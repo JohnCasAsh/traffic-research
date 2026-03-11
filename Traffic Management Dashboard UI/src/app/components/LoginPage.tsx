@@ -128,7 +128,7 @@ export function LoginPage() {
                   Password
                 </label>
                 <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <div className="absolute top-0 bottom-0 left-0 pl-3 flex items-center pointer-events-none" style={{ height: '48px' }}>
                     <Lock className="h-5 w-5 text-slate-400" />
                   </div>
                   <input
@@ -139,8 +139,8 @@ export function LoginPage() {
                     className="block w-full pl-10 pr-3 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-teal-500 bg-slate-50 text-slate-900 transition-colors"
                     placeholder="••••••••"
                   />
-                  {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
                 </div>
+                {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
               </div>
             </div>
 
