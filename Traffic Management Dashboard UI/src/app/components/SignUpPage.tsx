@@ -3,19 +3,33 @@ import { motion } from 'motion/react';
 import { Navigation, Mail, Lock, User, ArrowRight, Car, FlaskConical, Building } from 'lucide-react';
 import { useState } from 'react';
 
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+
 export function SignUpPage() {
   const navigate = useNavigate();
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState('');
   const [role, setRole] = useState<'driver' | 'researcher' | 'admin'>('driver');
+  const [form, setForm] = useState({ firstName: '', lastName: '', email: '', password: '' });
 
-  const handleSignUp = (e: React.FormEvent) => {
+  const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
-    // Simulate API call
-    setTimeout(() => {
+    setError('');
+    try {
+      const res = await fetch(`${API_URL}/api/auth/signup`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...form, role }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Signup failed');
+      navigate('/login');
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
       setIsLoading(false);
-      navigate('/dashboard');
-    }, 1500);
+    }
   };
 
   return (
@@ -144,6 +158,8 @@ export function SignUpPage() {
                   <input
                     type="text"
                     required
+                    value={form.firstName}
+                    onChange={(e) => setForm(f => ({ ...f, firstName: e.target.value }))}
                     className="block w-full pl-10 pr-3 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-teal-500 bg-slate-50 text-slate-900"
                     placeholder="Jane"
                   />
@@ -154,6 +170,8 @@ export function SignUpPage() {
                 <input
                   type="text"
                   required
+                  value={form.lastName}
+                  onChange={(e) => setForm(f => ({ ...f, lastName: e.target.value }))}
                   className="block w-full px-3 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-teal-500 bg-slate-50 text-slate-900"
                   placeholder="Doe"
                 />
@@ -171,6 +189,8 @@ export function SignUpPage() {
                 <input
                   type="email"
                   required
+                  value={form.email}
+                  onChange={(e) => setForm(f => ({ ...f, email: e.target.value }))}
                   className="block w-full pl-10 pr-3 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-teal-500 bg-slate-50 text-slate-900"
                   placeholder="jane.doe@example.com"
                 />
@@ -188,9 +208,13 @@ export function SignUpPage() {
                 <input
                   type="password"
                   required
+                  minLength={8}
+                  value={form.password}
+                  onChange={(e) => setForm(f => ({ ...f, password: e.target.value }))}
                   className="block w-full pl-10 pr-3 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-teal-500 bg-slate-50 text-slate-900"
                   placeholder="Create a strong password"
                 />
+                {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
               </div>
             </div>
 
