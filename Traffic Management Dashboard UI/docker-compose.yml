@@ -1,0 +1,9 @@
+services:
+  traffic-dashboard-ui:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: traffic-dashboard-ui
+    ports:
+      - "5173:5173"
+    restart: unless-stopped
