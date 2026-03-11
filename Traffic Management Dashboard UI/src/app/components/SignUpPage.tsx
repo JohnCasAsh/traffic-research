@@ -11,11 +11,17 @@ export function SignUpPage() {
   const [error, setError] = useState('');
   const [role, setRole] = useState<'driver' | 'researcher' | 'admin'>('driver');
   const [form, setForm] = useState({ firstName: '', lastName: '', email: '', password: '' });
+  const [confirmPassword, setConfirmPassword] = useState('');
 
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
     setError('');
+    if (form.password !== confirmPassword) {
+      setError('Passwords do not match');
+      setIsLoading(false);
+      return;
+    }
     try {
       const res = await fetch(`${API_URL}/api/auth/signup`, {
         method: 'POST',
@@ -214,6 +220,33 @@ export function SignUpPage() {
                   className="block w-full pl-10 pr-3 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-teal-500 bg-slate-50 text-slate-900"
                   placeholder="Create a strong password"
                 />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">
+                Confirm Password
+              </label>
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <Lock className="h-5 w-5 text-slate-400" />
+                </div>
+                <input
+                  type="password"
+                  required
+                  minLength={8}
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  className={`block w-full pl-10 pr-3 py-3 border rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-teal-500 bg-slate-50 text-slate-900 ${
+                    confirmPassword && confirmPassword !== form.password
+                      ? 'border-red-400'
+                      : 'border-slate-200'
+                  }`}
+                  placeholder="Re-enter your password"
+                />
+                {confirmPassword && confirmPassword !== form.password && (
+                  <p className="mt-1 text-sm text-red-600">Passwords do not match</p>
+                )}
                 {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
               </div>
             </div>
