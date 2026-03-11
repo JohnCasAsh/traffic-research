@@ -228,7 +228,7 @@ export function SignUpPage() {
                 Confirm Password
               </label>
               <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <div className="absolute top-0 bottom-0 left-0 pl-3 flex items-center pointer-events-none" style={{ height: '48px' }}>
                   <Lock className="h-5 w-5 text-slate-400" />
                 </div>
                 <input
@@ -244,11 +244,11 @@ export function SignUpPage() {
                   }`}
                   placeholder="Re-enter your password"
                 />
-                <p className={`mt-1 text-sm h-5 ${confirmPassword && confirmPassword !== form.password ? 'text-red-600' : 'text-transparent'}`}>
-                  {confirmPassword && confirmPassword !== form.password ? 'Passwords do not match' : '\u00A0'}
-                </p>
-                {error && <p className="text-sm text-red-600">{error}</p>}
               </div>
+              <p className={`mt-1 text-sm h-5 ${confirmPassword && confirmPassword !== form.password ? 'text-red-600' : 'text-transparent'}`}>
+                {confirmPassword && confirmPassword !== form.password ? 'Passwords do not match' : '\u00A0'}
+              </p>
+              {error && <p className="text-sm text-red-600">{error}</p>}
             </div>
 
             <div className="flex items-start">
