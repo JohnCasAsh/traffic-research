@@ -1,0 +1,10 @@
+{
+  "triggerTaskOnSave.tasks": {
+    "auto-deploy": {
+      "patterns": ["Traffic Management Dashboard UI/src/**/*"],
+      "command": "powershell -ExecutionPolicy Bypass -File ${workspaceFolder}/deploy.ps1"
+    }
+  },
+  "files.autoSave": "afterDelay",
+  "files.autoSaveDelay": 5000
+}
