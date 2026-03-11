@@ -8,7 +8,6 @@ const { v4: uuidv4 } = require('uuid');
 const db = require('./database');
 const {
   encryptEmail,
-  decryptEmail,
   hmacEmail,
   hashPassword,
   verifyWithPepperRotation,
@@ -48,7 +47,7 @@ router.post(
 
       // Check if email already exists (using HMAC lookup — no decryption needed)
       const emailHash = hmacEmail(email, hmacKey);
-      const existingUser = db.prepare('SELECT id FROM users WHERE email_hmac = ?').get(emailHash);
+      const existingUser = await db.getUserByEmailHmac(emailHash);
       if (existingUser) {
         return res.status(409).json({ error: 'An account with this email already exists' });
       }
@@ -60,22 +59,34 @@ router.post(
       const passwordHash = await hashPassword(password, pepper);
 
       // Get current pepper version
-      const pepperRow = db.prepare('SELECT version FROM pepper_versions WHERE is_current = 1').get();
+      const pepperRow = await db.getCurrentPepperVersion();
 
       // Insert user
       const userId = uuidv4();
-      db.prepare(`
-        INSERT INTO users (id, email_encrypted, email_hmac, email_iv, email_auth_tag, password_hash, pepper_version, first_name, last_name, role)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(userId, encrypted, emailHash, iv, authTag, passwordHash, pepperRow.version, firstName, lastName, role);
+      await db.createUser({
+        id: userId,
+        email_encrypted: encrypted,
+        email_hmac: emailHash,
+        email_iv: iv,
+        email_auth_tag: authTag,
+        password_hash: passwordHash,
+        pepper_version: pepperRow.version,
+        first_name: firstName,
+        last_name: lastName,
+        role,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        login_attempts: 0,
+        locked_until: null,
+      });
 
       // Audit log (Integrity — tracking all security events)
-      db.prepare('INSERT INTO audit_log (user_id, action, ip_address, details) VALUES (?, ?, ?, ?)').run(
-        userId,
-        'SIGNUP',
-        req.ip,
-        JSON.stringify({ role })
-      );
+      await db.addAuditLog({
+        user_id: userId,
+        action: 'SIGNUP',
+        ip_address: req.ip,
+        details: JSON.stringify({ role }),
+      });
 
       res.status(201).json({
         message: 'Account created successfully',
@@ -109,7 +120,7 @@ router.post(
 
       // Find user by email HMAC (no decryption needed for lookup)
       const emailHash = hmacEmail(email, hmacKey);
-      const user = db.prepare('SELECT * FROM users WHERE email_hmac = ?').get(emailHash);
+      const user = await db.getUserByEmailHmac(emailHash);
 
       if (!user) {
         return res.status(401).json({ error: 'Invalid credentials' });
@@ -133,60 +144,47 @@ router.post(
 
       if (!result.verified) {
         // Increment login attempts
-        const attempts = user.login_attempts + 1;
+        const attempts = (user.login_attempts || 0) + 1;
         if (attempts >= MAX_LOGIN_ATTEMPTS) {
           const lockUntil = new Date(Date.now() + LOCKOUT_MINUTES * 60000).toISOString();
-          db.prepare('UPDATE users SET login_attempts = ?, locked_until = ? WHERE id = ?').run(
-            attempts,
-            lockUntil,
-            user.id
-          );
-          db.prepare('INSERT INTO audit_log (user_id, action, ip_address, details) VALUES (?, ?, ?, ?)').run(
-            user.id,
-            'ACCOUNT_LOCKED',
-            req.ip,
-            JSON.stringify({ attempts })
-          );
+          await db.updateUserFailedLogin(user.id, attempts, lockUntil);
+          await db.addAuditLog({
+            user_id: user.id,
+            action: 'ACCOUNT_LOCKED',
+            ip_address: req.ip,
+            details: JSON.stringify({ attempts }),
+          });
         } else {
-          db.prepare('UPDATE users SET login_attempts = ? WHERE id = ?').run(attempts, user.id);
+          await db.updateUserLoginAttempts(user.id, attempts);
         }
 
-        db.prepare('INSERT INTO audit_log (user_id, action, ip_address) VALUES (?, ?, ?)').run(
-          user.id,
-          'LOGIN_FAILED',
-          req.ip
-        );
+        await db.addAuditLog({ user_id: user.id, action: 'LOGIN_FAILED', ip_address: req.ip });
 
         return res.status(401).json({ error: 'Invalid credentials' });
       }
 
       // If pepper was rotated, update the password hash with new pepper
       if (result.needsRehash) {
-        const pepperRow = db.prepare('SELECT version FROM pepper_versions WHERE is_current = 1').get();
-        db.prepare('UPDATE users SET password_hash = ?, pepper_version = ?, updated_at = datetime(?) WHERE id = ?').run(
+        const pepperRow = await db.getCurrentPepperVersion();
+        await db.updateUserPasswordHashAndPepperVersion(
+          user.id,
           result.newHash,
-          pepperRow.version,
-          new Date().toISOString(),
-          user.id
+          pepperRow.version
         );
 
-        db.prepare('INSERT INTO audit_log (user_id, action, ip_address, details) VALUES (?, ?, ?, ?)').run(
-          user.id,
-          'PEPPER_REHASH',
-          req.ip,
-          JSON.stringify({ newPepperVersion: pepperRow.version })
-        );
+        await db.addAuditLog({
+          user_id: user.id,
+          action: 'PEPPER_REHASH',
+          ip_address: req.ip,
+          details: JSON.stringify({ newPepperVersion: pepperRow.version }),
+        });
       }
 
       // Reset login attempts on success
-      db.prepare('UPDATE users SET login_attempts = 0, locked_until = NULL WHERE id = ?').run(user.id);
+      await db.resetUserLockout(user.id);
 
       // Audit log
-      db.prepare('INSERT INTO audit_log (user_id, action, ip_address) VALUES (?, ?, ?)').run(
-        user.id,
-        'LOGIN_SUCCESS',
-        req.ip
-      );
+      await db.addAuditLog({ user_id: user.id, action: 'LOGIN_SUCCESS', ip_address: req.ip });
 
       res.json({
         message: 'Login successful',
@@ -208,27 +206,23 @@ router.post(
 router.post('/rotate-pepper', async (req, res) => {
   try {
     // In production, protect this endpoint with admin auth middleware
-    const currentPepper = process.env.PASSWORD_PEPPER;
-
     // Create new pepper version
-    const currentVersion = db.prepare('SELECT MAX(version) as v FROM pepper_versions').get();
-    const newVersion = (currentVersion.v || 0) + 1;
-
-    db.prepare('UPDATE pepper_versions SET is_current = 0').run();
-    db.prepare('INSERT INTO pepper_versions (version, is_current) VALUES (?, 1)').run(newVersion);
+    const currentVersion = await db.getMaxPepperVersion();
+    const newVersion = (currentVersion.version || 0) + 1;
+    await db.rotatePepperVersion(newVersion);
 
     // Count users that will need rehash on next login
-    const usersToRehash = db.prepare('SELECT COUNT(*) as count FROM users WHERE pepper_version < ?').get(newVersion);
+    const usersToRehashCount = await db.countUsersWithPepperVersionLessThan(newVersion);
 
-    db.prepare('INSERT INTO audit_log (action, details) VALUES (?, ?)').run(
-      'PEPPER_ROTATED',
-      JSON.stringify({ newVersion, usersAffected: usersToRehash.count })
-    );
+    await db.addAuditLog({
+      action: 'PEPPER_ROTATED',
+      details: JSON.stringify({ newVersion, usersAffected: usersToRehashCount }),
+    });
 
     res.json({
       message: 'Pepper rotated successfully',
       newVersion,
-      note: `${usersToRehash.count} users will be re-hashed on their next login. Update PASSWORD_PEPPER in .env with the new pepper value and move the old pepper to PASSWORD_PEPPER_PREVIOUS.`,
+      note: `${usersToRehashCount} users will be re-hashed on their next login. Update PASSWORD_PEPPER in .env with the new pepper value and move the old pepper to PASSWORD_PEPPER_PREVIOUS.`,
     });
   } catch (err) {
     console.error('Pepper rotation error:', err);

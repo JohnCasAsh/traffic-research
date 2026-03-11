@@ -1,71 +1,265 @@
 // ============================================
-// DATABASE SETUP - SQLite with CIA Triad Schema
+// DATABASE SETUP - Firestore with CIA Triad Schema
 // ============================================
 // Confidentiality: emails encrypted, passwords hashed
 // Integrity: HMAC on emails, hash integrity checks
-// Availability: SQLite WAL mode for concurrent reads
+// Availability: managed cloud datastore + app-level lockout/rate limit
 // ============================================
 
-const Database = require('better-sqlite3');
-const path = require('path');
+const admin = require('firebase-admin');
 const fs = require('fs');
+const path = require('path');
 
-const DB_PATH = process.env.DB_PATH || path.join(__dirname, '..', 'data', 'smartroute.db');
+let firestore = null;
+let initialized = false;
+let initPromise = null;
 
-// Ensure data directory exists
-fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
+const COLLECTIONS = {
+  users: 'users',
+  pepperVersions: 'pepper_versions',
+  auditLog: 'audit_log',
+};
 
-const db = new Database(DB_PATH);
+function loadServiceAccountFromFile(serviceAccountPath) {
+  const resolvedPath = path.isAbsolute(serviceAccountPath)
+    ? serviceAccountPath
+    : path.join(__dirname, '..', serviceAccountPath);
 
-// Enable WAL mode for better concurrent access (Availability)
-db.pragma('journal_mode = WAL');
-db.pragma('foreign_keys = ON');
+  if (!fs.existsSync(resolvedPath)) {
+    throw new Error(`FIREBASE_SERVICE_ACCOUNT_PATH not found: ${resolvedPath}`);
+  }
 
-// Create users table
-db.exec(`
-  CREATE TABLE IF NOT EXISTS users (
-    id TEXT PRIMARY KEY,
-    email_encrypted TEXT NOT NULL,
-    email_hmac TEXT NOT NULL UNIQUE,
-    email_iv TEXT NOT NULL,
-    email_auth_tag TEXT NOT NULL,
-    password_hash TEXT NOT NULL,
-    pepper_version INTEGER NOT NULL DEFAULT 1,
-    first_name TEXT NOT NULL,
-    last_name TEXT NOT NULL,
-    role TEXT NOT NULL CHECK(role IN ('driver', 'researcher', 'admin')),
-    created_at TEXT NOT NULL DEFAULT (datetime('now')),
-    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
-    login_attempts INTEGER NOT NULL DEFAULT 0,
-    locked_until TEXT DEFAULT NULL
-  );
-
-  CREATE INDEX IF NOT EXISTS idx_users_email_hmac ON users(email_hmac);
-  CREATE INDEX IF NOT EXISTS idx_users_role ON users(role);
-
-  CREATE TABLE IF NOT EXISTS pepper_versions (
-    version INTEGER PRIMARY KEY,
-    created_at TEXT NOT NULL DEFAULT (datetime('now')),
-    is_current INTEGER NOT NULL DEFAULT 0
-  );
-
-  CREATE TABLE IF NOT EXISTS audit_log (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id TEXT,
-    action TEXT NOT NULL,
-    ip_address TEXT,
-    details TEXT,
-    created_at TEXT NOT NULL DEFAULT (datetime('now'))
-  );
-
-  CREATE INDEX IF NOT EXISTS idx_audit_user ON audit_log(user_id);
-  CREATE INDEX IF NOT EXISTS idx_audit_action ON audit_log(action);
-`);
-
-// Insert initial pepper version if not exists
-const pepperExists = db.prepare('SELECT COUNT(*) as count FROM pepper_versions WHERE version = 1').get();
-if (pepperExists.count === 0) {
-  db.prepare('INSERT INTO pepper_versions (version, is_current) VALUES (1, 1)').run();
+  return JSON.parse(fs.readFileSync(resolvedPath, 'utf8'));
 }
 
-module.exports = db;
+function buildServiceAccountFromEnv() {
+  const projectId = process.env.FIREBASE_PROJECT_ID;
+  const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
+  const privateKey = process.env.FIREBASE_PRIVATE_KEY;
+
+  if (!projectId || !clientEmail || !privateKey) {
+    throw new Error(
+      'Missing Firebase credentials. Set FIREBASE_SERVICE_ACCOUNT_PATH OR FIREBASE_PROJECT_ID + FIREBASE_CLIENT_EMAIL + FIREBASE_PRIVATE_KEY.'
+    );
+  }
+
+  return {
+    projectId,
+    clientEmail,
+    privateKey: privateKey.replace(/\\n/g, '\n'),
+  };
+}
+
+function getFirestore() {
+  if (firestore) {
+    return firestore;
+  }
+
+  const serviceAccount = process.env.FIREBASE_SERVICE_ACCOUNT_PATH
+    ? loadServiceAccountFromFile(process.env.FIREBASE_SERVICE_ACCOUNT_PATH)
+    : buildServiceAccountFromEnv();
+
+  if (!admin.apps.length) {
+    admin.initializeApp({
+      credential: admin.credential.cert(serviceAccount),
+      projectId:
+        process.env.FIREBASE_PROJECT_ID ||
+        serviceAccount.projectId ||
+        serviceAccount.project_id,
+    });
+  }
+
+  firestore = admin.firestore();
+  return firestore;
+}
+
+async function ensureInitialized() {
+  if (initialized) {
+    return;
+  }
+
+  const db = getFirestore();
+  const currentPepperSnapshot = await db
+    .collection(COLLECTIONS.pepperVersions)
+    .where('is_current', '==', true)
+    .limit(1)
+    .get();
+
+  if (currentPepperSnapshot.empty) {
+    await db.collection(COLLECTIONS.pepperVersions).doc('1').set({
+      version: 1,
+      is_current: true,
+      created_at: new Date().toISOString(),
+    });
+  }
+
+  initialized = true;
+}
+
+function ready() {
+  if (!initPromise) {
+    initPromise = ensureInitialized();
+  }
+  return initPromise;
+}
+
+async function getUserByEmailHmac(emailHmac) {
+  await ready();
+  const db = getFirestore();
+
+  const snapshot = await db
+    .collection(COLLECTIONS.users)
+    .where('email_hmac', '==', emailHmac)
+    .limit(1)
+    .get();
+
+  if (snapshot.empty) {
+    return null;
+  }
+
+  const doc = snapshot.docs[0];
+  const data = doc.data();
+  return {
+    ...data,
+    id: data.id || doc.id,
+  };
+}
+
+async function createUser(user) {
+  await ready();
+  const db = getFirestore();
+  await db.collection(COLLECTIONS.users).doc(user.id).set(user);
+}
+
+async function getCurrentPepperVersion() {
+  await ready();
+  const db = getFirestore();
+
+  const snapshot = await db
+    .collection(COLLECTIONS.pepperVersions)
+    .where('is_current', '==', true)
+    .limit(1)
+    .get();
+
+  if (snapshot.empty) {
+    return { version: 1 };
+  }
+
+  return snapshot.docs[0].data();
+}
+
+async function updateUserFailedLogin(userId, attempts, lockUntil) {
+  await ready();
+  const db = getFirestore();
+  await db.collection(COLLECTIONS.users).doc(userId).update({
+    login_attempts: attempts,
+    locked_until: lockUntil,
+    updated_at: new Date().toISOString(),
+  });
+}
+
+async function updateUserLoginAttempts(userId, attempts) {
+  await ready();
+  const db = getFirestore();
+  await db.collection(COLLECTIONS.users).doc(userId).update({
+    login_attempts: attempts,
+    updated_at: new Date().toISOString(),
+  });
+}
+
+async function updateUserPasswordHashAndPepperVersion(userId, passwordHash, pepperVersion) {
+  await ready();
+  const db = getFirestore();
+  await db.collection(COLLECTIONS.users).doc(userId).update({
+    password_hash: passwordHash,
+    pepper_version: pepperVersion,
+    updated_at: new Date().toISOString(),
+  });
+}
+
+async function resetUserLockout(userId) {
+  await ready();
+  const db = getFirestore();
+  await db.collection(COLLECTIONS.users).doc(userId).update({
+    login_attempts: 0,
+    locked_until: null,
+    updated_at: new Date().toISOString(),
+  });
+}
+
+async function addAuditLog({ user_id = null, action, ip_address = null, details = null }) {
+  await ready();
+  const db = getFirestore();
+  await db.collection(COLLECTIONS.auditLog).add({
+    user_id,
+    action,
+    ip_address,
+    details,
+    created_at: new Date().toISOString(),
+  });
+}
+
+async function getMaxPepperVersion() {
+  await ready();
+  const db = getFirestore();
+  const snapshot = await db
+    .collection(COLLECTIONS.pepperVersions)
+    .orderBy('version', 'desc')
+    .limit(1)
+    .get();
+
+  if (snapshot.empty) {
+    return { version: 0 };
+  }
+
+  return snapshot.docs[0].data();
+}
+
+async function rotatePepperVersion(newVersion) {
+  await ready();
+  const db = getFirestore();
+  const batch = db.batch();
+
+  const currentSnapshot = await db
+    .collection(COLLECTIONS.pepperVersions)
+    .where('is_current', '==', true)
+    .get();
+
+  currentSnapshot.forEach((doc) => {
+    batch.update(doc.ref, { is_current: false });
+  });
+
+  const newVersionRef = db.collection(COLLECTIONS.pepperVersions).doc(String(newVersion));
+  batch.set(newVersionRef, {
+    version: newVersion,
+    is_current: true,
+    created_at: new Date().toISOString(),
+  });
+
+  await batch.commit();
+}
+
+async function countUsersWithPepperVersionLessThan(version) {
+  await ready();
+  const db = getFirestore();
+  const snapshot = await db
+    .collection(COLLECTIONS.users)
+    .where('pepper_version', '<', version)
+    .get();
+  return snapshot.size;
+}
+
+module.exports = {
+  ready,
+  getUserByEmailHmac,
+  createUser,
+  getCurrentPepperVersion,
+  updateUserFailedLogin,
+  updateUserLoginAttempts,
+  updateUserPasswordHashAndPepperVersion,
+  resetUserLockout,
+  addAuditLog,
+  getMaxPepperVersion,
+  rotatePepperVersion,
+  countUsersWithPepperVersionLessThan,
+};

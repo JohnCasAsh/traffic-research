@@ -7,6 +7,8 @@ const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
+const fs = require('fs');
+const path = require('path');
 
 // ---- STARTUP ENV VALIDATION ----
 // Fail fast if required secrets are missing (prevents silent runtime crashes)
@@ -15,8 +17,32 @@ const REQUIRED_ENV = [
   'EMAIL_ENCRYPTION_KEY',
   'EMAIL_HMAC_KEY',
   'JWT_SECRET',
+  'FIREBASE_PROJECT_ID',
 ];
 const missing = REQUIRED_ENV.filter(k => !process.env[k]);
+
+const hasFirebaseFileCredential = Boolean(process.env.FIREBASE_SERVICE_ACCOUNT_PATH);
+const hasFirebaseInlineCredential = Boolean(
+  process.env.FIREBASE_CLIENT_EMAIL && process.env.FIREBASE_PRIVATE_KEY
+);
+
+if (hasFirebaseFileCredential) {
+  const serviceAccountPath = process.env.FIREBASE_SERVICE_ACCOUNT_PATH;
+  const resolvedPath = path.isAbsolute(serviceAccountPath)
+    ? serviceAccountPath
+    : path.join(__dirname, serviceAccountPath);
+
+  if (!fs.existsSync(resolvedPath)) {
+    missing.push(`Firebase service account file not found at: ${resolvedPath}`);
+  }
+}
+
+if (!hasFirebaseFileCredential && !hasFirebaseInlineCredential) {
+  missing.push(
+    'Firebase credentials: set FIREBASE_SERVICE_ACCOUNT_PATH or FIREBASE_CLIENT_EMAIL + FIREBASE_PRIVATE_KEY'
+  );
+}
+
 if (missing.length > 0) {
   console.error(`FATAL: Missing required environment variables: ${missing.join(', ')}`);
   console.error('Copy .env.example to .env and fill in all values.');
@@ -34,7 +60,7 @@ app.use(helmet());
 // CORS - allow frontend origins from env (comma-separated for multiple)
 // Example: ALLOWED_ORIGINS=https://blue.example.com,https://green.example.com
 const allowedOrigins = process.env.ALLOWED_ORIGINS
-  ? process.env.ALLOWED_ORIGINS.split(',')
+  ? process.env.ALLOWED_ORIGINS.split(',').map((origin) => origin.trim()).filter(Boolean)
   : ['http://localhost:5173'];
 app.use(cors({
   origin: function(origin, callback) {
