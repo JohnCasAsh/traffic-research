@@ -43,10 +43,15 @@ function buildServiceAccountFromEnv() {
     );
   }
 
+  const normalizedPrivateKey = privateKey
+    .replace(/^"|"$/g, '')
+    .replace(/\r/g, '')
+    .replace(/\\+n/g, '\n');
+
   return {
     projectId,
     clientEmail,
-    privateKey: privateKey.replace(/\\n/g, '\n'),
+    privateKey: normalizedPrivateKey,
   };
 }
 
