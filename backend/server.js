@@ -8,6 +8,21 @@ const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 
+// ---- STARTUP ENV VALIDATION ----
+// Fail fast if required secrets are missing (prevents silent runtime crashes)
+const REQUIRED_ENV = [
+  'PASSWORD_PEPPER',
+  'EMAIL_ENCRYPTION_KEY',
+  'EMAIL_HMAC_KEY',
+  'JWT_SECRET',
+];
+const missing = REQUIRED_ENV.filter(k => !process.env[k]);
+if (missing.length > 0) {
+  console.error(`FATAL: Missing required environment variables: ${missing.join(', ')}`);
+  console.error('Copy .env.example to .env and fill in all values.');
+  process.exit(1);
+}
+
 const authRoutes = require('./src/auth');
 
 const app = express();
@@ -16,12 +31,11 @@ const PORT = process.env.PORT || 3001;
 // Security headers (CIA Triad - Confidentiality)
 app.use(helmet());
 
-// CORS - allow frontend origins
-const allowedOrigins = [
-  process.env.FRONTEND_URL || 'http://localhost:5173',
-  'https://witty-pond-09f897900.4.azurestaticapps.net',
-  'http://localhost:5173',
-];
+// CORS - allow frontend origins from env (comma-separated for multiple)
+// Example: ALLOWED_ORIGINS=https://blue.example.com,https://green.example.com
+const allowedOrigins = process.env.ALLOWED_ORIGINS
+  ? process.env.ALLOWED_ORIGINS.split(',')
+  : ['http://localhost:5173'];
 app.use(cors({
   origin: function(origin, callback) {
     if (!origin || allowedOrigins.includes(origin)) {
@@ -38,8 +52,8 @@ app.use(express.json({ limit: '10kb' }));
 
 // Rate limiting (CIA Triad - Availability)
 const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 20,                   // 20 attempts per window
+  windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS || '900000'),  // default 15 min
+  max: parseInt(process.env.RATE_LIMIT_MAX || '20'),                  // default 20 attempts
   message: { error: 'Too many requests. Try again later.' },
   standardHeaders: true,
   legacyHeaders: false,

@@ -10,7 +10,7 @@ const Database = require('better-sqlite3');
 const path = require('path');
 const fs = require('fs');
 
-const DB_PATH = path.join(__dirname, '..', 'data', 'smartroute.db');
+const DB_PATH = process.env.DB_PATH || path.join(__dirname, '..', 'data', 'smartroute.db');
 
 // Ensure data directory exists
 fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });

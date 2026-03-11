@@ -17,8 +17,8 @@ const {
 const router = express.Router();
 
 // Max login attempts before account lockout (Availability protection)
-const MAX_LOGIN_ATTEMPTS = 5;
-const LOCKOUT_MINUTES = 15;
+const MAX_LOGIN_ATTEMPTS = parseInt(process.env.MAX_LOGIN_ATTEMPTS || '5');
+const LOCKOUT_MINUTES = parseInt(process.env.LOCKOUT_MINUTES || '15');
 
 // ---- SIGNUP ----
 router.post(
