@@ -41,7 +41,7 @@ export function SignUpPage() {
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col md:flex-row-reverse">
       {/* Right side - Image & Branding */}
-      <div className="hidden md:flex md:w-1/2 bg-slate-900 relative overflow-hidden">
+      <div className="hidden md:flex md:w-1/2 bg-slate-900 relative overflow-hidden md:sticky md:top-0 md:h-screen">
         <div className="absolute inset-0 z-0">
           <img
             src="https://images.unsplash.com/photo-1771834900973-6f056e20280d?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxhYnN0cmFjdCUyMHRlY2glMjBncmlkJTIwYmx1ZXxlbnwxfHx8fDE3NzMyMDIzOTZ8MA&ixlib=rb-4.1.0&q=80&w=1080"
@@ -89,7 +89,7 @@ export function SignUpPage() {
       </div>
 
       {/* Left side - Form */}
-      <div className="flex-1 flex flex-col justify-center px-6 py-12 sm:px-12 lg:px-24 bg-white relative overflow-y-auto">
+      <div className="flex-1 flex flex-col justify-center px-6 py-12 sm:px-12 lg:px-24 bg-white relative md:overflow-y-auto md:h-screen">
         <div className="absolute top-6 left-6 md:hidden">
           <Link to="/" className="flex items-center space-x-2">
             <div className="w-8 h-8 bg-gradient-to-br from-teal-500 to-blue-600 rounded-lg flex items-center justify-center">
@@ -244,10 +244,10 @@ export function SignUpPage() {
                   }`}
                   placeholder="Re-enter your password"
                 />
-                {confirmPassword && confirmPassword !== form.password && (
-                  <p className="mt-1 text-sm text-red-600">Passwords do not match</p>
-                )}
-                {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
+                <p className={`mt-1 text-sm h-5 ${confirmPassword && confirmPassword !== form.password ? 'text-red-600' : 'text-transparent'}`}>
+                  {confirmPassword && confirmPassword !== form.password ? 'Passwords do not match' : '\u00A0'}
+                </p>
+                {error && <p className="text-sm text-red-600">{error}</p>}
               </div>
             </div>
 
