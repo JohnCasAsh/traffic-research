@@ -16,9 +16,20 @@ const PORT = process.env.PORT || 3001;
 // Security headers (CIA Triad - Confidentiality)
 app.use(helmet());
 
-// CORS - only allow frontend origin
+// CORS - allow frontend origins
+const allowedOrigins = [
+  process.env.FRONTEND_URL || 'http://localhost:5173',
+  'https://witty-pond-09f897900.4.azurestaticapps.net',
+  'http://localhost:5173',
+];
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+  origin: function(origin, callback) {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   credentials: true,
 }));
 

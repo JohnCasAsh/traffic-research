@@ -3,7 +3,7 @@ import { motion } from 'motion/react';
 import { Navigation, Mail, Lock, User, ArrowRight, Car, FlaskConical, Building } from 'lucide-react';
 import { useState } from 'react';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+const API_URL = import.meta.env.VITE_API_URL || (window.location.hostname === 'localhost' ? 'http://localhost:3001' : 'https://traffic-backend-api.azurewebsites.net');
 
 export function SignUpPage() {
   const navigate = useNavigate();
