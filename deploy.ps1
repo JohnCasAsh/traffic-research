@@ -76,3 +76,40 @@ Write-Host "  GitHub:  https://github.com/JohnCasAsh/traffic-research" -Foregrou
 Write-Host "  Green:   $GreenURL" -ForegroundColor Green
 Write-Host "  Local:   http://localhost:5173 (run npm run dev)" -ForegroundColor White
 Write-Host ""
+
+# Step 5: Auto-log progress to Notion + Make
+Write-Host "[5/5] Logging deploy to Notion..." -ForegroundColor Yellow
+try {
+    $BackendURL = "http://localhost:3001"
+    # Get list of changed files from last commit
+    $changedFiles = git diff --name-only HEAD~1 HEAD 2>$null
+    if (-not $changedFiles) { $changedFiles = "No file diff available" }
+    $fileList = ($changedFiles | Select-Object -First 10) -join ", "
+    $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm"
+
+    # Log to Activity Log + Make webhook
+    $eventBody = @{
+        eventType = "deploy_completed"
+        payload = @{
+            severity = "info"
+            message = "Deploy to Green: $Message"
+            note = "Files changed: $fileList"
+            triggeredFrom = "deploy.ps1"
+        }
+    } | ConvertTo-Json -Depth 5
+    Invoke-RestMethod -Method Post -Uri "$BackendURL/api/ops/make-test" -ContentType "application/json" -Body $eventBody -TimeoutSec 10 -ErrorAction SilentlyContinue | Out-Null
+
+    # Log to Daily Progress Report
+    $progressBody = @{
+        title = "Deploy: $Message"
+        category = "Deployment"
+        status = "Completed"
+        notes = "Files: $fileList | Deployed to $GreenURL at $timestamp"
+        impact = "High"
+    } | ConvertTo-Json -Depth 5
+    Invoke-RestMethod -Method Post -Uri "$BackendURL/api/ops/log-progress" -ContentType "application/json" -Body $progressBody -TimeoutSec 10 -ErrorAction SilentlyContinue | Out-Null
+
+    Write-Host "  Notion + Make notified." -ForegroundColor Green
+} catch {
+    Write-Host "  Notion logging skipped (backend not running)." -ForegroundColor DarkGray
+}

@@ -161,6 +161,16 @@ app.post('/api/ops/log-progress', async (req, res) => {
 
   try {
     const result = await logProgress({ title, category, status, notes, impact, date });
+
+    // Also notify via Make so you get an email about progress
+    await sendMakeEvent('daily_progress_logged', {
+      message: title,
+      category: category || 'Backend',
+      status: status || 'Completed',
+      notes: notes || '',
+      impact: impact || 'Medium',
+    }).catch(() => {});
+
     res.json({ message: 'Progress logged', result });
   } catch (error) {
     res.status(502).json({ error: 'Failed to log progress', details: error.message });

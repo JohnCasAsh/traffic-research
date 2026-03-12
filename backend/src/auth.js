@@ -39,6 +39,9 @@ router.post(
       // Validate input
       const errors = validationResult(req);
       if (!errors.isEmpty()) {
+        const valPayload = { message: 'Signup validation failed', path: '/api/auth/signup', ip: req.ip, fields: errors.array().map(e => e.path).join(', ') };
+        logToNotionAsync('auth_validation_error', valPayload);
+        sendMakeEvent('auth_validation_error', valPayload).catch(() => {});
         return res.status(400).json({ error: 'Validation failed', details: errors.array() });
       }
 
@@ -167,6 +170,9 @@ router.post(
         }
 
         await db.addAuditLog({ user_id: user.id, action: 'LOGIN_FAILED', ip_address: req.ip });
+        const failPayload = { message: `Login failed (attempt ${attempts})`, path: '/api/auth/login', ip: req.ip };
+        logToNotionAsync('auth_login_failed', failPayload);
+        sendMakeEvent('auth_login_failed', failPayload).catch(() => {});
 
         return res.status(401).json({ error: 'Invalid credentials' });
       }

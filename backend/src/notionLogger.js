@@ -145,7 +145,7 @@ function logToNotionAsync(eventType, payload = {}, options = {}) {
 }
 
 // ============================================
-// DAILY PROGRESS REPORT — manual + API logging
+// DAILY PROGRESS REPORT
 // ============================================
 async function logProgress(entry = {}) {
   const apiKey = process.env.NOTION_API_KEY;
@@ -213,7 +213,7 @@ async function logProgress(entry = {}) {
 }
 
 // ============================================
-// SYSTEM HEALTH SUMMARY — daily stats snapshot
+// SYSTEM HEALTH SUMMARY
 // ============================================
 async function logHealthSummary(summary = {}) {
   const apiKey = process.env.NOTION_API_KEY;
