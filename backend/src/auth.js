@@ -6,6 +6,8 @@ const express = require('express');
 const { body, validationResult } = require('express-validator');
 const { v4: uuidv4 } = require('uuid');
 const db = require('./database');
+const { sendMakeEvent } = require('./makeNotifier');
+const { logToNotionAsync } = require('./notionLogger');
 const {
   encryptEmail,
   hmacEmail,
@@ -94,6 +96,9 @@ router.post(
       });
     } catch (err) {
       console.error('Signup error:', err);
+      const signupErrPayload = { message: err.message, path: '/api/auth/signup', ip: req.ip };
+      await sendMakeEvent('auth_signup_error', signupErrPayload);
+      logToNotionAsync('auth_signup_error', signupErrPayload);
       res.status(500).json({ error: 'Internal server error' });
     }
   }
@@ -154,6 +159,9 @@ router.post(
             ip_address: req.ip,
             details: JSON.stringify({ attempts }),
           });
+          const lockPayload = { userId: user.id, attempts, lockUntil };
+          await sendMakeEvent('auth_account_locked', lockPayload);
+          logToNotionAsync('auth_account_locked', lockPayload);
         } else {
           await db.updateUserLoginAttempts(user.id, attempts);
         }
@@ -197,6 +205,9 @@ router.post(
       });
     } catch (err) {
       console.error('Login error:', err);
+      const loginErrPayload = { message: err.message, path: '/api/auth/login', ip: req.ip };
+      await sendMakeEvent('auth_login_error', loginErrPayload);
+      logToNotionAsync('auth_login_error', loginErrPayload);
       res.status(500).json({ error: 'Internal server error' });
     }
   }
@@ -226,6 +237,9 @@ router.post('/rotate-pepper', async (req, res) => {
     });
   } catch (err) {
     console.error('Pepper rotation error:', err);
+    const pepperErrPayload = { message: err.message, path: '/api/auth/rotate-pepper', ip: req.ip };
+    await sendMakeEvent('auth_pepper_rotation_error', pepperErrPayload);
+    logToNotionAsync('auth_pepper_rotation_error', pepperErrPayload);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
