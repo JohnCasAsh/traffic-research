@@ -3,25 +3,45 @@ import { motion } from 'motion/react';
 import { Navigation, Mail, Lock, User, ArrowRight, Car, FlaskConical, Building } from 'lucide-react';
 import { useState } from 'react';
 
+const API_URL = import.meta.env.VITE_API_URL || (window.location.hostname === 'localhost' ? 'http://localhost:3001' : 'https://traffic-backend-api.azurewebsites.net');
+
 export function SignUpPage() {
   const navigate = useNavigate();
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState('');
   const [role, setRole] = useState<'driver' | 'researcher' | 'admin'>('driver');
+  const [form, setForm] = useState({ firstName: '', lastName: '', email: '', password: '' });
+  const [confirmPassword, setConfirmPassword] = useState('');
 
-  const handleSignUp = (e: React.FormEvent) => {
+  const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
-    // Simulate API call
-    setTimeout(() => {
+    setError('');
+    if (form.password !== confirmPassword) {
+      setError('Passwords do not match');
       setIsLoading(false);
-      navigate('/dashboard');
-    }, 1500);
+      return;
+    }
+    try {
+      const res = await fetch(`${API_URL}/api/auth/signup`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...form, role }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Signup failed');
+      navigate('/login');
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col md:flex-row-reverse">
       {/* Right side - Image & Branding */}
-      <div className="hidden md:flex md:w-1/2 bg-slate-900 relative overflow-hidden">
+      <div className="hidden md:flex md:w-1/2 bg-slate-900 relative overflow-hidden md:sticky md:top-0 md:h-screen">
         <div className="absolute inset-0 z-0">
           <img
             src="https://images.unsplash.com/photo-1771834900973-6f056e20280d?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxhYnN0cmFjdCUyMHRlY2glMjBncmlkJTIwYmx1ZXxlbnwxfHx8fDE3NzMyMDIzOTZ8MA&ixlib=rb-4.1.0&q=80&w=1080"
@@ -69,7 +89,7 @@ export function SignUpPage() {
       </div>
 
       {/* Left side - Form */}
-      <div className="flex-1 flex flex-col justify-center px-6 py-12 sm:px-12 lg:px-24 bg-white relative overflow-y-auto">
+      <div className="flex-1 flex flex-col justify-center px-6 py-12 sm:px-12 lg:px-24 bg-white relative md:overflow-y-auto md:h-screen">
         <div className="absolute top-6 left-6 md:hidden">
           <Link to="/" className="flex items-center space-x-2">
             <div className="w-8 h-8 bg-gradient-to-br from-teal-500 to-blue-600 rounded-lg flex items-center justify-center">
@@ -144,6 +164,8 @@ export function SignUpPage() {
                   <input
                     type="text"
                     required
+                    value={form.firstName}
+                    onChange={(e) => setForm(f => ({ ...f, firstName: e.target.value }))}
                     className="block w-full pl-10 pr-3 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-teal-500 bg-slate-50 text-slate-900"
                     placeholder="Jane"
                   />
@@ -154,6 +176,8 @@ export function SignUpPage() {
                 <input
                   type="text"
                   required
+                  value={form.lastName}
+                  onChange={(e) => setForm(f => ({ ...f, lastName: e.target.value }))}
                   className="block w-full px-3 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-teal-500 bg-slate-50 text-slate-900"
                   placeholder="Doe"
                 />
@@ -171,6 +195,8 @@ export function SignUpPage() {
                 <input
                   type="email"
                   required
+                  value={form.email}
+                  onChange={(e) => setForm(f => ({ ...f, email: e.target.value }))}
                   className="block w-full pl-10 pr-3 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-teal-500 bg-slate-50 text-slate-900"
                   placeholder="jane.doe@example.com"
                 />
@@ -188,10 +214,41 @@ export function SignUpPage() {
                 <input
                   type="password"
                   required
+                  minLength={8}
+                  value={form.password}
+                  onChange={(e) => setForm(f => ({ ...f, password: e.target.value }))}
                   className="block w-full pl-10 pr-3 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-teal-500 bg-slate-50 text-slate-900"
                   placeholder="Create a strong password"
                 />
               </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">
+                Confirm Password
+              </label>
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <Lock className="h-5 w-5 text-slate-400" />
+                </div>
+                <input
+                  type="password"
+                  required
+                  minLength={8}
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  className={`block w-full pl-10 pr-3 py-3 border rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-teal-500 bg-slate-50 text-slate-900 ${
+                    confirmPassword && confirmPassword !== form.password
+                      ? 'border-red-400'
+                      : 'border-slate-200'
+                  }`}
+                  placeholder="Re-enter your password"
+                />
+              </div>
+              <p className={`mt-1 text-sm h-5 ${confirmPassword && confirmPassword !== form.password ? 'text-red-600' : 'text-transparent'}`}>
+                {confirmPassword && confirmPassword !== form.password ? 'Passwords do not match' : '\u00A0'}
+              </p>
+              {error && <p className="text-sm text-red-600">{error}</p>}
             </div>
 
             <div className="flex items-start">

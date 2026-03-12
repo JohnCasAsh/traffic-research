@@ -3,18 +3,33 @@ import { motion } from 'motion/react';
 import { Navigation, Mail, Lock, ArrowRight, Github, Chrome } from 'lucide-react';
 import { useState } from 'react';
 
+const API_URL = import.meta.env.VITE_API_URL || (window.location.hostname === 'localhost' ? 'http://localhost:3001' : 'https://traffic-backend-api.azurewebsites.net');
+
 export function LoginPage() {
   const navigate = useNavigate();
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [form, setForm] = useState({ email: '', password: '' });
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
-    // Simulate API call
-    setTimeout(() => {
-      setIsLoading(false);
+    setError('');
+    try {
+      const res = await fetch(`${API_URL}/api/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(form),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Login failed');
+      localStorage.setItem('user', JSON.stringify(data.user));
       navigate('/dashboard');
-    }, 1500);
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -100,6 +115,8 @@ export function LoginPage() {
                   <input
                     type="email"
                     required
+                    value={form.email}
+                    onChange={(e) => setForm(f => ({ ...f, email: e.target.value }))}
                     className="block w-full pl-10 pr-3 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-teal-500 bg-slate-50 text-slate-900 transition-colors"
                     placeholder="researcher@university.edu"
                   />
@@ -117,10 +134,13 @@ export function LoginPage() {
                   <input
                     type="password"
                     required
+                    value={form.password}
+                    onChange={(e) => setForm(f => ({ ...f, password: e.target.value }))}
                     className="block w-full pl-10 pr-3 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-teal-500 bg-slate-50 text-slate-900 transition-colors"
                     placeholder="••••••••"
                   />
                 </div>
+                {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
               </div>
             </div>
 
