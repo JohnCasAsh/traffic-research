@@ -44,8 +44,7 @@ jobs:
           azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN_GREEN }}
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           action: upload
-          app_location: 'Traffic Management Dashboard UI'
-          output_location: dist
+          app_location: 'Traffic Management Dashboard UI/dist'
           skip_app_build: true
           deployment_environment: staging
 
