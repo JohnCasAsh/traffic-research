@@ -21,6 +21,7 @@ $GreenToken = "1f0d359479f271506b2aca9a355ac95b5d6ebc129ad9321b6519ddbe45f99d400
 
 # Azure URL
 $GreenURL = "https://witty-pond-09f897900.4.azurestaticapps.net"
+$CustomDomain = "https://www.navocs.com"
 
 Write-Host ""
 Write-Host "========================================" -ForegroundColor Cyan
@@ -74,6 +75,7 @@ Write-Host "========================================" -ForegroundColor Cyan
 Write-Host ""
 Write-Host "  GitHub:  https://github.com/JohnCasAsh/traffic-research" -ForegroundColor White
 Write-Host "  Green:   $GreenURL" -ForegroundColor Green
+Write-Host "  Domain:  $CustomDomain" -ForegroundColor Green
 Write-Host "  Local:   http://localhost:5173 (run npm run dev)" -ForegroundColor White
 Write-Host ""
 
