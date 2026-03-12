@@ -57,6 +57,43 @@ jobs:
           echo "Staging URL: ${{ steps.deploy.outputs.static_web_app_url }}"
           echo "Review and test, then merge develop -> main to promote to Blue production."
 
+      - name: Notify Make.com after deploy
+        if: success()
+        env:
+          MAKE_WEBHOOK_URL: ${{ secrets.MAKE_WEBHOOK_URL }}
+        run: |
+          if [ -z "$MAKE_WEBHOOK_URL" ]; then
+            echo "MAKE_WEBHOOK_URL secret not configured; skipping Make notification."
+            exit 0
+          fi
+
+          timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          payload=$(cat <<EOF
+          {
+            "eventType": "github_deploy_completed",
+            "service": "traffic-management-frontend",
+            "environment": "green-staging",
+            "timestamp": "$timestamp",
+            "payload": {
+              "severity": "info",
+              "message": "GitHub Actions deploy completed for develop",
+              "commit": "${{ github.sha }}",
+              "branch": "${{ github.ref_name }}",
+              "runId": "${{ github.run_id }}",
+              "runNumber": "${{ github.run_number }}",
+              "actor": "${{ github.actor }}",
+              "repo": "${{ github.repository }}",
+              "stagingUrl": "${{ steps.deploy.outputs.static_web_app_url }}"
+            }
+          }
+          EOF
+          )
+
+          curl -sS -X POST "$MAKE_WEBHOOK_URL" \
+            -H "Content-Type: application/json" \
+            -d "$payload" >/dev/null
+          echo "Make.com notification sent."
+
   # Optional: Close staging environment when PR is closed
   close_pull_request_job:
     if: github.event_name == 'pull_request' && github.event.action == 'closed'
