@@ -320,11 +320,19 @@ async function findOrCreateOAuthUser({ provider, email, firstName, lastName, ipA
   const existingUser = await db.getUserByEmailHmac(emailHash);
 
   if (existingUser) {
+    await db.addOAuthProviderToUser(existingUser.id, provider);
+
     if (existingUser.email_verified === false) {
       await db.markUserEmailVerified(existingUser.id);
       existingUser.email_verified = true;
       existingUser.email_verified_at = new Date().toISOString();
     }
+
+    existingUser.auth_provider = provider;
+    existingUser.auth_providers = Array.from(new Set([
+      ...(Array.isArray(existingUser.auth_providers) ? existingUser.auth_providers : []),
+      provider,
+    ]));
 
     await db.addAuditLog({
       user_id: existingUser.id,
@@ -361,6 +369,7 @@ async function findOrCreateOAuthUser({ provider, email, firstName, lastName, ipA
     email_verification_token_hash: null,
     email_verification_expires_at: null,
     auth_provider: provider,
+    auth_providers: [provider],
   });
 
   await db.addAuditLog({

@@ -180,6 +180,16 @@ async function createUser(user) {
   await db.collection(COLLECTIONS.users).doc(user.id).set(user);
 }
 
+async function addOAuthProviderToUser(userId, provider) {
+  await ready();
+  const db = getFirestore();
+  await db.collection(COLLECTIONS.users).doc(userId).set({
+    auth_provider: provider,
+    auth_providers: admin.firestore.FieldValue.arrayUnion(provider),
+    updated_at: new Date().toISOString(),
+  }, { merge: true });
+}
+
 async function deleteUser(userId) {
   await ready();
   const db = getFirestore();
@@ -309,6 +319,7 @@ module.exports = {
   getUserByEmailHmac,
   getUserByVerificationTokenHash,
   createUser,
+  addOAuthProviderToUser,
   deleteUser,
   setUserEmailVerificationToken,
   markUserEmailVerified,
