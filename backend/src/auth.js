@@ -107,6 +107,15 @@ function createCodeError(code, message) {
   return error;
 }
 
+function relaxOAuthRedirectHeaders(res) {
+  // OAuth endpoints only return redirects. Relaxing frame/security headers here
+  // avoids browser ERR_BLOCKED_BY_RESPONSE in embedded/webview contexts.
+  res.removeHeader('X-Frame-Options');
+  res.removeHeader('Content-Security-Policy');
+  res.removeHeader('Cross-Origin-Resource-Policy');
+  res.removeHeader('Cross-Origin-Opener-Policy');
+}
+
 function buildLoginRedirectUrl(params = {}) {
   const search = new URLSearchParams(params).toString();
   return `${FRONTEND_URL}/login${search ? `?${search}` : ''}`;
@@ -371,10 +380,12 @@ async function findOrCreateOAuthUser({ provider, email, firstName, lastName, ipA
 }
 
 function redirectOAuthError(res, provider, reason) {
+  relaxOAuthRedirectHeaders(res);
   return res.redirect(302, buildOauthErrorRedirectUrl(provider, reason));
 }
 
 function redirectOAuthSuccess(res, provider, user) {
+  relaxOAuthRedirectHeaders(res);
   return res.redirect(302, buildOauthSuccessRedirectUrl(provider, user));
 }
 
