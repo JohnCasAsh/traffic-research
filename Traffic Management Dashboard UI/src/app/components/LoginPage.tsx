@@ -8,14 +8,16 @@ const API_URL = import.meta.env.VITE_API_URL || (window.location.hostname === 'l
 export function LoginPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [form, setForm] = useState({ email: '', password: '' });
-
   const verified = searchParams.get('verified');
   const checkEmail = searchParams.get('checkEmail');
   const emailHint = searchParams.get('email');
   const verifyReason = searchParams.get('reason');
+
+  const [isLoading, setIsLoading] = useState(false);
+  const [isResending, setIsResending] = useState(false);
+  const [error, setError] = useState('');
+  const [resendMessage, setResendMessage] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
+  const [form, setForm] = useState({ email: emailHint || '', password: '' });
 
   const notice = verified === '1'
     ? { type: 'success', text: 'Email verified. You can sign in now.' }
@@ -34,6 +36,7 @@ export function LoginPage() {
     e.preventDefault();
     setIsLoading(true);
     setError('');
+    setResendMessage(null);
     try {
       const res = await fetch(`${API_URL}/api/auth/login`, {
         method: 'POST',
@@ -41,6 +44,12 @@ export function LoginPage() {
         body: JSON.stringify(form),
       });
       const data = await res.json();
+      if (!res.ok && data?.code === 'EMAIL_NOT_VERIFIED') {
+        setResendMessage({
+          type: 'info',
+          text: 'Your account is not verified yet. Click resend to get a new verification email.',
+        });
+      }
       if (!res.ok) throw new Error(data.error || 'Login failed');
       localStorage.setItem('user', JSON.stringify(data.user));
       navigate('/dashboard');
@@ -48,6 +57,43 @@ export function LoginPage() {
       setError(err.message);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleResendVerification = async () => {
+    if (!form.email.trim()) {
+      setResendMessage({
+        type: 'error',
+        text: 'Enter your email address first.',
+      });
+      return;
+    }
+
+    setIsResending(true);
+    setResendMessage(null);
+    try {
+      const res = await fetch(`${API_URL}/api/auth/resend-verification`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: form.email }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Unable to resend verification email.');
+      }
+
+      setResendMessage({
+        type: 'success',
+        text: data.message || 'Verification email sent. Please check your inbox.',
+      });
+    } catch (err: any) {
+      setResendMessage({
+        type: 'error',
+        text: err.message || 'Unable to resend verification email.',
+      });
+    } finally {
+      setIsResending(false);
     }
   };
 
@@ -195,6 +241,30 @@ export function LoginPage() {
                   Forgot password?
                 </a>
               </div>
+            </div>
+
+            <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+              <p className="text-sm text-slate-600">Didn&apos;t receive or lost your verification email?</p>
+              <button
+                type="button"
+                onClick={handleResendVerification}
+                disabled={isResending}
+                className="mt-2 text-sm font-medium text-teal-600 hover:text-teal-500 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {isResending ? 'Resending...' : 'Resend verification email'}
+              </button>
+              {resendMessage && (
+                <p className={`mt-2 text-sm ${
+                  resendMessage.type === 'success'
+                    ? 'text-emerald-700'
+                    : resendMessage.type === 'error'
+                      ? 'text-red-600'
+                      : 'text-blue-700'
+                }`}
+                >
+                  {resendMessage.text}
+                </p>
+              )}
             </div>
 
             <button
