@@ -1,13 +1,20 @@
 import { Link, useNavigate, useSearchParams } from 'react-router';
 import { motion } from 'motion/react';
 import { Navigation, Mail, Lock, ArrowRight, Github, Chrome } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 const API_URL = import.meta.env.VITE_API_URL || (window.location.hostname === 'localhost' ? 'http://localhost:3001' : 'https://traffic-backend-api.azurewebsites.net');
 
 export function LoginPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const oauth = searchParams.get('oauth');
+  const oauthProvider = searchParams.get('provider');
+  const oauthReason = searchParams.get('reason');
+  const oauthUserId = searchParams.get('userId');
+  const oauthFirstName = searchParams.get('firstName');
+  const oauthLastName = searchParams.get('lastName');
+  const oauthRole = searchParams.get('role');
   const verified = searchParams.get('verified');
   const checkEmail = searchParams.get('checkEmail');
   const emailHint = searchParams.get('email');
@@ -15,22 +22,63 @@ export function LoginPage() {
 
   const [isLoading, setIsLoading] = useState(false);
   const [isResending, setIsResending] = useState(false);
+  const [oauthLoadingProvider, setOauthLoadingProvider] = useState<'github' | 'google' | null>(null);
   const [error, setError] = useState('');
   const [resendMessage, setResendMessage] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
   const [form, setForm] = useState({ email: emailHint || '', password: '' });
 
-  const notice = verified === '1'
-    ? { type: 'success', text: 'Email verified. You can sign in now.' }
-    : checkEmail === '1'
-      ? {
-        type: 'info',
-        text: `Check your inbox${emailHint ? ` (${emailHint})` : ''} for a verification link.`,
-      }
-      : verifyReason === 'expired_token'
-        ? { type: 'error', text: 'Verification link expired. Please request a new verification email.' }
-        : verifyReason === 'invalid_token'
-          ? { type: 'error', text: 'Verification link is invalid. Please request a new one.' }
-          : null;
+  useEffect(() => {
+    if (oauth === 'success' && oauthUserId) {
+      const user = {
+        id: oauthUserId,
+        firstName: oauthFirstName || 'User',
+        lastName: oauthLastName || '',
+        role: oauthRole || 'driver',
+      };
+      localStorage.setItem('user', JSON.stringify(user));
+      navigate('/dashboard');
+    }
+  }, [navigate, oauth, oauthFirstName, oauthLastName, oauthRole, oauthUserId]);
+
+  const oauthProviderLabel = oauthProvider === 'google'
+    ? 'Google'
+    : oauthProvider === 'github'
+      ? 'GitHub'
+      : 'OAuth';
+
+  const oauthErrorText = oauth === 'error'
+    ? oauthReason === 'provider_denied'
+      ? `${oauthProviderLabel} sign-in was cancelled.`
+      : oauthReason === 'oauth_not_configured'
+        ? `${oauthProviderLabel} sign-in is not configured yet.`
+        : oauthReason === 'invalid_state'
+          ? 'Sign-in session expired. Please try again.'
+          : oauthReason === 'missing_code'
+            ? `${oauthProviderLabel} sign-in failed: missing authorization code.`
+            : oauthReason === 'no_verified_email'
+              ? `${oauthProviderLabel} account does not have a verified email.`
+              : `${oauthProviderLabel} sign-in failed. Please try again.`
+    : null;
+
+  const notice = oauthErrorText
+    ? { type: 'error' as const, text: oauthErrorText }
+    : verified === '1'
+      ? { type: 'success' as const, text: 'Email verified. You can sign in now.' }
+      : checkEmail === '1'
+        ? {
+          type: 'info' as const,
+          text: `Check your inbox${emailHint ? ` (${emailHint})` : ''} for a verification link.`,
+        }
+        : verifyReason === 'expired_token'
+          ? { type: 'error' as const, text: 'Verification link expired. Please request a new verification email.' }
+          : verifyReason === 'invalid_token'
+            ? { type: 'error' as const, text: 'Verification link is invalid. Please request a new one.' }
+            : null;
+
+  const startOAuth = (provider: 'google' | 'github') => {
+    setOauthLoadingProvider(provider);
+    window.location.href = `${API_URL}/api/auth/oauth/${provider}/start`;
+  };
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -298,13 +346,23 @@ export function LoginPage() {
             </div>
 
             <div className="mt-6 grid grid-cols-2 gap-3">
-              <button className="w-full flex justify-center items-center py-2.5 px-4 border border-slate-200 rounded-xl shadow-sm bg-white text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors">
+              <button
+                type="button"
+                onClick={() => startOAuth('github')}
+                disabled={oauthLoadingProvider !== null}
+                className="w-full flex justify-center items-center py-2.5 px-4 border border-slate-200 rounded-xl shadow-sm bg-white text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors disabled:cursor-not-allowed disabled:opacity-60"
+              >
                 <Github className="w-5 h-5 mr-2" />
-                GitHub
+                {oauthLoadingProvider === 'github' ? 'Connecting...' : 'GitHub'}
               </button>
-              <button className="w-full flex justify-center items-center py-2.5 px-4 border border-slate-200 rounded-xl shadow-sm bg-white text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors">
+              <button
+                type="button"
+                onClick={() => startOAuth('google')}
+                disabled={oauthLoadingProvider !== null}
+                className="w-full flex justify-center items-center py-2.5 px-4 border border-slate-200 rounded-xl shadow-sm bg-white text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors disabled:cursor-not-allowed disabled:opacity-60"
+              >
                 <Chrome className="w-5 h-5 mr-2 text-blue-500" />
-                Google
+                {oauthLoadingProvider === 'google' ? 'Connecting...' : 'Google'}
               </button>
             </div>
           </div>

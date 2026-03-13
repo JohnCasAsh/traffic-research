@@ -26,6 +26,7 @@ const REQUIRE_EMAIL_VERIFICATION = process.env.REQUIRE_EMAIL_VERIFICATION !== 'f
 const EMAIL_VERIFICATION_TTL_MINUTES = parseInt(
   process.env.EMAIL_VERIFICATION_TTL_MINUTES || '1440'
 );
+const OAUTH_STATE_TTL_MS = parseInt(process.env.OAUTH_STATE_TTL_MS || '600000');
 const VERIFY_API_BASE_URL = (
   process.env.EMAIL_VERIFY_URL_BASE ||
   (process.env.NODE_ENV === 'production'
@@ -36,6 +37,16 @@ const FRONTEND_URL = (
   process.env.FRONTEND_URL ||
   (process.env.NODE_ENV === 'production' ? 'https://www.navocs.com' : 'http://localhost:5173')
 ).replace(/\/+$/, '');
+const oauthStates = new Map();
+
+setInterval(() => {
+  const now = Date.now();
+  for (const [state, entry] of oauthStates.entries()) {
+    if (!entry || entry.expiresAt <= now) {
+      oauthStates.delete(state);
+    }
+  }
+}, Math.max(30000, Math.floor(OAUTH_STATE_TTL_MS / 2))).unref();
 
 function createEmailVerificationToken() {
   const token = crypto.randomBytes(32).toString('hex');
@@ -45,9 +56,316 @@ function createEmailVerificationToken() {
   return { token, tokenHash, expiresAt };
 }
 
+function createOauthState(provider) {
+  const state = crypto.randomBytes(24).toString('hex');
+  oauthStates.set(state, {
+    provider,
+    expiresAt: Date.now() + OAUTH_STATE_TTL_MS,
+  });
+
+  return state;
+}
+
+function consumeOauthState(provider, state) {
+  if (!state || typeof state !== 'string') {
+    return false;
+  }
+
+  const entry = oauthStates.get(state);
+  oauthStates.delete(state);
+
+  if (!entry) {
+    return false;
+  }
+
+  if (entry.provider !== provider) {
+    return false;
+  }
+
+  if (entry.expiresAt < Date.now()) {
+    return false;
+  }
+
+  return true;
+}
+
+function providerLabel(provider) {
+  if (provider === 'google') {
+    return 'Google';
+  }
+
+  if (provider === 'github') {
+    return 'GitHub';
+  }
+
+  return 'OAuth';
+}
+
+function createCodeError(code, message) {
+  const error = new Error(message);
+  error.code = code;
+  return error;
+}
+
 function buildLoginRedirectUrl(params = {}) {
   const search = new URLSearchParams(params).toString();
   return `${FRONTEND_URL}/login${search ? `?${search}` : ''}`;
+}
+
+function buildOauthErrorRedirectUrl(provider, reason) {
+  return buildLoginRedirectUrl({
+    oauth: 'error',
+    provider,
+    reason,
+  });
+}
+
+function buildOauthSuccessRedirectUrl(provider, user) {
+  return buildLoginRedirectUrl({
+    oauth: 'success',
+    provider,
+    userId: user.id,
+    firstName: user.first_name || '',
+    lastName: user.last_name || '',
+    role: user.role || 'driver',
+  });
+}
+
+function getGoogleOAuthConfig() {
+  return {
+    clientId: process.env.GOOGLE_CLIENT_ID,
+    clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+    redirectUri: process.env.GOOGLE_REDIRECT_URI || `${VERIFY_API_BASE_URL}/api/auth/oauth/google/callback`,
+  };
+}
+
+function getGitHubOAuthConfig() {
+  return {
+    clientId: process.env.GITHUB_CLIENT_ID,
+    clientSecret: process.env.GITHUB_CLIENT_SECRET,
+    redirectUri: process.env.GITHUB_REDIRECT_URI || `${VERIFY_API_BASE_URL}/api/auth/oauth/github/callback`,
+  };
+}
+
+function isGoogleOAuthConfigured() {
+  const config = getGoogleOAuthConfig();
+  return Boolean(config.clientId && config.clientSecret && config.redirectUri);
+}
+
+function isGitHubOAuthConfigured() {
+  const config = getGitHubOAuthConfig();
+  return Boolean(config.clientId && config.clientSecret && config.redirectUri);
+}
+
+async function parseJsonSafely(response) {
+  try {
+    return await response.json();
+  } catch (_) {
+    return null;
+  }
+}
+
+async function fetchGoogleProfile(code) {
+  const config = getGoogleOAuthConfig();
+  if (!isGoogleOAuthConfigured()) {
+    throw createCodeError('OAUTH_NOT_CONFIGURED', 'Google OAuth is not configured.');
+  }
+
+  const tokenBody = new URLSearchParams({
+    code,
+    client_id: config.clientId,
+    client_secret: config.clientSecret,
+    redirect_uri: config.redirectUri,
+    grant_type: 'authorization_code',
+  });
+
+  const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: tokenBody,
+  });
+
+  const tokenData = await parseJsonSafely(tokenResponse);
+  if (!tokenResponse.ok || !tokenData?.access_token) {
+    throw createCodeError('OAUTH_TOKEN_FAILED', 'Failed to exchange Google OAuth code.');
+  }
+
+  const profileResponse = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+    headers: {
+      Authorization: `Bearer ${tokenData.access_token}`,
+    },
+  });
+
+  const profile = await parseJsonSafely(profileResponse);
+  if (!profileResponse.ok || !profile?.email) {
+    throw createCodeError('OAUTH_PROFILE_FAILED', 'Failed to fetch Google profile.');
+  }
+
+  if (profile.email_verified !== true) {
+    throw createCodeError('NO_VERIFIED_EMAIL', 'Google account email is not verified.');
+  }
+
+  return {
+    email: profile.email,
+    firstName: profile.given_name || '',
+    lastName: profile.family_name || '',
+  };
+}
+
+async function fetchGitHubProfile(code) {
+  const config = getGitHubOAuthConfig();
+  if (!isGitHubOAuthConfigured()) {
+    throw createCodeError('OAUTH_NOT_CONFIGURED', 'GitHub OAuth is not configured.');
+  }
+
+  const tokenBody = new URLSearchParams({
+    code,
+    client_id: config.clientId,
+    client_secret: config.clientSecret,
+    redirect_uri: config.redirectUri,
+  });
+
+  const tokenResponse = await fetch('https://github.com/login/oauth/access_token', {
+    method: 'POST',
+    headers: {
+      Accept: 'application/json',
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
+    body: tokenBody,
+  });
+
+  const tokenData = await parseJsonSafely(tokenResponse);
+  if (!tokenResponse.ok || !tokenData?.access_token) {
+    throw createCodeError('OAUTH_TOKEN_FAILED', 'Failed to exchange GitHub OAuth code.');
+  }
+
+  const githubHeaders = {
+    Authorization: `Bearer ${tokenData.access_token}`,
+    Accept: 'application/vnd.github+json',
+    'User-Agent': 'smartroute-auth',
+  };
+
+  const profileResponse = await fetch('https://api.github.com/user', {
+    headers: githubHeaders,
+  });
+  const profile = await parseJsonSafely(profileResponse);
+
+  if (!profileResponse.ok) {
+    throw createCodeError('OAUTH_PROFILE_FAILED', 'Failed to fetch GitHub profile.');
+  }
+
+  let email = profile?.email || '';
+  if (!email) {
+    const emailsResponse = await fetch('https://api.github.com/user/emails', {
+      headers: githubHeaders,
+    });
+    const emails = await parseJsonSafely(emailsResponse);
+
+    if (!emailsResponse.ok || !Array.isArray(emails)) {
+      throw createCodeError('OAUTH_PROFILE_FAILED', 'Failed to fetch GitHub email list.');
+    }
+
+    const verifiedPrimary = emails.find((entry) => entry && entry.verified && entry.primary);
+    const verifiedFallback = emails.find((entry) => entry && entry.verified);
+    email = (verifiedPrimary || verifiedFallback || {}).email || '';
+  }
+
+  if (!email) {
+    throw createCodeError('NO_VERIFIED_EMAIL', 'GitHub account has no verified public email.');
+  }
+
+  const fullName = (profile?.name || '').trim();
+  let firstName = '';
+  let lastName = '';
+  if (fullName) {
+    const parts = fullName.split(/\s+/).filter(Boolean);
+    firstName = parts[0] || '';
+    lastName = parts.slice(1).join(' ');
+  }
+
+  if (!firstName) {
+    firstName = profile?.login || 'GitHubUser';
+  }
+
+  return {
+    email,
+    firstName,
+    lastName,
+  };
+}
+
+async function findOrCreateOAuthUser({ provider, email, firstName, lastName, ipAddress }) {
+  const hmacKey = process.env.EMAIL_HMAC_KEY;
+  const encKey = process.env.EMAIL_ENCRYPTION_KEY;
+  const emailHash = hmacEmail(email, hmacKey);
+  const existingUser = await db.getUserByEmailHmac(emailHash);
+
+  if (existingUser) {
+    if (existingUser.email_verified === false) {
+      await db.markUserEmailVerified(existingUser.id);
+      existingUser.email_verified = true;
+      existingUser.email_verified_at = new Date().toISOString();
+    }
+
+    await db.addAuditLog({
+      user_id: existingUser.id,
+      action: 'OAUTH_LOGIN_SUCCESS',
+      ip_address: ipAddress,
+      details: JSON.stringify({ provider }),
+    });
+
+    return existingUser;
+  }
+
+  const { encrypted, iv, authTag } = encryptEmail(email, encKey);
+  const nowIso = new Date().toISOString();
+  const pepperRow = await db.getCurrentPepperVersion();
+  const userId = uuidv4();
+
+  await db.createUser({
+    id: userId,
+    email_encrypted: encrypted,
+    email_hmac: emailHash,
+    email_iv: iv,
+    email_auth_tag: authTag,
+    password_hash: null,
+    pepper_version: pepperRow.version,
+    first_name: firstName || 'User',
+    last_name: lastName || '',
+    role: 'driver',
+    created_at: nowIso,
+    updated_at: nowIso,
+    login_attempts: 0,
+    locked_until: null,
+    email_verified: true,
+    email_verified_at: nowIso,
+    email_verification_token_hash: null,
+    email_verification_expires_at: null,
+    auth_provider: provider,
+  });
+
+  await db.addAuditLog({
+    user_id: userId,
+    action: 'OAUTH_SIGNUP',
+    ip_address: ipAddress,
+    details: JSON.stringify({ provider }),
+  });
+
+  return {
+    id: userId,
+    first_name: firstName || 'User',
+    last_name: lastName || '',
+    role: 'driver',
+    email_verified: true,
+  };
+}
+
+function redirectOAuthError(res, provider, reason) {
+  return res.redirect(302, buildOauthErrorRedirectUrl(provider, reason));
+}
+
+function redirectOAuthSuccess(res, provider, user) {
+  return res.redirect(302, buildOauthSuccessRedirectUrl(provider, user));
 }
 
 function sendVerifyResponse(req, res, statusCode, payload) {
@@ -303,6 +621,143 @@ router.post(
     }
   }
 );
+
+// ---- OAUTH (GOOGLE/GITHUB) ----
+router.get('/oauth/google/start', (req, res) => {
+  if (!isGoogleOAuthConfigured()) {
+    return redirectOAuthError(res, 'google', 'oauth_not_configured');
+  }
+
+  const config = getGoogleOAuthConfig();
+  const state = createOauthState('google');
+  const params = new URLSearchParams({
+    client_id: config.clientId,
+    redirect_uri: config.redirectUri,
+    response_type: 'code',
+    scope: 'openid email profile',
+    state,
+    prompt: 'select_account',
+  });
+
+  return res.redirect(302, `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`);
+});
+
+router.get('/oauth/google/callback', async (req, res) => {
+  const code = typeof req.query.code === 'string' ? req.query.code : '';
+  const state = typeof req.query.state === 'string' ? req.query.state : '';
+  const providerError = typeof req.query.error === 'string' ? req.query.error : '';
+
+  if (providerError) {
+    return redirectOAuthError(res, 'google', 'provider_denied');
+  }
+
+  if (!code) {
+    return redirectOAuthError(res, 'google', 'missing_code');
+  }
+
+  if (!consumeOauthState('google', state)) {
+    return redirectOAuthError(res, 'google', 'invalid_state');
+  }
+
+  try {
+    const profile = await fetchGoogleProfile(code);
+    const user = await findOrCreateOAuthUser({
+      provider: 'google',
+      email: profile.email,
+      firstName: profile.firstName,
+      lastName: profile.lastName,
+      ipAddress: req.ip,
+    });
+
+    const successPayload = {
+      provider: 'google',
+      userId: user.id,
+    };
+    sendMakeEvent('auth_oauth_login_success', successPayload).catch(() => {});
+    logToNotionAsync('auth_oauth_login_success', successPayload);
+
+    return redirectOAuthSuccess(res, 'google', user);
+  } catch (error) {
+    console.error('Google OAuth callback error:', error);
+    const errorPayload = {
+      provider: 'google',
+      message: error.message,
+      code: error.code || 'OAUTH_FAILED',
+    };
+    sendMakeEvent('auth_oauth_error', errorPayload).catch(() => {});
+    logToNotionAsync('auth_oauth_error', errorPayload);
+
+    const reason = error.code === 'NO_VERIFIED_EMAIL' ? 'no_verified_email' : 'oauth_failed';
+    return redirectOAuthError(res, 'google', reason);
+  }
+});
+
+router.get('/oauth/github/start', (req, res) => {
+  if (!isGitHubOAuthConfigured()) {
+    return redirectOAuthError(res, 'github', 'oauth_not_configured');
+  }
+
+  const config = getGitHubOAuthConfig();
+  const state = createOauthState('github');
+  const params = new URLSearchParams({
+    client_id: config.clientId,
+    redirect_uri: config.redirectUri,
+    scope: 'read:user user:email',
+    state,
+  });
+
+  return res.redirect(302, `https://github.com/login/oauth/authorize?${params.toString()}`);
+});
+
+router.get('/oauth/github/callback', async (req, res) => {
+  const code = typeof req.query.code === 'string' ? req.query.code : '';
+  const state = typeof req.query.state === 'string' ? req.query.state : '';
+  const providerError = typeof req.query.error === 'string' ? req.query.error : '';
+
+  if (providerError) {
+    return redirectOAuthError(res, 'github', 'provider_denied');
+  }
+
+  if (!code) {
+    return redirectOAuthError(res, 'github', 'missing_code');
+  }
+
+  if (!consumeOauthState('github', state)) {
+    return redirectOAuthError(res, 'github', 'invalid_state');
+  }
+
+  try {
+    const profile = await fetchGitHubProfile(code);
+    const user = await findOrCreateOAuthUser({
+      provider: 'github',
+      email: profile.email,
+      firstName: profile.firstName,
+      lastName: profile.lastName,
+      ipAddress: req.ip,
+    });
+
+    const successPayload = {
+      provider: 'github',
+      userId: user.id,
+    };
+    sendMakeEvent('auth_oauth_login_success', successPayload).catch(() => {});
+    logToNotionAsync('auth_oauth_login_success', successPayload);
+
+    return redirectOAuthSuccess(res, 'github', user);
+  } catch (error) {
+    console.error('GitHub OAuth callback error:', error);
+    const errorPayload = {
+      provider: 'github',
+      message: error.message,
+      code: error.code || 'OAUTH_FAILED',
+    };
+    sendMakeEvent('auth_oauth_error', errorPayload).catch(() => {});
+    logToNotionAsync('auth_oauth_error', errorPayload);
+
+    const reason = error.code === 'NO_VERIFIED_EMAIL' ? 'no_verified_email' : 'oauth_failed';
+    return redirectOAuthError(res, 'github', reason);
+  }
+});
 
 // ---- LOGIN ----
 router.post(
