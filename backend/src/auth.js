@@ -660,8 +660,13 @@ router.get('/oauth/google/start', (req, res) => {
     prompt: 'select_account',
   });
 
+  const googleAuthUrl = `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
+  if (String(req.query.format || '').toLowerCase() === 'json') {
+    return res.json({ url: googleAuthUrl });
+  }
+
   relaxOAuthRedirectHeaders(res);
-  return res.redirect(302, `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`);
+  return res.redirect(302, googleAuthUrl);
 });
 
 router.get('/oauth/google/callback', async (req, res) => {
@@ -732,8 +737,13 @@ router.get('/oauth/github/start', (req, res) => {
     state,
   });
 
+  const githubAuthUrl = `https://github.com/login/oauth/authorize?${params.toString()}`;
+  if (String(req.query.format || '').toLowerCase() === 'json') {
+    return res.json({ url: githubAuthUrl });
+  }
+
   relaxOAuthRedirectHeaders(res);
-  return res.redirect(302, `https://github.com/login/oauth/authorize?${params.toString()}`);
+  return res.redirect(302, githubAuthUrl);
 });
 
 router.get('/oauth/github/callback', async (req, res) => {

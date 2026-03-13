@@ -75,9 +75,22 @@ export function LoginPage() {
             ? { type: 'error' as const, text: 'Verification link is invalid. Please request a new one.' }
             : null;
 
-  const startOAuth = (provider: 'google' | 'github') => {
+  const startOAuth = async (provider: 'google' | 'github') => {
     setOauthLoadingProvider(provider);
-    window.location.href = `${API_URL}/api/auth/oauth/${provider}/start`;
+    setError('');
+    try {
+      const response = await fetch(`${API_URL}/api/auth/oauth/${provider}/start?format=json`);
+      const payload = await response.json().catch(() => ({}));
+
+      if (!response.ok || !payload?.url) {
+        throw new Error('Unable to start social sign-in right now.');
+      }
+
+      window.location.href = payload.url;
+    } catch (err: any) {
+      setOauthLoadingProvider(null);
+      setError(err?.message || 'Unable to start social sign-in right now.');
+    }
   };
 
   const handleLogin = async (e: React.FormEvent) => {
