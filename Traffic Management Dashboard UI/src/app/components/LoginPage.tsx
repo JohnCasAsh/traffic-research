@@ -1,4 +1,4 @@
-import { Link, useNavigate } from 'react-router';
+import { Link, useNavigate, useSearchParams } from 'react-router';
 import { motion } from 'motion/react';
 import { Navigation, Mail, Lock, ArrowRight, Github, Chrome } from 'lucide-react';
 import { useState } from 'react';
@@ -7,9 +7,28 @@ const API_URL = import.meta.env.VITE_API_URL || (window.location.hostname === 'l
 
 export function LoginPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [form, setForm] = useState({ email: '', password: '' });
+
+  const verified = searchParams.get('verified');
+  const checkEmail = searchParams.get('checkEmail');
+  const emailHint = searchParams.get('email');
+  const verifyReason = searchParams.get('reason');
+
+  const notice = verified === '1'
+    ? { type: 'success', text: 'Email verified. You can sign in now.' }
+    : checkEmail === '1'
+      ? {
+        type: 'info',
+        text: `Check your inbox${emailHint ? ` (${emailHint})` : ''} for a verification link.`,
+      }
+      : verifyReason === 'expired_token'
+        ? { type: 'error', text: 'Verification link expired. Please request a new verification email.' }
+        : verifyReason === 'invalid_token'
+          ? { type: 'error', text: 'Verification link is invalid. Please request a new one.' }
+          : null;
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -101,6 +120,20 @@ export function LoginPage() {
             <h2 className="text-3xl font-bold text-slate-900 mb-2">Sign in</h2>
             <p className="text-slate-500">Enter your details to access your dashboard</p>
           </div>
+
+          {notice && (
+            <div
+              className={`mb-6 rounded-xl border px-4 py-3 text-sm ${
+                notice.type === 'success'
+                  ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                  : notice.type === 'error'
+                    ? 'border-red-200 bg-red-50 text-red-700'
+                    : 'border-blue-200 bg-blue-50 text-blue-700'
+              }`}
+            >
+              {notice.text}
+            </div>
+          )}
 
           <form onSubmit={handleLogin} className="space-y-6">
             <div className="space-y-4">

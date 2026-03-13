@@ -130,10 +130,60 @@ async function getUserByEmailHmac(emailHmac) {
   };
 }
 
+async function getUserByVerificationTokenHash(tokenHash) {
+  await ready();
+  const db = getFirestore();
+
+  const snapshot = await db
+    .collection(COLLECTIONS.users)
+    .where('email_verification_token_hash', '==', tokenHash)
+    .limit(1)
+    .get();
+
+  if (snapshot.empty) {
+    return null;
+  }
+
+  const doc = snapshot.docs[0];
+  const data = doc.data();
+  return {
+    ...data,
+    id: data.id || doc.id,
+  };
+}
+
+async function setUserEmailVerificationToken(userId, tokenHash, expiresAt) {
+  await ready();
+  const db = getFirestore();
+  await db.collection(COLLECTIONS.users).doc(userId).update({
+    email_verification_token_hash: tokenHash,
+    email_verification_expires_at: expiresAt,
+    updated_at: new Date().toISOString(),
+  });
+}
+
+async function markUserEmailVerified(userId) {
+  await ready();
+  const db = getFirestore();
+  await db.collection(COLLECTIONS.users).doc(userId).update({
+    email_verified: true,
+    email_verified_at: new Date().toISOString(),
+    email_verification_token_hash: null,
+    email_verification_expires_at: null,
+    updated_at: new Date().toISOString(),
+  });
+}
+
 async function createUser(user) {
   await ready();
   const db = getFirestore();
   await db.collection(COLLECTIONS.users).doc(user.id).set(user);
+}
+
+async function deleteUser(userId) {
+  await ready();
+  const db = getFirestore();
+  await db.collection(COLLECTIONS.users).doc(userId).delete();
 }
 
 async function getCurrentPepperVersion() {
@@ -257,7 +307,11 @@ async function countUsersWithPepperVersionLessThan(version) {
 module.exports = {
   ready,
   getUserByEmailHmac,
+  getUserByVerificationTokenHash,
   createUser,
+  deleteUser,
+  setUserEmailVerificationToken,
+  markUserEmailVerified,
   getCurrentPepperVersion,
   updateUserFailedLogin,
   updateUserLoginAttempts,

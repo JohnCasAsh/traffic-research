@@ -30,6 +30,11 @@ export function SignUpPage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Signup failed');
+      if (data.requiresEmailVerification) {
+        const email = encodeURIComponent(form.email);
+        navigate(`/login?checkEmail=1&email=${email}`);
+        return;
+      }
       navigate('/login');
     } catch (err: any) {
       setError(err.message);
