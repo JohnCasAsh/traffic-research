@@ -1,20 +1,103 @@
-import { Link, useNavigate } from 'react-router';
+import { Link, useNavigate, useSearchParams } from 'react-router';
 import { motion } from 'motion/react';
 import { Navigation, Mail, Lock, ArrowRight, Github, Chrome } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
-const API_URL = import.meta.env.VITE_API_URL || (window.location.hostname === 'localhost' ? 'http://localhost:3001' : 'https://traffic-backend-api.azurewebsites.net');
+const API_URL = import.meta.env.VITE_API_URL || (window.location.hostname === 'localhost' ? 'http://localhost:3001' : 'https://api.navocs.com');
 
 export function LoginPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const oauth = searchParams.get('oauth');
+  const oauthProvider = searchParams.get('provider');
+  const oauthReason = searchParams.get('reason');
+  const oauthUserId = searchParams.get('userId');
+  const oauthFirstName = searchParams.get('firstName');
+  const oauthLastName = searchParams.get('lastName');
+  const oauthRole = searchParams.get('role');
+  const verified = searchParams.get('verified');
+  const checkEmail = searchParams.get('checkEmail');
+  const emailHint = searchParams.get('email');
+  const verifyReason = searchParams.get('reason');
+
   const [isLoading, setIsLoading] = useState(false);
+  const [isResending, setIsResending] = useState(false);
+  const [oauthLoadingProvider, setOauthLoadingProvider] = useState<'github' | 'google' | null>(null);
   const [error, setError] = useState('');
-  const [form, setForm] = useState({ email: '', password: '' });
+  const [resendMessage, setResendMessage] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
+  const [form, setForm] = useState({ email: emailHint || '', password: '' });
+
+  useEffect(() => {
+    if (oauth === 'success' && oauthUserId) {
+      const user = {
+        id: oauthUserId,
+        firstName: oauthFirstName || 'User',
+        lastName: oauthLastName || '',
+        role: oauthRole || 'driver',
+      };
+      localStorage.setItem('user', JSON.stringify(user));
+      navigate('/dashboard');
+    }
+  }, [navigate, oauth, oauthFirstName, oauthLastName, oauthRole, oauthUserId]);
+
+  const oauthProviderLabel = oauthProvider === 'google'
+    ? 'Google'
+    : oauthProvider === 'github'
+      ? 'GitHub'
+      : 'OAuth';
+
+  const oauthErrorText = oauth === 'error'
+    ? oauthReason === 'provider_denied'
+      ? `${oauthProviderLabel} sign-in was cancelled.`
+      : oauthReason === 'oauth_not_configured'
+        ? `${oauthProviderLabel} sign-in is not configured yet.`
+        : oauthReason === 'invalid_state'
+          ? 'Sign-in session expired. Please try again.'
+          : oauthReason === 'missing_code'
+            ? `${oauthProviderLabel} sign-in failed: missing authorization code.`
+            : oauthReason === 'no_verified_email'
+              ? `${oauthProviderLabel} account does not have a verified email.`
+              : `${oauthProviderLabel} sign-in failed. Please try again.`
+    : null;
+
+  const notice = oauthErrorText
+    ? { type: 'error' as const, text: oauthErrorText }
+    : verified === '1'
+      ? { type: 'success' as const, text: 'Email verified. You can sign in now.' }
+      : checkEmail === '1'
+        ? {
+          type: 'info' as const,
+          text: `Check your inbox${emailHint ? ` (${emailHint})` : ''} for a verification link.`,
+        }
+        : verifyReason === 'expired_token'
+          ? { type: 'error' as const, text: 'Verification link expired. Please request a new verification email.' }
+          : verifyReason === 'invalid_token'
+            ? { type: 'error' as const, text: 'Verification link is invalid. Please request a new one.' }
+            : null;
+
+  const startOAuth = async (provider: 'google' | 'github') => {
+    setOauthLoadingProvider(provider);
+    setError('');
+    try {
+      const response = await fetch(`${API_URL}/api/auth/oauth/${provider}/start?format=json`);
+      const payload = await response.json().catch(() => ({}));
+
+      if (!response.ok || !payload?.url) {
+        throw new Error('Unable to start social sign-in right now.');
+      }
+
+      window.location.href = payload.url;
+    } catch (err: any) {
+      setOauthLoadingProvider(null);
+      setError(err?.message || 'Unable to start social sign-in right now.');
+    }
+  };
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
     setError('');
+    setResendMessage(null);
     try {
       const res = await fetch(`${API_URL}/api/auth/login`, {
         method: 'POST',
@@ -22,6 +105,12 @@ export function LoginPage() {
         body: JSON.stringify(form),
       });
       const data = await res.json();
+      if (!res.ok && data?.code === 'EMAIL_NOT_VERIFIED') {
+        setResendMessage({
+          type: 'info',
+          text: 'Your account is not verified yet. Click resend to get a new verification email.',
+        });
+      }
       if (!res.ok) throw new Error(data.error || 'Login failed');
       localStorage.setItem('user', JSON.stringify(data.user));
       navigate('/dashboard');
@@ -29,6 +118,43 @@ export function LoginPage() {
       setError(err.message);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleResendVerification = async () => {
+    if (!form.email.trim()) {
+      setResendMessage({
+        type: 'error',
+        text: 'Enter your email address first.',
+      });
+      return;
+    }
+
+    setIsResending(true);
+    setResendMessage(null);
+    try {
+      const res = await fetch(`${API_URL}/api/auth/resend-verification`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: form.email }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Unable to resend verification email.');
+      }
+
+      setResendMessage({
+        type: 'success',
+        text: data.message || 'Verification email sent. Please check your inbox.',
+      });
+    } catch (err: any) {
+      setResendMessage({
+        type: 'error',
+        text: err.message || 'Unable to resend verification email.',
+      });
+    } finally {
+      setIsResending(false);
     }
   };
 
@@ -102,6 +228,20 @@ export function LoginPage() {
             <p className="text-slate-500">Enter your details to access your dashboard</p>
           </div>
 
+          {notice && (
+            <div
+              className={`mb-6 rounded-xl border px-4 py-3 text-sm ${
+                notice.type === 'success'
+                  ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                  : notice.type === 'error'
+                    ? 'border-red-200 bg-red-50 text-red-700'
+                    : 'border-blue-200 bg-blue-50 text-blue-700'
+              }`}
+            >
+              {notice.text}
+            </div>
+          )}
+
           <form onSubmit={handleLogin} className="space-y-6">
             <div className="space-y-4">
               <div>
@@ -164,6 +304,30 @@ export function LoginPage() {
               </div>
             </div>
 
+            <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+              <p className="text-sm text-slate-600">Didn&apos;t receive or lost your verification email?</p>
+              <button
+                type="button"
+                onClick={handleResendVerification}
+                disabled={isResending}
+                className="mt-2 text-sm font-medium text-teal-600 hover:text-teal-500 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {isResending ? 'Resending...' : 'Resend verification email'}
+              </button>
+              {resendMessage && (
+                <p className={`mt-2 text-sm ${
+                  resendMessage.type === 'success'
+                    ? 'text-emerald-700'
+                    : resendMessage.type === 'error'
+                      ? 'text-red-600'
+                      : 'text-blue-700'
+                }`}
+                >
+                  {resendMessage.text}
+                </p>
+              )}
+            </div>
+
             <button
               type="submit"
               disabled={isLoading}
@@ -195,13 +359,23 @@ export function LoginPage() {
             </div>
 
             <div className="mt-6 grid grid-cols-2 gap-3">
-              <button className="w-full flex justify-center items-center py-2.5 px-4 border border-slate-200 rounded-xl shadow-sm bg-white text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors">
+              <button
+                type="button"
+                onClick={() => startOAuth('github')}
+                disabled={oauthLoadingProvider !== null}
+                className="w-full flex justify-center items-center py-2.5 px-4 border border-slate-200 rounded-xl shadow-sm bg-white text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors disabled:cursor-not-allowed disabled:opacity-60"
+              >
                 <Github className="w-5 h-5 mr-2" />
-                GitHub
+                {oauthLoadingProvider === 'github' ? 'Connecting...' : 'GitHub'}
               </button>
-              <button className="w-full flex justify-center items-center py-2.5 px-4 border border-slate-200 rounded-xl shadow-sm bg-white text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors">
+              <button
+                type="button"
+                onClick={() => startOAuth('google')}
+                disabled={oauthLoadingProvider !== null}
+                className="w-full flex justify-center items-center py-2.5 px-4 border border-slate-200 rounded-xl shadow-sm bg-white text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors disabled:cursor-not-allowed disabled:opacity-60"
+              >
                 <Chrome className="w-5 h-5 mr-2 text-blue-500" />
-                Google
+                {oauthLoadingProvider === 'google' ? 'Connecting...' : 'Google'}
               </button>
             </div>
           </div>

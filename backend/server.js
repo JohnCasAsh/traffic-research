@@ -56,6 +56,9 @@ const authRoutes = require('./src/auth');
 const app = express();
 const PORT = process.env.PORT || 3001;
 
+// Azure App Service sits behind a proxy; trust first hop for accurate client IP/rate limits.
+app.set('trust proxy', 1);
+
 // Security headers (CIA Triad - Confidentiality)
 app.use(helmet());
 
