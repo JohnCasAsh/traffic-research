@@ -660,6 +660,7 @@ router.get('/oauth/google/start', (req, res) => {
     prompt: 'select_account',
   });
 
+  relaxOAuthRedirectHeaders(res);
   return res.redirect(302, `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`);
 });
 
@@ -731,6 +732,7 @@ router.get('/oauth/github/start', (req, res) => {
     state,
   });
 
+  relaxOAuthRedirectHeaders(res);
   return res.redirect(302, `https://github.com/login/oauth/authorize?${params.toString()}`);
 });
 
