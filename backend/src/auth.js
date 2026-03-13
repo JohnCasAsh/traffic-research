@@ -152,9 +152,19 @@ function isGoogleOAuthConfigured() {
   return Boolean(config.clientId && config.clientSecret && config.redirectUri);
 }
 
+function isGoogleOAuthStartConfigured() {
+  const config = getGoogleOAuthConfig();
+  return Boolean(config.clientId && config.redirectUri);
+}
+
 function isGitHubOAuthConfigured() {
   const config = getGitHubOAuthConfig();
   return Boolean(config.clientId && config.clientSecret && config.redirectUri);
+}
+
+function isGitHubOAuthStartConfigured() {
+  const config = getGitHubOAuthConfig();
+  return Boolean(config.clientId && config.redirectUri);
 }
 
 async function parseJsonSafely(response) {
@@ -624,7 +634,7 @@ router.post(
 
 // ---- OAUTH (GOOGLE/GITHUB) ----
 router.get('/oauth/google/start', (req, res) => {
-  if (!isGoogleOAuthConfigured()) {
+  if (!isGoogleOAuthStartConfigured()) {
     return redirectOAuthError(res, 'google', 'oauth_not_configured');
   }
 
@@ -687,13 +697,17 @@ router.get('/oauth/google/callback', async (req, res) => {
     sendMakeEvent('auth_oauth_error', errorPayload).catch(() => {});
     logToNotionAsync('auth_oauth_error', errorPayload);
 
-    const reason = error.code === 'NO_VERIFIED_EMAIL' ? 'no_verified_email' : 'oauth_failed';
+    const reason = error.code === 'NO_VERIFIED_EMAIL'
+      ? 'no_verified_email'
+      : error.code === 'OAUTH_NOT_CONFIGURED'
+        ? 'oauth_not_configured'
+        : 'oauth_failed';
     return redirectOAuthError(res, 'google', reason);
   }
 });
 
 router.get('/oauth/github/start', (req, res) => {
-  if (!isGitHubOAuthConfigured()) {
+  if (!isGitHubOAuthStartConfigured()) {
     return redirectOAuthError(res, 'github', 'oauth_not_configured');
   }
 
@@ -754,7 +768,11 @@ router.get('/oauth/github/callback', async (req, res) => {
     sendMakeEvent('auth_oauth_error', errorPayload).catch(() => {});
     logToNotionAsync('auth_oauth_error', errorPayload);
 
-    const reason = error.code === 'NO_VERIFIED_EMAIL' ? 'no_verified_email' : 'oauth_failed';
+    const reason = error.code === 'NO_VERIFIED_EMAIL'
+      ? 'no_verified_email'
+      : error.code === 'OAUTH_NOT_CONFIGURED'
+        ? 'oauth_not_configured'
+        : 'oauth_failed';
     return redirectOAuthError(res, 'github', reason);
   }
 });
