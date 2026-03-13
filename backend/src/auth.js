@@ -9,7 +9,7 @@ const { v4: uuidv4 } = require('uuid');
 const db = require('./database');
 const { sendMakeEvent } = require('./makeNotifier');
 const { logToNotionAsync } = require('./notionLogger');
-const { sendVerificationEmail, isBrevoConfigured } = require('./brevoMailer');
+const { sendVerificationEmail } = require('./brevoMailer');
 const {
   encryptEmail,
   hmacEmail,
@@ -95,12 +95,6 @@ router.post(
       const encKey = process.env.EMAIL_ENCRYPTION_KEY;
       const hmacKey = process.env.EMAIL_HMAC_KEY;
       const nowIso = new Date().toISOString();
-
-      if (REQUIRE_EMAIL_VERIFICATION && !isBrevoConfigured()) {
-        return res.status(503).json({
-          error: 'Email verification service is not configured. Please try again later.',
-        });
-      }
 
       // Check if email already exists (using HMAC lookup — no decryption needed)
       const emailHash = hmacEmail(email, hmacKey);
@@ -280,12 +274,6 @@ router.post(
 
       if (user.email_verified !== false) {
         return res.json({ message: 'Account is already verified.' });
-      }
-
-      if (!isBrevoConfigured()) {
-        return res.status(503).json({
-          error: 'Email verification service is not configured.',
-        });
       }
 
       const verificationState = createEmailVerificationToken();

@@ -1,7 +1,9 @@
 const { fetchWithRetry } = require('./resilientFetch');
 
 function isBrevoConfigured() {
-  return Boolean(process.env.BREVO_API_KEY && process.env.EMAIL_FROM);
+  const apiKey = (process.env.BREVO_API_KEY || '').trim();
+  const emailFrom = (process.env.EMAIL_FROM || '').trim();
+  return Boolean(apiKey && emailFrom);
 }
 
 function escapeHtml(value = '') {
@@ -14,7 +16,10 @@ function escapeHtml(value = '') {
 }
 
 async function sendVerificationEmail({ toEmail, firstName, verificationUrl }) {
-  if (!isBrevoConfigured()) {
+  const apiKey = (process.env.BREVO_API_KEY || '').trim();
+  const emailFrom = (process.env.EMAIL_FROM || '').trim();
+
+  if (!apiKey || !emailFrom) {
     return {
       sent: false,
       skipped: true,
@@ -28,7 +33,7 @@ async function sendVerificationEmail({ toEmail, firstName, verificationUrl }) {
 
   const payload = {
     sender: {
-      email: process.env.EMAIL_FROM,
+      email: emailFrom,
       name: senderName,
     },
     to: [{ email: toEmail, name: firstName || toEmail }],
@@ -57,7 +62,7 @@ async function sendVerificationEmail({ toEmail, firstName, verificationUrl }) {
         headers: {
           accept: 'application/json',
           'content-type': 'application/json',
-          'api-key': process.env.BREVO_API_KEY,
+          'api-key': apiKey,
         },
         body: JSON.stringify(payload),
       },
