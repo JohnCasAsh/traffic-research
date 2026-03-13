@@ -86,3 +86,10 @@ Week 2:
 3. List at least 10 test origin-destination pairs for evaluation.
 4. Build the project folder structure and setup repository.
 5. Begin UI wireframe and backend API test script.
+
+## 10. Progress Update - March 13, 2026
+- Completed Google and GitHub OAuth backend integration with callback handlers and secure state validation.
+- Added frontend social login flow improvements to start OAuth via JSON endpoint and direct provider redirect.
+- Configured production custom backend domain and SSL for api.navocs.com.
+- Added provider tracking for merged OAuth accounts so same email logs into one user while recording multiple providers.
+- Validated deploy pipeline by shipping backend and frontend updates to production.
