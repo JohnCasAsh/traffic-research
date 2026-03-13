@@ -3,7 +3,7 @@ import { motion } from 'motion/react';
 import { Navigation, Mail, Lock, ArrowRight, Github, Chrome } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
-const API_URL = import.meta.env.VITE_API_URL || (window.location.hostname === 'localhost' ? 'http://localhost:3001' : 'https://traffic-backend-api.azurewebsites.net');
+const API_URL = import.meta.env.VITE_API_URL || (window.location.hostname === 'localhost' ? 'http://localhost:3001' : 'https://api.navocs.com');
 
 export function LoginPage() {
   const navigate = useNavigate();
