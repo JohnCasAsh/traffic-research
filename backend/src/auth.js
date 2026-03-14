@@ -9,7 +9,7 @@ const { v4: uuidv4 } = require('uuid');
 const db = require('./database');
 const { sendMakeEvent } = require('./makeNotifier');
 const { logToNotionAsync } = require('./notionLogger');
-const { sendVerificationEmail } = require('./brevoMailer');
+const { sendVerificationEmail, sendPasswordResetEmail } = require('./brevoMailer');
 const {
   encryptEmail,
   hmacEmail,
@@ -26,6 +26,8 @@ const REQUIRE_EMAIL_VERIFICATION = process.env.REQUIRE_EMAIL_VERIFICATION !== 'f
 const EMAIL_VERIFICATION_TTL_MINUTES = parseInt(
   process.env.EMAIL_VERIFICATION_TTL_MINUTES || '1440'
 );
+const PASSWORD_RESET_TTL_MINUTES = parseInt(process.env.PASSWORD_RESET_TTL_MINUTES || '60');
+const PASSWORD_RESET_MAX_PER_DAY = parseInt(process.env.PASSWORD_RESET_MAX_PER_DAY || '3');
 const OAUTH_STATE_TTL_MS = parseInt(process.env.OAUTH_STATE_TTL_MS || '600000');
 const VERIFY_API_BASE_URL = (
   process.env.EMAIL_VERIFY_URL_BASE ||
@@ -52,6 +54,14 @@ function createEmailVerificationToken() {
   const token = crypto.randomBytes(32).toString('hex');
   const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
   const expiresAt = new Date(Date.now() + EMAIL_VERIFICATION_TTL_MINUTES * 60000).toISOString();
+
+  return { token, tokenHash, expiresAt };
+}
+
+function createPasswordResetToken() {
+  const token = crypto.randomBytes(32).toString('hex');
+  const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+  const expiresAt = new Date(Date.now() + PASSWORD_RESET_TTL_MINUTES * 60000).toISOString();
 
   return { token, tokenHash, expiresAt };
 }
@@ -99,6 +109,38 @@ function providerLabel(provider) {
   }
 
   return 'OAuth';
+}
+
+function getAuthProviderList(user) {
+  if (Array.isArray(user.auth_providers) && user.auth_providers.length > 0) {
+    return user.auth_providers;
+  }
+
+  if (user.auth_provider) {
+    return [user.auth_provider];
+  }
+
+  return [];
+}
+
+function formatProviderList(providers) {
+  const labels = providers
+    .map((provider) => providerLabel(provider))
+    .filter(Boolean);
+
+  if (labels.length === 0) {
+    return 'social sign-in';
+  }
+
+  if (labels.length === 1) {
+    return labels[0];
+  }
+
+  if (labels.length === 2) {
+    return `${labels[0]} or ${labels[1]}`;
+  }
+
+  return `${labels.slice(0, -1).join(', ')}, or ${labels[labels.length - 1]}`;
 }
 
 function createCodeError(code, message) {
@@ -376,6 +418,11 @@ async function findOrCreateOAuthUser({ provider, email, firstName, lastName, ipA
     email_verified_at: nowIso,
     email_verification_token_hash: null,
     email_verification_expires_at: null,
+    password_reset_token_hash: null,
+    password_reset_expires_at: null,
+    password_reset_requested_at: null,
+    password_reset_request_date: null,
+    password_reset_request_count: 0,
     auth_provider: provider,
     auth_providers: [provider],
   });
@@ -490,6 +537,11 @@ router.post(
         email_verified_at: REQUIRE_EMAIL_VERIFICATION ? null : nowIso,
         email_verification_token_hash: verificationState ? verificationState.tokenHash : null,
         email_verification_expires_at: verificationState ? verificationState.expiresAt : null,
+        password_reset_token_hash: null,
+        password_reset_expires_at: null,
+        password_reset_requested_at: null,
+        password_reset_request_date: null,
+        password_reset_request_count: 0,
       });
 
       // Audit log (Integrity — tracking all security events)
@@ -655,6 +707,187 @@ router.post(
       return res.json({ message: 'Verification email sent.' });
     } catch (err) {
       console.error('Resend verification error:', err);
+      return res.status(500).json({ error: 'Internal server error' });
+    }
+  }
+);
+
+router.post(
+  '/forgot-password',
+  [body('email').isEmail().normalizeEmail()],
+  async (req, res) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({ error: 'Invalid email address' });
+      }
+
+      const { email } = req.body;
+      const hmacKey = process.env.EMAIL_HMAC_KEY;
+      const emailHash = hmacEmail(email, hmacKey);
+      const user = await db.getUserByEmailHmac(emailHash);
+
+      if (!user) {
+        return res.json({ message: 'If an account exists, a password reset email has been sent.' });
+      }
+
+      if (!user.password_hash) {
+        const providers = formatProviderList(getAuthProviderList(user));
+        await db.addAuditLog({
+          user_id: user.id,
+          action: 'PASSWORD_RESET_BLOCKED_OAUTH_ACCOUNT',
+          ip_address: req.ip,
+          details: JSON.stringify({ providers }),
+        });
+
+        return res.status(400).json({
+          error: `This account uses ${providers}. Please sign in with ${providers}.`,
+          code: 'OAUTH_ACCOUNT_NO_PASSWORD',
+        });
+      }
+
+      const todayUtc = new Date().toISOString().slice(0, 10);
+      const currentCount = user.password_reset_request_date === todayUtc
+        ? Number(user.password_reset_request_count || 0)
+        : 0;
+
+      if (currentCount >= PASSWORD_RESET_MAX_PER_DAY) {
+        await db.addAuditLog({
+          user_id: user.id,
+          action: 'PASSWORD_RESET_DAILY_LIMIT_REACHED',
+          ip_address: req.ip,
+          details: JSON.stringify({
+            date: todayUtc,
+            count: currentCount,
+            limit: PASSWORD_RESET_MAX_PER_DAY,
+          }),
+        });
+
+        return res.status(429).json({
+          error: `Password reset limit reached. You can request up to ${PASSWORD_RESET_MAX_PER_DAY} reset emails per day.`,
+          code: 'PASSWORD_RESET_DAILY_LIMIT',
+        });
+      }
+
+      const resetState = createPasswordResetToken();
+      const nextCount = currentCount + 1;
+      await db.setUserPasswordResetToken(
+        user.id,
+        resetState.tokenHash,
+        resetState.expiresAt,
+        todayUtc,
+        nextCount
+      );
+
+      const resetUrl = `${FRONTEND_URL}/password-recovery?token=${resetState.token}`;
+      const emailResult = await sendPasswordResetEmail({
+        toEmail: email,
+        firstName: user.first_name,
+        resetUrl,
+        expiresMinutes: PASSWORD_RESET_TTL_MINUTES,
+      });
+
+      if (!emailResult.sent) {
+        return res.status(503).json({
+          error: 'Password reset email provider is not configured.',
+        });
+      }
+
+      await db.addAuditLog({
+        user_id: user.id,
+        action: 'PASSWORD_RESET_REQUESTED',
+        ip_address: req.ip,
+        details: JSON.stringify({
+          date: todayUtc,
+          count: nextCount,
+          limit: PASSWORD_RESET_MAX_PER_DAY,
+        }),
+      });
+
+      const resetPayload = {
+        userId: user.id,
+        count: nextCount,
+        limit: PASSWORD_RESET_MAX_PER_DAY,
+      };
+      sendMakeEvent('auth_password_reset_requested', resetPayload).catch(() => {});
+      logToNotionAsync('auth_password_reset_requested', resetPayload);
+
+      return res.json({ message: 'Password reset email sent. Please check your inbox.' });
+    } catch (err) {
+      console.error('Forgot password error:', err);
+      return res.status(500).json({ error: 'Internal server error' });
+    }
+  }
+);
+
+router.post(
+  '/reset-password',
+  [
+    body('token').isString().trim().isLength({ min: 20, max: 256 }),
+    body('password')
+      .isLength({ min: 8, max: 128 })
+      .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/)
+      .withMessage('Password must have uppercase, lowercase, and number'),
+  ],
+  async (req, res) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({ error: 'Validation failed', details: errors.array() });
+      }
+
+      const { token, password } = req.body;
+      const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+      const user = await db.getUserByPasswordResetTokenHash(tokenHash);
+
+      if (!user) {
+        return res.status(400).json({
+          error: 'Reset link is invalid or already used.',
+          code: 'INVALID_RESET_TOKEN',
+        });
+      }
+
+      const expiresAt = user.password_reset_expires_at
+        ? new Date(user.password_reset_expires_at).getTime()
+        : 0;
+
+      if (!expiresAt || Number.isNaN(expiresAt) || expiresAt < Date.now()) {
+        await db.clearUserPasswordResetToken(user.id).catch(() => {});
+        return res.status(410).json({
+          error: 'Reset link expired. Please request a new one.',
+          code: 'RESET_TOKEN_EXPIRED',
+        });
+      }
+
+      if (!user.password_hash) {
+        const providers = formatProviderList(getAuthProviderList(user));
+        return res.status(400).json({
+          error: `This account uses ${providers}. Please sign in with ${providers}.`,
+          code: 'OAUTH_ACCOUNT_NO_PASSWORD',
+        });
+      }
+
+      const currentPepper = process.env.PASSWORD_PEPPER;
+      const pepperRow = await db.getCurrentPepperVersion();
+      const passwordHash = await hashPassword(password, currentPepper);
+
+      await db.updateUserPasswordHashAndPepperVersion(user.id, passwordHash, pepperRow.version);
+      await db.clearUserPasswordResetToken(user.id);
+      await db.resetUserLockout(user.id);
+
+      await db.addAuditLog({
+        user_id: user.id,
+        action: 'PASSWORD_RESET_SUCCESS',
+        ip_address: req.ip,
+      });
+
+      const resetSuccessPayload = { userId: user.id };
+      sendMakeEvent('auth_password_reset_success', resetSuccessPayload).catch(() => {});
+      logToNotionAsync('auth_password_reset_success', resetSuccessPayload);
+
+      return res.json({ message: 'Password reset successful. You can sign in with your new password.' });
+    } catch (err) {
+      console.error('Reset password error:', err);
       return res.status(500).json({ error: 'Internal server error' });
     }
   }

@@ -152,6 +152,28 @@ async function getUserByVerificationTokenHash(tokenHash) {
   };
 }
 
+async function getUserByPasswordResetTokenHash(tokenHash) {
+  await ready();
+  const db = getFirestore();
+
+  const snapshot = await db
+    .collection(COLLECTIONS.users)
+    .where('password_reset_token_hash', '==', tokenHash)
+    .limit(1)
+    .get();
+
+  if (snapshot.empty) {
+    return null;
+  }
+
+  const doc = snapshot.docs[0];
+  const data = doc.data();
+  return {
+    ...data,
+    id: data.id || doc.id,
+  };
+}
+
 async function setUserEmailVerificationToken(userId, tokenHash, expiresAt) {
   await ready();
   const db = getFirestore();
@@ -170,6 +192,29 @@ async function markUserEmailVerified(userId) {
     email_verified_at: new Date().toISOString(),
     email_verification_token_hash: null,
     email_verification_expires_at: null,
+    updated_at: new Date().toISOString(),
+  });
+}
+
+async function setUserPasswordResetToken(userId, tokenHash, expiresAt, requestDate, requestCount) {
+  await ready();
+  const db = getFirestore();
+  await db.collection(COLLECTIONS.users).doc(userId).update({
+    password_reset_token_hash: tokenHash,
+    password_reset_expires_at: expiresAt,
+    password_reset_requested_at: new Date().toISOString(),
+    password_reset_request_date: requestDate,
+    password_reset_request_count: requestCount,
+    updated_at: new Date().toISOString(),
+  });
+}
+
+async function clearUserPasswordResetToken(userId) {
+  await ready();
+  const db = getFirestore();
+  await db.collection(COLLECTIONS.users).doc(userId).update({
+    password_reset_token_hash: null,
+    password_reset_expires_at: null,
     updated_at: new Date().toISOString(),
   });
 }
@@ -318,10 +363,13 @@ module.exports = {
   ready,
   getUserByEmailHmac,
   getUserByVerificationTokenHash,
+  getUserByPasswordResetTokenHash,
   createUser,
   addOAuthProviderToUser,
   deleteUser,
   setUserEmailVerificationToken,
+  setUserPasswordResetToken,
+  clearUserPasswordResetToken,
   markUserEmailVerified,
   getCurrentPepperVersion,
   updateUserFailedLogin,

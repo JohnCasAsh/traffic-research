@@ -5,6 +5,7 @@ import { Dashboard } from "./components/Dashboard";
 import { RouteComparison } from "./components/RouteComparison";
 import { Analytics } from "./components/Analytics";
 import { LoginPage } from "./components/LoginPage";
+import { PasswordRecoveryPage } from "./components/PasswordRecoveryPage";
 import { SignUpPage } from "./components/SignUpPage";
 
 export const router = createBrowserRouter([
@@ -25,5 +26,9 @@ export const router = createBrowserRouter([
   {
     path: "/signup",
     Component: SignUpPage,
+  },
+  {
+    path: "/password-recovery",
+    Component: PasswordRecoveryPage,
   },
 ]);
