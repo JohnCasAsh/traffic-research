@@ -320,6 +320,14 @@ async function findOrCreateOAuthUser({ provider, email, firstName, lastName, ipA
   const existingUser = await db.getUserByEmailHmac(emailHash);
 
   if (existingUser) {
+    // Block OAuth login for accounts registered with email/password
+    if (existingUser.password_hash) {
+      throw createCodeError(
+        'PASSWORD_ACCOUNT_EXISTS',
+        'This email is already registered with email and password sign-in. Please sign in with your password.'
+      );
+    }
+
     await db.addOAuthProviderToUser(existingUser.id, provider);
 
     if (existingUser.email_verified === false) {
@@ -727,7 +735,9 @@ router.get('/oauth/google/callback', async (req, res) => {
       ? 'no_verified_email'
       : error.code === 'OAUTH_NOT_CONFIGURED'
         ? 'oauth_not_configured'
-        : 'oauth_failed';
+        : error.code === 'PASSWORD_ACCOUNT_EXISTS'
+          ? 'password_account_exists'
+          : 'oauth_failed';
     return redirectOAuthError(res, 'google', reason);
   }
 });
@@ -804,7 +814,9 @@ router.get('/oauth/github/callback', async (req, res) => {
       ? 'no_verified_email'
       : error.code === 'OAUTH_NOT_CONFIGURED'
         ? 'oauth_not_configured'
-        : 'oauth_failed';
+        : error.code === 'PASSWORD_ACCOUNT_EXISTS'
+          ? 'password_account_exists'
+          : 'oauth_failed';
     return redirectOAuthError(res, 'github', reason);
   }
 });
@@ -841,6 +853,17 @@ router.post(
         const minutesLeft = Math.ceil((new Date(user.locked_until) - new Date()) / 60000);
         return res.status(423).json({
           error: `Account locked. Try again in ${minutesLeft} minutes.`,
+        });
+      }
+
+      // Block password login for accounts registered via OAuth only
+      if (!user.password_hash) {
+        const providers = Array.isArray(user.auth_providers) && user.auth_providers.length > 0
+          ? user.auth_providers.map(p => p === 'google' ? 'Google' : p === 'github' ? 'GitHub' : p).join(' or ')
+          : 'social sign-in';
+        return res.status(401).json({
+          error: `This account was created with ${providers}. Please use the social sign-in button to sign in.`,
+          code: 'OAUTH_ACCOUNT_NO_PASSWORD',
         });
       }
 

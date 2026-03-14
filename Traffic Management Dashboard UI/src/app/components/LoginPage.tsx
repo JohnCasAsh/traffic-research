@@ -56,8 +56,8 @@ export function LoginPage() {
           : oauthReason === 'missing_code'
             ? `${oauthProviderLabel} sign-in failed: missing authorization code.`
             : oauthReason === 'no_verified_email'
-              ? `${oauthProviderLabel} account does not have a verified email.`
-              : `${oauthProviderLabel} sign-in failed. Please try again.`
+              ? `${oauthProviderLabel} account does not have a verified email.`              : oauthReason === 'password_account_exists'
+              ? `This email is already registered with email and password. Please sign in with your password instead of ${oauthProviderLabel}.`              : `${oauthProviderLabel} sign-in failed. Please try again.`
     : null;
 
   const notice = oauthErrorText
