@@ -66,12 +66,8 @@ if ($LASTEXITCODE -ne 0 -or -not $appSettingsJson) {
 }
 
 $appSettings = $appSettingsJson | ConvertFrom-Json
-if (-not $env:VITE_API_URL -and $appSettings.VITE_API_URL) {
-    $env:VITE_API_URL = [string]$appSettings.VITE_API_URL
-}
-if (-not $env:VITE_GOOGLE_MAPS_API_KEY -and $appSettings.VITE_GOOGLE_MAPS_API_KEY) {
-    $env:VITE_GOOGLE_MAPS_API_KEY = [string]$appSettings.VITE_GOOGLE_MAPS_API_KEY
-}
+$env:VITE_API_URL = [string]$appSettings.VITE_API_URL
+$env:VITE_GOOGLE_MAPS_API_KEY = [string]$appSettings.VITE_GOOGLE_MAPS_API_KEY
 
 if (-not $env:VITE_GOOGLE_MAPS_API_KEY) {
     Write-Host "  Missing VITE_GOOGLE_MAPS_API_KEY for frontend build." -ForegroundColor Red
@@ -83,7 +79,23 @@ if ($LASTEXITCODE -ne 0) {
     Write-Host "  BUILD FAILED!" -ForegroundColor Red
     exit 1
 }
-Write-Host "  Build complete." -ForegroundColor Green
+
+$mainBundle = Get-ChildItem -Path (Join-Path $UIFolder "dist\assets") -Filter "index-*.js" -File |
+    Sort-Object LastWriteTime -Descending |
+    Select-Object -First 1
+
+if (-not $mainBundle) {
+    Write-Host "  BUILD FAILED: could not find frontend bundle in dist/assets." -ForegroundColor Red
+    exit 1
+}
+
+$bundleContent = Get-Content $mainBundle.FullName -Raw
+if (-not $bundleContent.Contains($env:VITE_GOOGLE_MAPS_API_KEY)) {
+    Write-Host "  BUILD FAILED: Google Maps key not embedded in bundle. Deployment stopped." -ForegroundColor Red
+    exit 1
+}
+
+Write-Host "  Build complete and map key verified in bundle." -ForegroundColor Green
 
 # Step 4: Deploy to Azure Green
 Write-Host "[4/4] Deploying to Azure GREEN (staging)..." -ForegroundColor Yellow
