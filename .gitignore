@@ -9,3 +9,4 @@ dist/
 Thumbs.db
 backend/data/
 backend/firebase-service-account*.json
+backend/*.zip
