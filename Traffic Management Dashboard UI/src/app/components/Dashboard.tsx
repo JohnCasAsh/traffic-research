@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import { motion } from 'motion/react';
 import { MapPin, Navigation, Fuel, DollarSign, Car, Zap, TrendingUp, Settings, Info } from 'lucide-react';
+import { DashboardMap } from './DashboardMap';
 
 export function Dashboard() {
   const navigate = useNavigate();
@@ -282,80 +283,7 @@ export function Dashboard() {
             className="lg:col-span-2"
           >
             <div className="bg-white rounded-xl shadow-sm border border-slate-200 h-full min-h-[600px] relative overflow-hidden">
-              {/* Map Background Image */}
-              <img
-                src="https://images.unsplash.com/photo-1532594722383-b75fb8381b55?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxyb3V0ZSUyMG1hcCUyMG5hdmlnYXRpb258ZW58MXx8fHwxNzczMjAxNjAyfDA&ixlib=rb-4.1.0&q=80&w=1080"
-                alt="Map Navigation"
-                className="absolute inset-0 w-full h-full object-cover opacity-20"
-              />
-              
-              {/* Map Placeholder Overlay */}
-              <div className="absolute inset-0 bg-gradient-to-br from-slate-100/80 to-slate-200/80 flex items-center justify-center">
-                <motion.div
-                  initial={{ opacity: 0, scale: 0.8 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  transition={{ delay: 0.6 }}
-                  className="text-center z-10"
-                >
-                  <motion.div
-                    animate={{ y: [0, -10, 0] }}
-                    transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
-                    className="w-20 h-20 bg-white rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg"
-                  >
-                    <MapPin className="w-10 h-10 text-teal-600" />
-                  </motion.div>
-                  <h3 className="text-xl font-bold text-slate-700 mb-2">Interactive Map View</h3>
-                  <p className="text-slate-500 max-w-sm">
-                    Enter origin and destination to view route analysis on the interactive map
-                  </p>
-                </motion.div>
-              </div>
-
-              {/* Map Controls Overlay */}
-              <div className="absolute top-4 right-4 space-y-2 z-20">
-                <motion.button
-                  whileHover={{ scale: 1.1 }}
-                  whileTap={{ scale: 0.9 }}
-                  className="w-10 h-10 bg-white rounded-lg shadow-md flex items-center justify-center hover:bg-slate-50 transition-colors"
-                >
-                  <span className="text-xl">+</span>
-                </motion.button>
-                <motion.button
-                  whileHover={{ scale: 1.1 }}
-                  whileTap={{ scale: 0.9 }}
-                  className="w-10 h-10 bg-white rounded-lg shadow-md flex items-center justify-center hover:bg-slate-50 transition-colors"
-                >
-                  <span className="text-xl">−</span>
-                </motion.button>
-              </div>
-
-              {/* Legend */}
-              <motion.div
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: 0.8 }}
-                className="absolute bottom-4 left-4 bg-white rounded-lg shadow-lg p-4 border border-slate-200 z-20"
-              >
-                <div className="text-xs font-medium text-slate-700 mb-2">Traffic Legend</div>
-                <div className="space-y-1">
-                  <div className="flex items-center space-x-2">
-                    <motion.div
-                      animate={{ scale: [1, 1.2, 1] }}
-                      transition={{ duration: 1.5, repeat: Infinity }}
-                      className="w-3 h-3 bg-green-500 rounded-full"
-                    ></motion.div>
-                    <span className="text-xs text-slate-600">Low Traffic</span>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <div className="w-3 h-3 bg-orange-500 rounded-full"></div>
-                    <span className="text-xs text-slate-600">Moderate</span>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <div className="w-3 h-3 bg-red-500 rounded-full"></div>
-                    <span className="text-xs text-slate-600">Heavy Traffic</span>
-                  </div>
-                </div>
-              </motion.div>
+              <DashboardMap origin={formData.origin} destination={formData.destination} />
             </div>
           </motion.div>
         </div>
