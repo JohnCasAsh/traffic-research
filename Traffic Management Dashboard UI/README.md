@@ -22,6 +22,9 @@
   - Live path is now rendered segment-by-segment, where each segment keeps its original speed color.
   - Congestion alerts are generated when a tracked vehicle stays below the configured low-speed threshold long enough.
   - Historical segments can be queried from /api/tracking/history.
+  - Traffic analytics (including busiest day/hour) can be queried from /api/tracking/analytics.
+  - Live vehicles remain visible for up to 30 minutes after their last update by default.
+  - Historical tracking data is persisted locally on the backend for later analysis.
 
   Required backend env values are documented in backend/.env.example:
   - TRACKING_TTL_MS
@@ -32,6 +35,8 @@
   - TRACKING_SEGMENT_RETENTION_MS
   - TRACKING_HISTORY_DEFAULT_MINUTES
   - TRACKING_HISTORY_MAX_MINUTES
+  - TRACKING_ANALYTICS_DEFAULT_DAYS
+  - TRACKING_LOCAL_STORE_PATH
 
   Run `npm i` to install the dependencies.
 

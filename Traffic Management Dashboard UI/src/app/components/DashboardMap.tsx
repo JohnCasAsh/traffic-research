@@ -186,6 +186,8 @@ type LiveTrackingAlert = {
   speedKph: number;
   startedAt: string;
   updatedAt: string;
+  durationMs?: number;
+  durationMinutes?: number;
 };
 
 type LiveTrackingSnapshot = {
@@ -1197,6 +1199,11 @@ export function DashboardMap({ origin, destination, liveTrackingEnabled = false 
                 <div className="text-[10px] text-red-700">
                   Vehicle {alert.vehicleId.slice(0, 6)} | {Math.round(alert.speedKph)} km/h
                 </div>
+                {typeof alert.durationMinutes === 'number' && (
+                  <div className="text-[10px] text-red-700">
+                    In traffic for {alert.durationMinutes.toFixed(1)} min
+                  </div>
+                )}
               </div>
             ))}
           </div>

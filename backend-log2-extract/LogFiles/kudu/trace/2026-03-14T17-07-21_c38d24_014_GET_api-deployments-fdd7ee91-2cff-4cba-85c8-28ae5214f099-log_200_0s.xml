@@ -1,0 +1,7 @@
+<step title="Incoming Request" date="2026-03-14T17:07:21.433" instance="c38d24" url="/api/deployments/fdd7ee91-2cff-4cba-85c8-28ae5214f099/log" method="GET" type="request" pid="831,1,51" Accept="*/*" Host="traffic-backend-api.scm.azurewebsites.net" User-Agent="AZURECLI/2.80.0 (MSI)" Accept-Encoding="gzip, deflate" Authorization="Bea..." x-ms-client-request-id="4065632c-1fc8-11f1-959b-50bbb53266d1" X-ARR-LOG-ID="4065632c-1fc8-11f1-959b-50bbb53266d1" CLIENT-IP="49.150.202.34:22316" X-SITE-DEPLOYMENT-ID="traffic-backend-api" WAS-DEFAULT-HOSTNAME="traffic-backend-api.scm.azurewebsites.net" X-Forwarded-Proto="https" X-AppService-Proto="https" X-Forwarded-TlsVersion="1.3" X-WAWS-Unencoded-URL="/api/deployments/fdd7ee91-2cff-4cba-85c8-28ae5214f099/log" X-Client-IP="49.150.202.34" X-Client-Port="22316" >
+  <step title="Cleanup Xml Logs" date="2026-03-14T17:07:21.435" /><!-- duration: 7ms -->
+  <step title="DeploymentService.GetLogEntry" date="2026-03-14T17:07:21.531" >
+    <step title="DeploymentManager.GetLogEntries(id:fdd7ee91-2cff-4cba-85c8-28ae5214f099)" date="2026-03-14T17:07:21.541" /><!-- duration: 19ms -->
+  </step><!-- duration: 31ms -->
+  <step title="Outgoing response" date="2026-03-14T17:07:21.590" type="response" statusCode="200" statusText="OK" /><!-- duration: 3ms -->
+</step><!-- duration: 163ms -->
