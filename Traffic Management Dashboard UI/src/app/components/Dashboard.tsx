@@ -7,6 +7,9 @@ import { DashboardMap } from './DashboardMap';
 export function Dashboard() {
   const navigate = useNavigate();
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [liveTrackingEnabled, setLiveTrackingEnabled] = useState(false);
+  const [isLocatingOrigin, setIsLocatingOrigin] = useState(false);
+  const [originLocationStatus, setOriginLocationStatus] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     origin: '',
     destination: '',
@@ -28,6 +31,46 @@ export function Dashboard() {
 
   const handleChange = (field: string, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));
+  };
+
+  const handleUseCurrentLocation = () => {
+    if (typeof navigator === 'undefined' || !navigator.geolocation) {
+      setOriginLocationStatus('Location is not supported in this browser.');
+      return;
+    }
+
+    setIsLocatingOrigin(true);
+    setOriginLocationStatus(null);
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const latitude = position.coords.latitude;
+        const longitude = position.coords.longitude;
+        const coordinateText = `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`;
+
+        setFormData((previous) => ({
+          ...previous,
+          origin: coordinateText,
+        }));
+        setOriginLocationStatus('Current location applied. You can still edit Origin manually.');
+        setIsLocatingOrigin(false);
+      },
+      (error) => {
+        if (error.code === error.PERMISSION_DENIED) {
+          setOriginLocationStatus('Location permission was denied. Enable it to use current origin.');
+        } else if (error.code === error.TIMEOUT) {
+          setOriginLocationStatus('Unable to get location in time. Please try again.');
+        } else {
+          setOriginLocationStatus('Unable to read current location. You can enter Origin manually.');
+        }
+        setIsLocatingOrigin(false);
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 12000,
+        maximumAge: 5000,
+      }
+    );
   };
 
   return (
@@ -67,18 +110,29 @@ export function Dashboard() {
                     <MapPin className="w-4 h-4 text-teal-600" />
                     <span>Origin Location</span>
                   </label>
-                  <button type="button" className="text-xs text-teal-600 hover:text-teal-700 font-medium flex items-center">
-                    <Navigation className="w-3 h-3 mr-1" /> Use current
+                  <button
+                    type="button"
+                    onClick={handleUseCurrentLocation}
+                    disabled={isLocatingOrigin}
+                    className="text-xs text-teal-600 hover:text-teal-700 font-medium flex items-center disabled:text-slate-400 disabled:cursor-not-allowed"
+                  >
+                    <Navigation className="w-3 h-3 mr-1" /> {isLocatingOrigin ? 'Locating...' : 'Use current'}
                   </button>
                 </div>
                 <input
                   type="text"
                   value={formData.origin}
-                  onChange={(e) => handleChange('origin', e.target.value)}
+                  onChange={(e) => {
+                    setOriginLocationStatus(null);
+                    handleChange('origin', e.target.value);
+                  }}
                   placeholder="Enter starting location"
                   className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-all"
                   required
                 />
+                {originLocationStatus && (
+                  <p className="text-xs mt-2 text-slate-600">{originLocationStatus}</p>
+                )}
               </motion.div>
 
               {/* Destination */}
@@ -210,11 +264,16 @@ export function Dashboard() {
               <div className="flex gap-3 pt-2">
                 <button 
                   type="button" 
-                  title="Coming Soon: Track your route live while driving"
-                  className="flex-1 py-3 px-4 border border-slate-200 rounded-xl bg-slate-50 text-slate-400 text-sm font-medium flex items-center justify-center space-x-2 cursor-not-allowed"
+                  title={liveTrackingEnabled ? 'Stop sharing your live location' : 'Share your live location while driving'}
+                  onClick={() => setLiveTrackingEnabled((previous) => !previous)}
+                  className={`flex-1 py-3 px-4 border rounded-xl text-sm font-medium flex items-center justify-center space-x-2 transition-colors ${
+                    liveTrackingEnabled
+                      ? 'border-emerald-300 bg-emerald-50 text-emerald-700'
+                      : 'border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100'
+                  }`}
                 >
                   <Navigation className="w-4 h-4" />
-                  <span>Live Tracking</span>
+                  <span>{liveTrackingEnabled ? 'Tracking Live' : 'Live Tracking'}</span>
                 </button>
                 <button 
                   type="button" 
@@ -283,7 +342,11 @@ export function Dashboard() {
             className="lg:col-span-2"
           >
             <div className="bg-white rounded-xl shadow-sm border border-slate-200 h-full min-h-[600px] relative overflow-hidden">
-              <DashboardMap origin={formData.origin} destination={formData.destination} />
+              <DashboardMap
+                origin={formData.origin}
+                destination={formData.destination}
+                liveTrackingEnabled={liveTrackingEnabled}
+              />
             </div>
           </motion.div>
         </div>

@@ -93,3 +93,21 @@ Week 2:
 - Configured production custom backend domain and SSL for api.navocs.com.
 - Added provider tracking for merged OAuth accounts so same email logs into one user while recording multiple providers.
 - Validated deploy pipeline by shipping backend and frontend updates to production.
+
+## 11. Phase Status Note - March 15, 2026
+
+Phase 1 (Active Now - In Progress):
+- Build and stabilize the web dashboard for route comparison and recommendation.
+- Include route options, live map preview, traffic-aware routing, and energy/cost scoring baseline.
+- Implement live tracking and segment-based traffic history visualization for evaluation.
+- Current status: active development and testing are ongoing under Phase 1.
+
+Phase 2 (Planned Next):
+- Add station recommendation logic for nearest practical fuel/charging stop.
+- Incorporate fuel price, electricity price, detour distance, and expected delay into ranking.
+- Improve route score with station-aware cost optimization.
+
+Phase 3 (Planned Advanced Stage):
+- Integrate richer telemetry sources (OBD-II and EV battery/charging signals where available).
+- Add predictive optimization and stronger historical analytics for long-term route efficiency.
+- Expand evaluation with larger datasets and publication-grade benchmarking.
