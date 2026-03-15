@@ -15,6 +15,8 @@ param(
 $ErrorActionPreference = "Stop"
 $ProjectRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $UIFolder = Join-Path $ProjectRoot "Traffic Management Dashboard UI"
+$StaticWebAppName = "tmresearch-green-johncasash"
+$ResourceGroup = "traffic-management-rg"
 
 # Azure deployment token
 $GreenToken = "1f0d359479f271506b2aca9a355ac95b5d6ebc129ad9321b6519ddbe45f99d4004-478d80e9-b00d-480c-81e8-239e63a16564000292109f897900"
@@ -55,6 +57,27 @@ Write-Host "  Pushed to origin/$currentBranch" -ForegroundColor Green
 # Step 3: Build
 Write-Host "[3/4] Building project..." -ForegroundColor Yellow
 Set-Location $UIFolder
+
+Write-Host "  Loading frontend app settings for build-time Vite env vars..." -ForegroundColor Gray
+$appSettingsJson = az staticwebapp appsettings list --name $StaticWebAppName --resource-group $ResourceGroup --query properties -o json
+if ($LASTEXITCODE -ne 0 -or -not $appSettingsJson) {
+    Write-Host "  Failed to load Static Web App settings." -ForegroundColor Red
+    exit 1
+}
+
+$appSettings = $appSettingsJson | ConvertFrom-Json
+if (-not $env:VITE_API_URL -and $appSettings.VITE_API_URL) {
+    $env:VITE_API_URL = [string]$appSettings.VITE_API_URL
+}
+if (-not $env:VITE_GOOGLE_MAPS_API_KEY -and $appSettings.VITE_GOOGLE_MAPS_API_KEY) {
+    $env:VITE_GOOGLE_MAPS_API_KEY = [string]$appSettings.VITE_GOOGLE_MAPS_API_KEY
+}
+
+if (-not $env:VITE_GOOGLE_MAPS_API_KEY) {
+    Write-Host "  Missing VITE_GOOGLE_MAPS_API_KEY for frontend build." -ForegroundColor Red
+    exit 1
+}
+
 npm run build
 if ($LASTEXITCODE -ne 0) {
     Write-Host "  BUILD FAILED!" -ForegroundColor Red
