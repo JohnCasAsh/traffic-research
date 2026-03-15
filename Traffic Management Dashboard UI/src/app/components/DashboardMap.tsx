@@ -22,6 +22,7 @@ export function DashboardMap({ origin, destination }: DashboardMapProps) {
   const directionsServiceRef = useRef<any>(null);
   const directionsRendererRef = useRef<any>(null);
 
+  const [isMapActivated, setIsMapActivated] = useState(false);
   const [mapReady, setMapReady] = useState(false);
   const [configurationError, setConfigurationError] = useState<string | null>(null);
   const [routeError, setRouteError] = useState<string | null>(null);
@@ -39,6 +40,10 @@ export function DashboardMap({ origin, destination }: DashboardMapProps) {
   const normalizedDestination = destination.trim();
 
   useEffect(() => {
+    if (!isMapActivated) {
+      return;
+    }
+
     if (!mapsApiKey) {
       setConfigurationError(
         'Google Maps is not configured yet. Add VITE_GOOGLE_MAPS_API_KEY to the frontend environment settings.'
@@ -111,10 +116,15 @@ export function DashboardMap({ origin, destination }: DashboardMapProps) {
       directionsRendererRef.current = null;
       setMapReady(false);
     };
-  }, [mapsApiKey]);
+  }, [isMapActivated, mapsApiKey]);
 
   useEffect(() => {
-    if (!mapReady || !directionsServiceRef.current || !directionsRendererRef.current) {
+    if (
+      !isMapActivated ||
+      !mapReady ||
+      !directionsServiceRef.current ||
+      !directionsRendererRef.current
+    ) {
       return;
     }
 
@@ -181,7 +191,7 @@ export function DashboardMap({ origin, destination }: DashboardMapProps) {
       cancelled = true;
       window.clearTimeout(debounceHandle);
     };
-  }, [mapReady, normalizedOrigin, normalizedDestination]);
+  }, [isMapActivated, mapReady, normalizedOrigin, normalizedDestination]);
 
   const changeZoom = (delta: number) => {
     const map = mapRef.current;
@@ -193,11 +203,61 @@ export function DashboardMap({ origin, destination }: DashboardMapProps) {
     map.setZoom(Math.max(3, Math.min(20, currentZoom + delta)));
   };
 
+  const openLiveMap = () => {
+    setIsMapActivated(true);
+    setRouteError(null);
+    setConfigurationError(null);
+  };
+
   return (
     <div className="relative h-full min-h-[600px] overflow-hidden">
       <div ref={mapContainerRef} className="absolute inset-0" />
 
-      {configurationError && (
+      {!isMapActivated && (
+        <motion.button
+          type="button"
+          onClick={openLiveMap}
+          whileHover={{ scale: 1.01 }}
+          whileTap={{ scale: 0.995 }}
+          className="absolute inset-0 z-20 text-left"
+        >
+          <img
+            src="https://images.unsplash.com/photo-1532594722383-b75fb8381b55?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxyb3V0ZSUyMG1hcCUyMG5hdmlnYXRpb258ZW58MXx8fHwxNzczMjAxNjAyfDA&ixlib=rb-4.1.0&q=80&w=1080"
+            alt="Map Navigation"
+            className="absolute inset-0 w-full h-full object-cover opacity-20"
+          />
+          <div className="absolute inset-0 bg-gradient-to-br from-slate-100/80 to-slate-200/80 flex items-center justify-center p-6">
+            <div className="text-center">
+              <motion.div
+                animate={{ y: [0, -10, 0] }}
+                transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
+                className="w-20 h-20 bg-white rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg"
+              >
+                <MapPin className="w-10 h-10 text-teal-600" />
+              </motion.div>
+              <h3 className="text-xl font-bold text-slate-700 mb-2">Interactive Map View</h3>
+              <p className="text-slate-500 max-w-sm mb-4">
+                Enter origin and destination to view route analysis on the interactive map
+              </p>
+              <span className="inline-flex items-center rounded-full bg-white px-4 py-2 text-xs font-semibold text-slate-700 shadow border border-slate-200">
+                Click to open live Google Map
+              </span>
+            </div>
+          </div>
+        </motion.button>
+      )}
+
+      {isMapActivated && !configurationError && !mapReady && (
+        <div className="absolute inset-0 bg-slate-100/70 flex items-center justify-center p-6 z-20 pointer-events-none">
+          <div className="max-w-md text-center">
+            <MapPin className="w-10 h-10 text-teal-600 mx-auto mb-3" />
+            <h3 className="text-lg font-bold text-slate-800 mb-1">Opening Google Map</h3>
+            <p className="text-slate-600 text-sm">Loading map libraries and preparing the live view...</p>
+          </div>
+        </div>
+      )}
+
+      {isMapActivated && configurationError && (
         <div className="absolute inset-0 bg-slate-100/95 flex items-center justify-center p-6 z-20">
           <div className="max-w-md text-center">
             <MapPin className="w-12 h-12 text-red-500 mx-auto mb-4" />
@@ -207,7 +267,11 @@ export function DashboardMap({ origin, destination }: DashboardMapProps) {
         </div>
       )}
 
-      {!configurationError && !normalizedOrigin && !normalizedDestination && (
+      {isMapActivated &&
+        mapReady &&
+        !configurationError &&
+        !normalizedOrigin &&
+        !normalizedDestination && (
         <div className="absolute inset-0 bg-slate-100/35 flex items-center justify-center p-6 z-10 pointer-events-none">
           <motion.div
             initial={{ opacity: 0, scale: 0.9 }}
@@ -229,7 +293,7 @@ export function DashboardMap({ origin, destination }: DashboardMapProps) {
         </div>
       )}
 
-      {routeSummary && (
+      {isMapActivated && routeSummary && (
         <div className="absolute top-4 left-4 z-20 bg-white/95 backdrop-blur rounded-lg shadow-lg border border-slate-200 px-4 py-3">
           <div className="text-xs font-medium text-slate-500 mb-1">Preview Route</div>
           <div className="flex items-center gap-3 text-sm text-slate-700">
@@ -240,13 +304,13 @@ export function DashboardMap({ origin, destination }: DashboardMapProps) {
         </div>
       )}
 
-      {isRouting && !configurationError && (
+      {isMapActivated && isRouting && !configurationError && (
         <div className="absolute top-4 left-1/2 -translate-x-1/2 z-20 bg-blue-50 border border-blue-200 text-blue-700 rounded-full px-4 py-2 text-xs font-medium">
           Calculating route on Google Maps...
         </div>
       )}
 
-      {routeError && !configurationError && (
+      {isMapActivated && routeError && !configurationError && (
         <div className="absolute top-4 left-1/2 -translate-x-1/2 z-20 bg-red-50 border border-red-200 text-red-700 rounded-full px-4 py-2 text-xs font-medium">
           {routeError}
         </div>
@@ -254,7 +318,8 @@ export function DashboardMap({ origin, destination }: DashboardMapProps) {
 
       {!configurationError && (
         <>
-          <div className="absolute top-4 right-4 space-y-2 z-20">
+          {isMapActivated && (
+            <div className="absolute top-4 right-4 space-y-2 z-20">
             <motion.button
               whileHover={{ scale: 1.1 }}
               whileTap={{ scale: 0.9 }}
@@ -275,7 +340,8 @@ export function DashboardMap({ origin, destination }: DashboardMapProps) {
             >
               <span className="text-xl">−</span>
             </motion.button>
-          </div>
+            </div>
+          )}
 
           <motion.div
             initial={{ opacity: 0, x: -20 }}
