@@ -128,51 +128,58 @@ export function DashboardMap({ origin, destination }: DashboardMapProps) {
 
     let cancelled = false;
     setRouteError(null);
-    setIsRouting(true);
+    const debounceHandle = window.setTimeout(() => {
+      if (cancelled) {
+        return;
+      }
 
-    directionsServiceRef.current
-      .route({
-        origin: normalizedOrigin,
-        destination: normalizedDestination,
-        travelMode: (window as any).google.maps.TravelMode.DRIVING,
-        provideRouteAlternatives: false,
-        unitSystem: (window as any).google.maps.UnitSystem.METRIC,
-      })
-      .then((result: any) => {
-        if (cancelled) {
-          return;
-        }
+      setIsRouting(true);
 
-        directionsRendererRef.current.setDirections(result);
+      directionsServiceRef.current
+        .route({
+          origin: normalizedOrigin,
+          destination: normalizedDestination,
+          travelMode: (window as any).google.maps.TravelMode.DRIVING,
+          provideRouteAlternatives: false,
+          unitSystem: (window as any).google.maps.UnitSystem.METRIC,
+        })
+        .then((result: any) => {
+          if (cancelled) {
+            return;
+          }
 
-        const primaryLeg = result?.routes?.[0]?.legs?.[0];
-        if (primaryLeg) {
-          setRouteSummary({
-            distanceText: primaryLeg.distance?.text || 'N/A',
-            durationText: primaryLeg.duration?.text || 'N/A',
-          });
-        } else {
+          directionsRendererRef.current.setDirections(result);
+
+          const primaryLeg = result?.routes?.[0]?.legs?.[0];
+          if (primaryLeg) {
+            setRouteSummary({
+              distanceText: primaryLeg.distance?.text || 'N/A',
+              durationText: primaryLeg.duration?.text || 'N/A',
+            });
+          } else {
+            setRouteSummary(null);
+          }
+        })
+        .catch((error: any) => {
+          if (cancelled) {
+            return;
+          }
+
+          console.error('Google Maps route error:', error);
+          directionsRendererRef.current.set('directions', null);
           setRouteSummary(null);
-        }
-      })
-      .catch((error: any) => {
-        if (cancelled) {
-          return;
-        }
-
-        console.error('Google Maps route error:', error);
-        directionsRendererRef.current.set('directions', null);
-        setRouteSummary(null);
-        setRouteError('Unable to plot this route. Check the addresses and try again.');
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setIsRouting(false);
-        }
-      });
+          setRouteError('Unable to plot this route. Check the addresses and try again.');
+        })
+        .finally(() => {
+          if (!cancelled) {
+            setIsRouting(false);
+          }
+        });
+    }, 450);
 
     return () => {
       cancelled = true;
+      window.clearTimeout(debounceHandle);
     };
   }, [mapReady, normalizedOrigin, normalizedDestination]);
 
