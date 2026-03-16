@@ -2,10 +2,19 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import { motion } from 'motion/react';
 import { MapPin, Navigation, Fuel, DollarSign, Car, Zap, TrendingUp, Settings, Info } from 'lucide-react';
+import { DashboardMap } from './DashboardMap';
+import {
+  formatLocationAccuracy,
+  GeolocationLookupError,
+  getReliableCurrentPosition,
+} from '../location';
 
 export function Dashboard() {
   const navigate = useNavigate();
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [liveTrackingEnabled, setLiveTrackingEnabled] = useState(false);
+  const [isLocatingOrigin, setIsLocatingOrigin] = useState(false);
+  const [originLocationStatus, setOriginLocationStatus] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     origin: '',
     destination: '',
@@ -27,6 +36,56 @@ export function Dashboard() {
 
   const handleChange = (field: string, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));
+  };
+
+  const handleUseCurrentLocation = async () => {
+    setIsLocatingOrigin(true);
+    setOriginLocationStatus(null);
+
+    try {
+      const { position, accuracyMeters, precise } = await getReliableCurrentPosition();
+      const latitude = position.coords.latitude;
+      const longitude = position.coords.longitude;
+      const coordinateText = `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`;
+      const accuracyText = formatLocationAccuracy(accuracyMeters);
+
+      setFormData((previous) => ({
+        ...previous,
+        origin: coordinateText,
+      }));
+      setOriginLocationStatus(
+        precise
+          ? accuracyText
+            ? `Current location applied. Accuracy about ${accuracyText}. You can still edit Origin manually.`
+            : 'Current location applied. You can still edit Origin manually.'
+          : accuracyText
+            ? `Current location applied with approximate accuracy about ${accuracyText}. Verify the pin before routing.`
+            : 'Current location applied with approximate accuracy. Verify the pin before routing.'
+      );
+    } catch (error) {
+      if (error instanceof GeolocationLookupError) {
+        if (error.code === 'unsupported') {
+          setOriginLocationStatus('Location is not supported in this browser.');
+        } else if (error.code === 'permission-denied') {
+          setOriginLocationStatus('Location permission was denied. Enable it to use current origin.');
+        } else if (error.code === 'coarse-location') {
+          const accuracyText = formatLocationAccuracy(error.accuracyMeters);
+          setOriginLocationStatus(
+            accuracyText
+              ? `Location looks too broad right now, about ${accuracyText}. Move to a clearer signal or enable device location services, then try again.`
+              : 'Location looks too broad right now. Move to a clearer signal or enable device location services, then try again.'
+          );
+        } else if (error.code === 'timeout') {
+          setOriginLocationStatus('Location is taking too long to become accurate. Please try again.');
+        } else {
+          setOriginLocationStatus('Unable to read current location. You can enter Origin manually.');
+        }
+      } else {
+        setOriginLocationStatus('Unable to read current location. You can enter Origin manually.');
+      }
+    } finally {
+      setIsLocatingOrigin(false);
+    }
   };
 
   return (
@@ -66,18 +125,29 @@ export function Dashboard() {
                     <MapPin className="w-4 h-4 text-teal-600" />
                     <span>Origin Location</span>
                   </label>
-                  <button type="button" className="text-xs text-teal-600 hover:text-teal-700 font-medium flex items-center">
-                    <Navigation className="w-3 h-3 mr-1" /> Use current
+                  <button
+                    type="button"
+                    onClick={handleUseCurrentLocation}
+                    disabled={isLocatingOrigin}
+                    className="text-xs text-teal-600 hover:text-teal-700 font-medium flex items-center disabled:text-slate-400 disabled:cursor-not-allowed"
+                  >
+                    <Navigation className="w-3 h-3 mr-1" /> {isLocatingOrigin ? 'Locating...' : 'Use current'}
                   </button>
                 </div>
                 <input
                   type="text"
                   value={formData.origin}
-                  onChange={(e) => handleChange('origin', e.target.value)}
+                  onChange={(e) => {
+                    setOriginLocationStatus(null);
+                    handleChange('origin', e.target.value);
+                  }}
                   placeholder="Enter starting location"
                   className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-all"
                   required
                 />
+                {originLocationStatus && (
+                  <p className="text-xs mt-2 text-slate-600">{originLocationStatus}</p>
+                )}
               </motion.div>
 
               {/* Destination */}
@@ -209,11 +279,16 @@ export function Dashboard() {
               <div className="flex gap-3 pt-2">
                 <button 
                   type="button" 
-                  title="Coming Soon: Track your route live while driving"
-                  className="flex-1 py-3 px-4 border border-slate-200 rounded-xl bg-slate-50 text-slate-400 text-sm font-medium flex items-center justify-center space-x-2 cursor-not-allowed"
+                  title={liveTrackingEnabled ? 'Stop sharing your live location' : 'Share your live location while driving'}
+                  onClick={() => setLiveTrackingEnabled((previous) => !previous)}
+                  className={`flex-1 py-3 px-4 border rounded-xl text-sm font-medium flex items-center justify-center space-x-2 transition-colors ${
+                    liveTrackingEnabled
+                      ? 'border-emerald-300 bg-emerald-50 text-emerald-700'
+                      : 'border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100'
+                  }`}
                 >
                   <Navigation className="w-4 h-4" />
-                  <span>Live Tracking</span>
+                  <span>{liveTrackingEnabled ? 'Tracking Live' : 'Live Tracking'}</span>
                 </button>
                 <button 
                   type="button" 
@@ -282,80 +357,11 @@ export function Dashboard() {
             className="lg:col-span-2"
           >
             <div className="bg-white rounded-xl shadow-sm border border-slate-200 h-full min-h-[600px] relative overflow-hidden">
-              {/* Map Background Image */}
-              <img
-                src="https://images.unsplash.com/photo-1532594722383-b75fb8381b55?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxyb3V0ZSUyMG1hcCUyMG5hdmlnYXRpb258ZW58MXx8fHwxNzczMjAxNjAyfDA&ixlib=rb-4.1.0&q=80&w=1080"
-                alt="Map Navigation"
-                className="absolute inset-0 w-full h-full object-cover opacity-20"
+              <DashboardMap
+                origin={formData.origin}
+                destination={formData.destination}
+                liveTrackingEnabled={liveTrackingEnabled}
               />
-              
-              {/* Map Placeholder Overlay */}
-              <div className="absolute inset-0 bg-gradient-to-br from-slate-100/80 to-slate-200/80 flex items-center justify-center">
-                <motion.div
-                  initial={{ opacity: 0, scale: 0.8 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  transition={{ delay: 0.6 }}
-                  className="text-center z-10"
-                >
-                  <motion.div
-                    animate={{ y: [0, -10, 0] }}
-                    transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
-                    className="w-20 h-20 bg-white rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg"
-                  >
-                    <MapPin className="w-10 h-10 text-teal-600" />
-                  </motion.div>
-                  <h3 className="text-xl font-bold text-slate-700 mb-2">Interactive Map View</h3>
-                  <p className="text-slate-500 max-w-sm">
-                    Enter origin and destination to view route analysis on the interactive map
-                  </p>
-                </motion.div>
-              </div>
-
-              {/* Map Controls Overlay */}
-              <div className="absolute top-4 right-4 space-y-2 z-20">
-                <motion.button
-                  whileHover={{ scale: 1.1 }}
-                  whileTap={{ scale: 0.9 }}
-                  className="w-10 h-10 bg-white rounded-lg shadow-md flex items-center justify-center hover:bg-slate-50 transition-colors"
-                >
-                  <span className="text-xl">+</span>
-                </motion.button>
-                <motion.button
-                  whileHover={{ scale: 1.1 }}
-                  whileTap={{ scale: 0.9 }}
-                  className="w-10 h-10 bg-white rounded-lg shadow-md flex items-center justify-center hover:bg-slate-50 transition-colors"
-                >
-                  <span className="text-xl">−</span>
-                </motion.button>
-              </div>
-
-              {/* Legend */}
-              <motion.div
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: 0.8 }}
-                className="absolute bottom-4 left-4 bg-white rounded-lg shadow-lg p-4 border border-slate-200 z-20"
-              >
-                <div className="text-xs font-medium text-slate-700 mb-2">Traffic Legend</div>
-                <div className="space-y-1">
-                  <div className="flex items-center space-x-2">
-                    <motion.div
-                      animate={{ scale: [1, 1.2, 1] }}
-                      transition={{ duration: 1.5, repeat: Infinity }}
-                      className="w-3 h-3 bg-green-500 rounded-full"
-                    ></motion.div>
-                    <span className="text-xs text-slate-600">Low Traffic</span>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <div className="w-3 h-3 bg-orange-500 rounded-full"></div>
-                    <span className="text-xs text-slate-600">Moderate</span>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <div className="w-3 h-3 bg-red-500 rounded-full"></div>
-                    <span className="text-xs text-slate-600">Heavy Traffic</span>
-                  </div>
-                </div>
-              </motion.div>
             </div>
           </motion.div>
         </div>

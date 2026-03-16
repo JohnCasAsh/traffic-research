@@ -130,6 +130,22 @@ async function getUserByEmailHmac(emailHmac) {
   };
 }
 
+async function getUserById(userId) {
+  await ready();
+  const db = getFirestore();
+  const doc = await db.collection(COLLECTIONS.users).doc(userId).get();
+
+  if (!doc.exists) {
+    return null;
+  }
+
+  const data = doc.data();
+  return {
+    ...data,
+    id: data.id || doc.id,
+  };
+}
+
 async function getUserByVerificationTokenHash(tokenHash) {
   await ready();
   const db = getFirestore();
@@ -137,6 +153,28 @@ async function getUserByVerificationTokenHash(tokenHash) {
   const snapshot = await db
     .collection(COLLECTIONS.users)
     .where('email_verification_token_hash', '==', tokenHash)
+    .limit(1)
+    .get();
+
+  if (snapshot.empty) {
+    return null;
+  }
+
+  const doc = snapshot.docs[0];
+  const data = doc.data();
+  return {
+    ...data,
+    id: data.id || doc.id,
+  };
+}
+
+async function getUserByPasswordResetTokenHash(tokenHash) {
+  await ready();
+  const db = getFirestore();
+
+  const snapshot = await db
+    .collection(COLLECTIONS.users)
+    .where('password_reset_token_hash', '==', tokenHash)
     .limit(1)
     .get();
 
@@ -174,10 +212,42 @@ async function markUserEmailVerified(userId) {
   });
 }
 
+async function setUserPasswordResetToken(userId, tokenHash, expiresAt, requestDate, requestCount) {
+  await ready();
+  const db = getFirestore();
+  await db.collection(COLLECTIONS.users).doc(userId).update({
+    password_reset_token_hash: tokenHash,
+    password_reset_expires_at: expiresAt,
+    password_reset_requested_at: new Date().toISOString(),
+    password_reset_request_date: requestDate,
+    password_reset_request_count: requestCount,
+    updated_at: new Date().toISOString(),
+  });
+}
+
+async function clearUserPasswordResetToken(userId) {
+  await ready();
+  const db = getFirestore();
+  await db.collection(COLLECTIONS.users).doc(userId).update({
+    password_reset_token_hash: null,
+    password_reset_expires_at: null,
+    updated_at: new Date().toISOString(),
+  });
+}
+
 async function createUser(user) {
   await ready();
   const db = getFirestore();
   await db.collection(COLLECTIONS.users).doc(user.id).set(user);
+}
+
+async function updateUserProfile(userId, updates) {
+  await ready();
+  const db = getFirestore();
+  await db.collection(COLLECTIONS.users).doc(userId).set({
+    ...updates,
+    updated_at: new Date().toISOString(),
+  }, { merge: true });
 }
 
 async function addOAuthProviderToUser(userId, provider) {
@@ -316,12 +386,17 @@ async function countUsersWithPepperVersionLessThan(version) {
 
 module.exports = {
   ready,
+  getUserById,
   getUserByEmailHmac,
   getUserByVerificationTokenHash,
+  getUserByPasswordResetTokenHash,
   createUser,
+  updateUserProfile,
   addOAuthProviderToUser,
   deleteUser,
   setUserEmailVerificationToken,
+  setUserPasswordResetToken,
+  clearUserPasswordResetToken,
   markUserEmailVerified,
   getCurrentPepperVersion,
   updateUserFailedLogin,

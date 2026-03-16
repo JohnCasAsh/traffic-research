@@ -101,6 +101,8 @@ git push origin main
 For API keys and secrets, add them in the Azure Portal:
 Azure Static Web App > Configuration > Application settings
 
+For the backend App Service, make sure `ALLOWED_ORIGINS` includes every frontend domain that users can open. Exact origins and wildcard host patterns are supported, for example `https://www.navocs.com,https://navocs.com,https://*.azurestaticapps.net`.
+
 Never commit API keys to the repository.
 
 ## Branch Protection (Recommended)

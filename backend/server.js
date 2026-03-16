@@ -7,10 +7,12 @@ const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
+const ipKeyGenerator = rateLimit.ipKeyGenerator || ((ip) => ip);
 const fs = require('fs');
 const path = require('path');
 const { sendMakeEvent, isMakeConfigured } = require('./src/makeNotifier');
 const { logToNotionAsync, logToNotion, isNotionConfigured, logProgress, logHealthSummary } = require('./src/notionLogger');
+const { createOriginPolicy } = require('./src/originPolicy');
 
 // ---- STARTUP ENV VALIDATION ----
 // Fail fast if required secrets are missing (prevents silent runtime crashes)
@@ -52,9 +54,30 @@ if (missing.length > 0) {
 }
 
 const authRoutes = require('./src/auth');
+const { liveTrackingRouter } = require('./src/liveTracking');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
+
+function normalizeClientIp(rawIp) {
+  if (!rawIp || typeof rawIp !== 'string') {
+    return 'unknown';
+  }
+
+  const trimmed = rawIp.trim();
+  if (!trimmed) {
+    return 'unknown';
+  }
+
+  // Some upstream proxies append the source port (e.g. 1.2.3.4:56789).
+  // Keep IPv6 intact while stripping IPv4 ports for stable rate-limit keys.
+  const ipv4WithPort = /^\d{1,3}(?:\.\d{1,3}){3}:\d+$/;
+  if (ipv4WithPort.test(trimmed)) {
+    return trimmed.replace(/:\d+$/, '');
+  }
+
+  return trimmed;
+}
 
 // Azure App Service sits behind a proxy; trust first hop for accurate client IP/rate limits.
 app.set('trust proxy', 1);
@@ -62,14 +85,12 @@ app.set('trust proxy', 1);
 // Security headers (CIA Triad - Confidentiality)
 app.use(helmet());
 
-// CORS - allow frontend origins from env (comma-separated for multiple)
-// Example: ALLOWED_ORIGINS=https://blue.example.com,https://green.example.com
-const allowedOrigins = process.env.ALLOWED_ORIGINS
-  ? process.env.ALLOWED_ORIGINS.split(',').map((origin) => origin.trim()).filter(Boolean)
-  : ['http://localhost:5173'];
+// CORS - allow frontend origins from env (comma-separated for multiple).
+// Supports exact origins and wildcard host patterns like https://*.azurestaticapps.net.
+const originPolicy = createOriginPolicy(process.env.ALLOWED_ORIGINS);
 app.use(cors({
   origin: function(origin, callback) {
-    if (!origin || allowedOrigins.includes(origin)) {
+    if (!origin || originPolicy.isAllowed(origin)) {
       callback(null, true);
     } else {
       callback(new Error('Not allowed by CORS'));
@@ -86,6 +107,10 @@ const authLimiter = rateLimit({
   windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS || '900000'),  // default 15 min
   max: parseInt(process.env.RATE_LIMIT_MAX || '20'),                  // default 20 attempts
   message: { error: 'Too many requests. Try again later.' },
+  keyGenerator: (req) => {
+    const normalizedIp = normalizeClientIp(req.ip || req.socket?.remoteAddress);
+    return ipKeyGenerator(normalizedIp);
+  },
   standardHeaders: true,
   legacyHeaders: false,
 });
@@ -95,6 +120,7 @@ app.use('/api/auth', authLimiter);
 
 // Routes
 app.use('/api/auth', authRoutes);
+app.use('/api/tracking', liveTrackingRouter);
 
 // Health check
 app.get('/api/health', (req, res) => {
@@ -208,6 +234,14 @@ app.post('/api/ops/health-summary', async (req, res) => {
 });
 
 app.use(async (err, req, res, next) => {
+  if (err?.type === 'entity.parse.failed') {
+    return res.status(400).json({ error: 'Invalid JSON payload' });
+  }
+
+  if (err?.message === 'Not allowed by CORS') {
+    return res.status(403).json({ error: 'Origin not allowed' });
+  }
+
   console.error('Unhandled request error:', err);
   const errorPayload = {
     method: req.method,

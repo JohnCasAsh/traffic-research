@@ -33,12 +33,25 @@ jobs:
         working-directory: 'Traffic Management Dashboard UI'
         run: npm ci
 
+      - name: Validate frontend build secrets
+        run: |
+          if [ -z "${{ secrets.VITE_GOOGLE_MAPS_API_KEY }}" ]; then
+            echo "Missing required secret: VITE_GOOGLE_MAPS_API_KEY"
+            exit 1
+          fi
+          if [ -z "${{ secrets.VITE_API_URL }}" ]; then
+            echo "Missing required secret: VITE_API_URL"
+            exit 1
+          fi
+
       - name: Build for staging
         working-directory: 'Traffic Management Dashboard UI'
         run: npm run build
         env:
           VITE_APP_ENV: staging
           VITE_APP_VERSION: ${{ github.sha }}
+          VITE_API_URL: ${{ secrets.VITE_API_URL }}
+          VITE_GOOGLE_MAPS_API_KEY: ${{ secrets.VITE_GOOGLE_MAPS_API_KEY }}
 
       - name: Deploy to Azure Static Web Apps (Green - Staging)
         id: deploy

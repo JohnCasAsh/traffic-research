@@ -5,7 +5,11 @@ import { Dashboard } from "./components/Dashboard";
 import { RouteComparison } from "./components/RouteComparison";
 import { Analytics } from "./components/Analytics";
 import { LoginPage } from "./components/LoginPage";
+import { PasswordRecoveryPage } from "./components/PasswordRecoveryPage";
+import { ProfilePage } from "./components/ProfilePage";
+import { RequireAuth } from "./components/RequireAuth";
 import { SignUpPage } from "./components/SignUpPage";
+import { SpeedMeterPrototypePage } from "./components/SpeedMeterPrototypePage";
 
 export const router = createBrowserRouter([
   {
@@ -13,9 +17,16 @@ export const router = createBrowserRouter([
     Component: Layout,
     children: [
       { index: true, Component: LandingPage },
-      { path: "dashboard", Component: Dashboard },
-      { path: "routes", Component: RouteComparison },
-      { path: "analytics", Component: Analytics },
+      { path: "speed-meter", Component: SpeedMeterPrototypePage },
+      {
+        Component: RequireAuth,
+        children: [
+          { path: "dashboard", Component: Dashboard },
+          { path: "routes", Component: RouteComparison },
+          { path: "analytics", Component: Analytics },
+          { path: "profile", Component: ProfilePage },
+        ],
+      },
     ],
   },
   {
@@ -25,5 +36,9 @@ export const router = createBrowserRouter([
   {
     path: "/signup",
     Component: SignUpPage,
+  },
+  {
+    path: "/password-recovery",
+    Component: PasswordRecoveryPage,
   },
 ]);
