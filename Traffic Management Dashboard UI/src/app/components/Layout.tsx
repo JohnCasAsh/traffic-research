@@ -1,9 +1,14 @@
 import { Outlet, Link, useLocation } from 'react-router';
-import { Navigation, MapPin, BarChart3, Route } from 'lucide-react';
+import { Navigation, MapPin, BarChart3, Route, LogOut, UserRound, Gauge } from 'lucide-react';
+import { useAuth, type AuthUser } from '../auth';
 
 export function Layout() {
   const location = useLocation();
   const isLanding = location.pathname === '/';
+  const { isAuthenticated, logout, user } = useAuth();
+  const accountDisplayName = [user?.firstName?.trim(), user?.lastName?.trim()]
+    .filter(Boolean)
+    .join(' ') || user?.email || 'Profile';
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col">
@@ -32,22 +37,54 @@ export function Layout() {
                 <NavLink to="/analytics" icon={<BarChart3 className="w-4 h-4" />}>
                   Analytics
                 </NavLink>
+                <NavLink to="/speed-meter" icon={<Gauge className="w-4 h-4" />}>
+                  Speed Meter
+                </NavLink>
+                <NavLink to="/profile" icon={<UserRound className="w-4 h-4" />}>
+                  Profile
+                </NavLink>
               </div>
             )}
 
-            <div className="flex items-center space-x-4">
-              <Link
-                to="/login"
-                className="hidden sm:block text-slate-600 hover:text-teal-600 font-medium transition-colors"
-              >
-                Log in
-              </Link>
-              <Link
-                to="/signup"
-                className="px-6 py-2 bg-gradient-to-r from-teal-500 to-blue-600 text-white rounded-lg hover:shadow-lg hover:scale-105 transition-all font-medium text-sm"
-              >
-                Sign Up
-              </Link>
+            <div className="flex items-center gap-3">
+              {isAuthenticated && user ? (
+                <div className="flex items-center gap-3">
+                  <Link
+                    to="/profile"
+                    className="inline-flex items-center gap-2 text-slate-700 transition hover:text-teal-600"
+                  >
+                    <ProfileAvatar user={user} />
+                    <span className="hidden max-w-[180px] truncate text-sm font-medium sm:inline">
+                      {accountDisplayName}
+                    </span>
+                  </Link>
+
+                  <button
+                    type="button"
+                    onClick={logout}
+                    className="inline-flex items-center gap-2 text-sm font-medium text-slate-600 transition hover:text-teal-600"
+                    aria-label="Log out"
+                  >
+                    <LogOut className="w-4 h-4" />
+                    <span className="hidden sm:inline">Log out</span>
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <Link
+                    to="/login"
+                    className="hidden sm:block text-slate-600 hover:text-teal-600 font-medium transition-colors"
+                  >
+                    Log in
+                  </Link>
+                  <Link
+                    to="/signup"
+                    className="px-6 py-2 bg-gradient-to-r from-teal-500 to-blue-600 text-white rounded-lg hover:shadow-lg hover:scale-105 transition-all font-medium text-sm"
+                  >
+                    Sign Up
+                  </Link>
+                </>
+              )}
             </div>
           </div>
         </div>
@@ -64,6 +101,12 @@ export function Layout() {
               </MobileNavLink>
               <MobileNavLink to="/analytics" icon={<BarChart3 className="w-5 h-5" />}>
                 Analytics
+              </MobileNavLink>
+              <MobileNavLink to="/speed-meter" icon={<Gauge className="w-5 h-5" />}>
+                Speed
+              </MobileNavLink>
+              <MobileNavLink to="/profile" icon={<UserRound className="w-5 h-5" />}>
+                Profile
               </MobileNavLink>
             </div>
           </div>
@@ -97,6 +140,7 @@ export function Layout() {
                 <li><Link to="/dashboard" className="hover:text-teal-400 transition-colors">Dashboard</Link></li>
                 <li><Link to="/routes" className="hover:text-teal-400 transition-colors">Route Comparison</Link></li>
                 <li><Link to="/analytics" className="hover:text-teal-400 transition-colors">Analytics</Link></li>
+                <li><Link to="/speed-meter" className="hover:text-teal-400 transition-colors">Speed Meter</Link></li>
               </ul>
             </div>
             <div>
@@ -150,5 +194,25 @@ function MobileNavLink({ to, icon, children }: { to: string; icon: React.ReactNo
       {icon}
       <span className="text-xs font-medium">{children}</span>
     </Link>
+  );
+}
+
+function ProfileAvatar({ user }: { user: AuthUser }) {
+  const initials = `${user.firstName.charAt(0)}${user.lastName.charAt(0)}`.trim().toUpperCase() || 'U';
+
+  if (user.profilePictureUrl) {
+    return (
+      <img
+        src={user.profilePictureUrl}
+        alt="Profile"
+        className="h-9 w-9 rounded-lg object-cover border border-slate-200"
+      />
+    );
+  }
+
+  return (
+    <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-teal-500 to-blue-600 text-sm font-bold text-white shadow-sm">
+      {initials}
+    </div>
   );
 }

@@ -47,6 +47,20 @@ export function PasswordRecoveryPage() {
       const payload = await response.json().catch(() => ({}));
 
       if (!response.ok) {
+        if (payload?.code === 'OAUTH_ACCOUNT_NO_PASSWORD') {
+          setNotice({
+            type: 'error',
+            text:
+              payload?.error ||
+              'This account was signed in using Google or GitHub. Please return to login and use the Google or GitHub sign-in button.',
+          });
+          return;
+        }
+
+        if (response.status >= 500) {
+          throw new Error('Password reset service is temporarily unavailable. Please try again in a few minutes.');
+        }
+
         throw new Error(payload?.error || 'Unable to send password reset email right now.');
       }
 
@@ -55,9 +69,12 @@ export function PasswordRecoveryPage() {
         text: payload?.message || 'Password reset email sent. Please check your inbox.',
       });
     } catch (error: any) {
+      const rawMessage = String(error?.message || '');
       setNotice({
         type: 'error',
-        text: error?.message || 'Unable to send password reset email right now.',
+        text: rawMessage.includes('Failed to fetch')
+          ? 'Network connection issue while contacting the server. Please check your internet and try again.'
+          : rawMessage || 'Unable to send password reset email right now.',
       });
     } finally {
       setIsSubmitting(false);
@@ -86,6 +103,9 @@ export function PasswordRecoveryPage() {
       const payload = await response.json().catch(() => ({}));
 
       if (!response.ok) {
+        if (response.status >= 500) {
+          throw new Error('Password reset service is temporarily unavailable. Please try again in a few minutes.');
+        }
         throw new Error(payload?.error || 'Unable to reset password right now.');
       }
 
@@ -98,9 +118,12 @@ export function PasswordRecoveryPage() {
         navigate('/login');
       }, 1600);
     } catch (error: any) {
+      const rawMessage = String(error?.message || '');
       setNotice({
         type: 'error',
-        text: error?.message || 'Unable to reset password right now.',
+        text: rawMessage.includes('Failed to fetch')
+          ? 'Network connection issue while contacting the server. Please check your internet and try again.'
+          : rawMessage || 'Unable to reset password right now.',
       });
     } finally {
       setIsSubmitting(false);

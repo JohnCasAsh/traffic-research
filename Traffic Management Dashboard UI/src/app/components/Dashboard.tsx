@@ -3,6 +3,11 @@ import { useNavigate } from 'react-router';
 import { motion } from 'motion/react';
 import { MapPin, Navigation, Fuel, DollarSign, Car, Zap, TrendingUp, Settings, Info } from 'lucide-react';
 import { DashboardMap } from './DashboardMap';
+import {
+  formatLocationAccuracy,
+  GeolocationLookupError,
+  getReliableCurrentPosition,
+} from '../location';
 
 export function Dashboard() {
   const navigate = useNavigate();
@@ -33,44 +38,54 @@ export function Dashboard() {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
-  const handleUseCurrentLocation = () => {
-    if (typeof navigator === 'undefined' || !navigator.geolocation) {
-      setOriginLocationStatus('Location is not supported in this browser.');
-      return;
-    }
-
+  const handleUseCurrentLocation = async () => {
     setIsLocatingOrigin(true);
     setOriginLocationStatus(null);
 
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        const latitude = position.coords.latitude;
-        const longitude = position.coords.longitude;
-        const coordinateText = `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`;
+    try {
+      const { position, accuracyMeters, precise } = await getReliableCurrentPosition();
+      const latitude = position.coords.latitude;
+      const longitude = position.coords.longitude;
+      const coordinateText = `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`;
+      const accuracyText = formatLocationAccuracy(accuracyMeters);
 
-        setFormData((previous) => ({
-          ...previous,
-          origin: coordinateText,
-        }));
-        setOriginLocationStatus('Current location applied. You can still edit Origin manually.');
-        setIsLocatingOrigin(false);
-      },
-      (error) => {
-        if (error.code === error.PERMISSION_DENIED) {
+      setFormData((previous) => ({
+        ...previous,
+        origin: coordinateText,
+      }));
+      setOriginLocationStatus(
+        precise
+          ? accuracyText
+            ? `Current location applied. Accuracy about ${accuracyText}. You can still edit Origin manually.`
+            : 'Current location applied. You can still edit Origin manually.'
+          : accuracyText
+            ? `Current location applied with approximate accuracy about ${accuracyText}. Verify the pin before routing.`
+            : 'Current location applied with approximate accuracy. Verify the pin before routing.'
+      );
+    } catch (error) {
+      if (error instanceof GeolocationLookupError) {
+        if (error.code === 'unsupported') {
+          setOriginLocationStatus('Location is not supported in this browser.');
+        } else if (error.code === 'permission-denied') {
           setOriginLocationStatus('Location permission was denied. Enable it to use current origin.');
-        } else if (error.code === error.TIMEOUT) {
-          setOriginLocationStatus('Unable to get location in time. Please try again.');
+        } else if (error.code === 'coarse-location') {
+          const accuracyText = formatLocationAccuracy(error.accuracyMeters);
+          setOriginLocationStatus(
+            accuracyText
+              ? `Location looks too broad right now, about ${accuracyText}. Move to a clearer signal or enable device location services, then try again.`
+              : 'Location looks too broad right now. Move to a clearer signal or enable device location services, then try again.'
+          );
+        } else if (error.code === 'timeout') {
+          setOriginLocationStatus('Location is taking too long to become accurate. Please try again.');
         } else {
           setOriginLocationStatus('Unable to read current location. You can enter Origin manually.');
         }
-        setIsLocatingOrigin(false);
-      },
-      {
-        enableHighAccuracy: true,
-        timeout: 12000,
-        maximumAge: 5000,
+      } else {
+        setOriginLocationStatus('Unable to read current location. You can enter Origin manually.');
       }
-    );
+    } finally {
+      setIsLocatingOrigin(false);
+    }
   };
 
   return (

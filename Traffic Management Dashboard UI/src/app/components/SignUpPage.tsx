@@ -1,17 +1,24 @@
 import { Link, useNavigate } from 'react-router';
 import { motion } from 'motion/react';
 import { Navigation, Mail, Lock, User, ArrowRight, Car, FlaskConical, Building } from 'lucide-react';
-import { useState } from 'react';
-
-const API_URL = import.meta.env.VITE_API_URL || (window.location.hostname === 'localhost' ? 'http://localhost:3001' : 'https://api.navocs.com');
+import { useEffect, useState } from 'react';
+import { API_URL } from '../api';
+import { useAuth } from '../auth';
 
 export function SignUpPage() {
   const navigate = useNavigate();
+  const { isAuthenticated } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [role, setRole] = useState<'driver' | 'researcher' | 'admin'>('driver');
   const [form, setForm] = useState({ firstName: '', lastName: '', email: '', password: '' });
   const [confirmPassword, setConfirmPassword] = useState('');
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      navigate('/profile', { replace: true });
+    }
+  }, [isAuthenticated, navigate]);
 
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -28,8 +35,21 @@ export function SignUpPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...form, role }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Signup failed');
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        if (data?.code === 'OAUTH_ACCOUNT_EXISTS') {
+          throw new Error(
+            data?.error ||
+              'This account has been created using Google or GitHub. Please return to login and use the sign-in button for your provider.'
+          );
+        }
+
+        if (data?.code === 'EMAIL_ALREADY_EXISTS') {
+          throw new Error(data?.error || 'An account with this email already exists. Please sign in instead.');
+        }
+
+        throw new Error(data?.error || 'Signup failed');
+      }
       if (data.requiresEmailVerification) {
         const email = encodeURIComponent(form.email);
         navigate(`/login?checkEmail=1&email=${email}`);

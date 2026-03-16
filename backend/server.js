@@ -12,6 +12,7 @@ const fs = require('fs');
 const path = require('path');
 const { sendMakeEvent, isMakeConfigured } = require('./src/makeNotifier');
 const { logToNotionAsync, logToNotion, isNotionConfigured, logProgress, logHealthSummary } = require('./src/notionLogger');
+const { createOriginPolicy } = require('./src/originPolicy');
 
 // ---- STARTUP ENV VALIDATION ----
 // Fail fast if required secrets are missing (prevents silent runtime crashes)
@@ -84,14 +85,12 @@ app.set('trust proxy', 1);
 // Security headers (CIA Triad - Confidentiality)
 app.use(helmet());
 
-// CORS - allow frontend origins from env (comma-separated for multiple)
-// Example: ALLOWED_ORIGINS=https://blue.example.com,https://green.example.com
-const allowedOrigins = process.env.ALLOWED_ORIGINS
-  ? process.env.ALLOWED_ORIGINS.split(',').map((origin) => origin.trim()).filter(Boolean)
-  : ['http://localhost:5173'];
+// CORS - allow frontend origins from env (comma-separated for multiple).
+// Supports exact origins and wildcard host patterns like https://*.azurestaticapps.net.
+const originPolicy = createOriginPolicy(process.env.ALLOWED_ORIGINS);
 app.use(cors({
   origin: function(origin, callback) {
-    if (!origin || allowedOrigins.includes(origin)) {
+    if (!origin || originPolicy.isAllowed(origin)) {
       callback(null, true);
     } else {
       callback(new Error('Not allowed by CORS'));

@@ -2,9 +2,16 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { importLibrary, setOptions } from '@googlemaps/js-api-loader';
 import { motion } from 'motion/react';
 import { MapPin } from 'lucide-react';
+import {
+  formatLocationAccuracy,
+  MAX_LIVE_TRACKING_ACCURACY_METERS,
+  parseCoordinateInput,
+} from '../location';
 
 const DEFAULT_CENTER = { lat: 14.5995, lng: 120.9842 }; // Manila
 const DEFAULT_ZOOM = 12;
+const LOCAL_TRAFFIC_STREAM_RADIUS_KM = 5;
+const TRAFFIC_STREAM_RECENTER_METERS = 800;
 const MAX_ROUTE_OPTIONS = 3;
 const MAX_ALLOWED_FORCED_DETOUR_RATIO = 1.4;
 const BRIDGE_OPEN_HOUR = 6; // 6:00 AM
@@ -127,6 +134,26 @@ function routeUsesSecondBridge(route: any) {
   return routeContainsKeyword(route, SECOND_BRIDGE_KEYWORDS) || routePassesNearCoordinate(route, BUNTUN_BRIDGE_COORD);
 }
 
+function distanceBetweenPointsMeters(
+  start: { lat: number; lng: number },
+  end: { lat: number; lng: number }
+) {
+  const earthRadiusMeters = 6371000;
+  const toRadians = (value: number) => (value * Math.PI) / 180;
+
+  const deltaLat = toRadians(end.lat - start.lat);
+  const deltaLng = toRadians(end.lng - start.lng);
+  const startLatRadians = toRadians(start.lat);
+  const endLatRadians = toRadians(end.lat);
+
+  const a =
+    Math.sin(deltaLat / 2) ** 2 +
+    Math.cos(startLatRadians) * Math.cos(endLatRadians) * Math.sin(deltaLng / 2) ** 2;
+
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return earthRadiusMeters * c;
+}
+
 function buildRouteFingerprint(route: any) {
   const primaryLeg = route?.legs?.[0];
   const distanceValue = primaryLeg?.distance?.value ?? 'na';
@@ -225,6 +252,8 @@ export function DashboardMap({ origin, destination, liveTrackingEnabled = false 
   const [trackingStatusMessage, setTrackingStatusMessage] = useState<string | null>(null);
   const [activeTrafficAlerts, setActiveTrafficAlerts] = useState<LiveTrackingAlert[]>([]);
   const [trafficLevelCounts, setTrafficLevelCounts] = useState({ low: 0, moderate: 0, heavy: 0 });
+  const [localTrackingPosition, setLocalTrackingPosition] = useState<{ lat: number; lng: number } | null>(null);
+  const [trafficStreamAnchor, setTrafficStreamAnchor] = useState<{ lat: number; lng: number } | null>(null);
 
   const mapsApiKey = useMemo(() => {
     return (
@@ -264,6 +293,58 @@ export function DashboardMap({ origin, destination, liveTrackingEnabled = false 
 
   const normalizedOrigin = origin.trim();
   const normalizedDestination = destination.trim();
+  const resolvedOrigin = useMemo(
+    () => parseCoordinateInput(normalizedOrigin) || normalizedOrigin,
+    [normalizedOrigin]
+  );
+  const resolvedDestination = useMemo(
+    () => parseCoordinateInput(normalizedDestination) || normalizedDestination,
+    [normalizedDestination]
+  );
+  const originCoordinate = useMemo(() => parseCoordinateInput(normalizedOrigin), [normalizedOrigin]);
+  const activeRouteOption = useMemo(
+    () => routeOptions.find((option) => option.routeId === selectedRouteId) || routeOptions[0] || null,
+    [routeOptions, selectedRouteId]
+  );
+  const routeStartCoordinate = useMemo(() => {
+    const startLocation = activeRouteOption?.directionsResult?.routes?.[activeRouteOption.resultRouteIndex]?.legs?.[0]?.start_location;
+    return getPointLatLng(startLocation);
+  }, [activeRouteOption]);
+  const trafficFocusCoordinate = localTrackingPosition || originCoordinate || routeStartCoordinate;
+
+  useEffect(() => {
+    if (!trafficFocusCoordinate) {
+      setTrafficStreamAnchor(null);
+      return;
+    }
+
+    setTrafficStreamAnchor((currentAnchor) => {
+      if (!currentAnchor) {
+        return trafficFocusCoordinate;
+      }
+
+      const movedMeters = distanceBetweenPointsMeters(currentAnchor, trafficFocusCoordinate);
+      if (movedMeters < TRAFFIC_STREAM_RECENTER_METERS) {
+        return currentAnchor;
+      }
+
+      return trafficFocusCoordinate;
+    });
+  }, [trafficFocusCoordinate]);
+
+  const trafficStreamUrl = useMemo(() => {
+    if (!apiBaseUrl || !trafficStreamAnchor) {
+      return null;
+    }
+
+    const query = new URLSearchParams({
+      lat: trafficStreamAnchor.lat.toFixed(6),
+      lng: trafficStreamAnchor.lng.toFixed(6),
+      radiusKm: String(LOCAL_TRAFFIC_STREAM_RADIUS_KM),
+    });
+
+    return `${apiBaseUrl}/api/tracking/stream?${query.toString()}`;
+  }, [apiBaseUrl, trafficStreamAnchor]);
 
   useEffect(() => {
     if (!isMapActivated) {
@@ -391,16 +472,16 @@ export function DashboardMap({ origin, destination, liveTrackingEnabled = false 
             : { departureTime: new Date() };
 
           const baseRequest = {
-            origin: normalizedOrigin,
-            destination: normalizedDestination,
+            origin: resolvedOrigin,
+            destination: resolvedDestination,
             travelMode: gmaps.TravelMode.DRIVING,
             unitSystem: gmaps.UnitSystem.METRIC,
             drivingOptions,
           };
 
           const planningRequest = {
-            origin: normalizedOrigin,
-            destination: normalizedDestination,
+            origin: resolvedOrigin,
+            destination: resolvedDestination,
             travelMode: gmaps.TravelMode.DRIVING,
             unitSystem: gmaps.UnitSystem.METRIC,
           };
@@ -908,8 +989,27 @@ export function DashboardMap({ origin, destination, liveTrackingEnabled = false 
       setTrafficLevelCounts(nextCounts);
     };
 
+    if (!trafficStreamUrl) {
+      for (const marker of liveMarkersRef.current.values()) {
+        marker.setMap(null);
+      }
+      liveMarkersRef.current.clear();
+
+      for (const polylineList of livePolylinesRef.current.values()) {
+        for (const polyline of polylineList) {
+          polyline.setMap(null);
+        }
+      }
+      livePolylinesRef.current.clear();
+
+      setTrafficLevelCounts({ low: 0, moderate: 0, heavy: 0 });
+      setActiveTrafficAlerts([]);
+      setStreamConnected(false);
+      return;
+    }
+
     let disposed = false;
-    const stream = new EventSource(`${apiBaseUrl}/api/tracking/stream`);
+    const stream = new EventSource(trafficStreamUrl);
 
     const onSnapshot = (event: MessageEvent) => {
       if (disposed) {
@@ -977,7 +1077,7 @@ export function DashboardMap({ origin, destination, liveTrackingEnabled = false 
       setActiveTrafficAlerts([]);
       clearMarkers();
     };
-  }, [apiBaseUrl, isMapActivated, localVehicleId, mapReady]);
+  }, [apiBaseUrl, isMapActivated, localVehicleId, mapReady, trafficStreamUrl]);
 
   useEffect(() => {
     if (!liveTrackingEnabled) {
@@ -1000,8 +1100,29 @@ export function DashboardMap({ origin, destination, liveTrackingEnabled = false 
     const watchId = navigator.geolocation.watchPosition(
       (position) => {
         const coords = position.coords;
+        const accuracyMeters = Number(coords.accuracy);
+        if (
+          Number.isFinite(accuracyMeters) &&
+          accuracyMeters > MAX_LIVE_TRACKING_ACCURACY_METERS
+        ) {
+          const accuracyText = formatLocationAccuracy(accuracyMeters);
+          setTrackingStatusMessage(
+            accuracyText
+              ? `Waiting for a more accurate GPS fix before sharing live updates. Current accuracy is about ${accuracyText}.`
+              : 'Waiting for a more accurate GPS fix before sharing live updates.'
+          );
+          return;
+        }
+
         const speedMps = Number(coords.speed);
         const speedKph = Number.isFinite(speedMps) && speedMps > 0 ? speedMps * 3.6 : 0;
+
+        setLocalTrackingPosition({
+          lat: coords.latitude,
+          lng: coords.longitude,
+        });
+
+        setTrackingStatusMessage('Live tracking enabled. Sharing location updates.');
 
         fetch(`${apiBaseUrl}/api/tracking/update`, {
           method: 'POST',
@@ -1021,7 +1142,7 @@ export function DashboardMap({ origin, destination, liveTrackingEnabled = false 
       },
       (error) => {
         if (error.code === error.PERMISSION_DENIED) {
-          setTrackingStatusMessage('Location permission was denied. Enable location access to track live traffic.');
+          setTrackingStatusMessage('PERMISSION_DENIED');
           return;
         }
 
@@ -1029,7 +1150,7 @@ export function DashboardMap({ origin, destination, liveTrackingEnabled = false 
       },
       {
         enableHighAccuracy: true,
-        maximumAge: 5000,
+        maximumAge: 0,
         timeout: 12000,
       }
     );
@@ -1038,6 +1159,14 @@ export function DashboardMap({ origin, destination, liveTrackingEnabled = false 
       navigator.geolocation.clearWatch(watchId);
     };
   }, [apiBaseUrl, liveTrackingEnabled, localVehicleId]);
+
+  useEffect(() => {
+    if (liveTrackingEnabled) {
+      return;
+    }
+
+    setLocalTrackingPosition(null);
+  }, [liveTrackingEnabled]);
 
   const changeZoom = (delta: number) => {
     const map = mapRef.current;
@@ -1185,7 +1314,26 @@ export function DashboardMap({ origin, destination, liveTrackingEnabled = false 
           <div className={streamConnected ? 'text-emerald-700' : 'text-amber-700'}>
             {streamConnected ? 'Traffic feed connected' : 'Connecting traffic feed...'}
           </div>
-          {trackingStatusMessage && <div className="mt-1 text-slate-600">{trackingStatusMessage}</div>}
+          {trackingStatusMessage === 'PERMISSION_DENIED' ? (
+            <div className="mt-2 rounded border border-red-200 bg-red-50 p-2 text-[10px] text-red-800">
+              <div className="mb-1 font-semibold">Location permission is blocked.</div>
+              <div className="mb-1 font-medium">To re-enable:</div>
+              <div className="font-semibold">Android (Chrome):</div>
+              <div>Tap the lock icon in the address bar → Permissions → Location → Allow</div>
+              <div className="mt-1 font-semibold">iPhone/iPad (Safari):</div>
+              <div>Settings → Safari → Location → Ask or Allow</div>
+              <div className="mt-1 font-semibold">iPhone/iPad (Chrome):</div>
+              <div>Settings → Chrome → Location → While Using</div>
+              <button
+                onClick={() => window.location.reload()}
+                className="mt-2 w-full rounded bg-red-600 px-2 py-1 text-[10px] font-semibold text-white"
+              >
+                Reload after granting permission
+              </button>
+            </div>
+          ) : trackingStatusMessage ? (
+            <div className="mt-1 text-slate-600">{trackingStatusMessage}</div>
+          ) : null}
         </div>
       )}
 

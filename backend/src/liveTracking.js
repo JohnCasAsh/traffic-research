@@ -101,10 +101,73 @@ function sendSse(res, eventName, payload) {
   res.write(`data: ${JSON.stringify(payload)}\n\n`);
 }
 
+function isWithinTrackingFilter(filterOptions, lat, lng) {
+  const filterLat = toFiniteNumber(filterOptions?.lat);
+  const filterLng = toFiniteNumber(filterOptions?.lng);
+  const radiusKm = toFiniteNumber(filterOptions?.radiusKm) || TRACKING_DEFAULT_RADIUS_KM;
+
+  if (filterLat == null || filterLng == null) {
+    return true;
+  }
+
+  if (!Number.isFinite(Number(lat)) || !Number.isFinite(Number(lng))) {
+    return false;
+  }
+
+  return haversineDistanceKm(filterLat, filterLng, Number(lat), Number(lng)) <= radiusKm;
+}
+
+function filterSnapshotForClient(snapshot, filterOptions) {
+  const filterLat = toFiniteNumber(filterOptions?.lat);
+  const filterLng = toFiniteNumber(filterOptions?.lng);
+  if (filterLat == null || filterLng == null) {
+    return snapshot;
+  }
+
+  const vehicles = Array.isArray(snapshot?.vehicles)
+    ? snapshot.vehicles.filter((vehicle) =>
+        isWithinTrackingFilter(filterOptions, vehicle?.lat, vehicle?.lng)
+      )
+    : [];
+  const visibleVehicleIds = new Set(vehicles.map((vehicle) => vehicle.vehicleId));
+  const alerts = Array.isArray(snapshot?.alerts)
+    ? snapshot.alerts.filter((alert) => visibleVehicleIds.has(alert?.vehicleId))
+    : [];
+
+  return {
+    ...snapshot,
+    vehicles,
+    alerts,
+  };
+}
+
+function shouldSendEventToClient(eventName, payload, filterOptions) {
+  if (eventName === 'snapshot' || eventName === 'congestion-clear') {
+    return true;
+  }
+
+  if (eventName === 'congestion-alert') {
+    return isWithinTrackingFilter(filterOptions, payload?.lat, payload?.lng);
+  }
+
+  if (eventName === 'tracking-update') {
+    return isWithinTrackingFilter(filterOptions, payload?.vehicle?.lat, payload?.vehicle?.lng);
+  }
+
+  return true;
+}
+
 function broadcastSse(eventName, payload) {
   for (const client of sseClients) {
     try {
-      sendSse(client.res, eventName, payload);
+      if (!shouldSendEventToClient(eventName, payload, client.filterOptions)) {
+        continue;
+      }
+
+      const eventPayload =
+        eventName === 'snapshot' ? filterSnapshotForClient(payload, client.filterOptions) : payload;
+
+      sendSse(client.res, eventName, eventPayload);
     } catch {
       clearInterval(client.heartbeatId);
       sseClients.delete(client);
@@ -1066,6 +1129,11 @@ router.get('/stream', (req, res) => {
 
   const client = {
     res,
+    filterOptions: {
+      lat: req.query.lat,
+      lng: req.query.lng,
+      radiusKm: req.query.radiusKm,
+    },
     heartbeatId: setInterval(() => {
       try {
         res.write(': keepalive\n\n');
@@ -1076,7 +1144,7 @@ router.get('/stream', (req, res) => {
   };
 
   sseClients.add(client);
-  sendSse(res, 'snapshot', buildSnapshot());
+  sendSse(res, 'snapshot', filterSnapshotForClient(buildSnapshot(), client.filterOptions));
 
   req.on('close', () => {
     clearInterval(client.heartbeatId);

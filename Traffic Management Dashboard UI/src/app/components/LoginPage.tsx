@@ -2,8 +2,8 @@ import { Link, useNavigate, useSearchParams } from 'react-router';
 import { motion } from 'motion/react';
 import { Navigation, Mail, Lock, ArrowRight, Github, Chrome } from 'lucide-react';
 import { useEffect, useState } from 'react';
-
-const API_URL = import.meta.env.VITE_API_URL || (window.location.hostname === 'localhost' ? 'http://localhost:3001' : 'https://api.navocs.com');
+import { API_URL } from '../api';
+import { useAuth } from '../auth';
 
 export function LoginPage() {
   const navigate = useNavigate();
@@ -15,10 +15,13 @@ export function LoginPage() {
   const oauthFirstName = searchParams.get('firstName');
   const oauthLastName = searchParams.get('lastName');
   const oauthRole = searchParams.get('role');
+  const oauthToken = searchParams.get('token');
   const verified = searchParams.get('verified');
   const checkEmail = searchParams.get('checkEmail');
   const emailHint = searchParams.get('email');
+  const redirectTo = searchParams.get('redirect') || '/dashboard';
   const verifyReason = searchParams.get('reason');
+  const { isAuthenticated, login } = useAuth();
 
   const [isLoading, setIsLoading] = useState(false);
   const [isResending, setIsResending] = useState(false);
@@ -28,17 +31,47 @@ export function LoginPage() {
   const [form, setForm] = useState({ email: emailHint || '', password: '' });
 
   useEffect(() => {
-    if (oauth === 'success' && oauthUserId) {
-      const user = {
+    if (oauth === 'success' && oauthToken && oauthUserId) {
+      login(oauthToken, {
         id: oauthUserId,
+        email: '',
         firstName: oauthFirstName || 'User',
         lastName: oauthLastName || '',
         role: oauthRole || 'driver',
-      };
-      localStorage.setItem('user', JSON.stringify(user));
-      navigate('/dashboard');
+        profilePictureUrl: '',
+        address: {
+          country: '',
+          province: '',
+          city: '',
+          barangay: '',
+          street: '',
+          houseNumber: '',
+          postalCode: '',
+        },
+        authProviders: oauthProvider ? [oauthProvider] : [],
+        hasPassword: false,
+        emailVerified: true,
+      });
+      navigate(redirectTo, { replace: true });
+      return;
     }
-  }, [navigate, oauth, oauthFirstName, oauthLastName, oauthRole, oauthUserId]);
+
+    if (isAuthenticated) {
+      navigate(redirectTo, { replace: true });
+    }
+  }, [
+    isAuthenticated,
+    login,
+    navigate,
+    oauth,
+    oauthFirstName,
+    oauthLastName,
+    oauthProvider,
+    oauthRole,
+    oauthToken,
+    oauthUserId,
+    redirectTo,
+  ]);
 
   const oauthProviderLabel = oauthProvider === 'google'
     ? 'Google'
@@ -58,7 +91,7 @@ export function LoginPage() {
             : oauthReason === 'no_verified_email'
               ? `${oauthProviderLabel} account does not have a verified email.`
               : oauthReason === 'password_account_exists'
-                ? `This email is already registered with email and password. Please sign in with your password instead of ${oauthProviderLabel}.`
+                ? `This account was created using email and password. Please return to login and sign in with your password — not ${oauthProviderLabel}.`
                 : `${oauthProviderLabel} sign-in failed. Please try again.`
     : null;
 
@@ -81,11 +114,15 @@ export function LoginPage() {
     setOauthLoadingProvider(provider);
     setError('');
     try {
-      const response = await fetch(`${API_URL}/api/auth/oauth/${provider}/start?format=json`);
+      const startUrl = new URL(`${API_URL}/api/auth/oauth/${provider}/start`);
+      startUrl.searchParams.set('format', 'json');
+      startUrl.searchParams.set('frontendOrigin', window.location.origin);
+
+      const response = await fetch(startUrl.toString());
       const payload = await response.json().catch(() => ({}));
 
       if (!response.ok || !payload?.url) {
-        throw new Error('Unable to start social sign-in right now.');
+        throw new Error(payload?.error || 'Unable to start social sign-in right now.');
       }
 
       window.location.href = payload.url;
@@ -114,8 +151,11 @@ export function LoginPage() {
         });
       }
       if (!res.ok) throw new Error(data.error || 'Login failed');
-      localStorage.setItem('user', JSON.stringify(data.user));
-      navigate('/dashboard');
+      if (!data?.token || !data?.user) {
+        throw new Error('Login response is incomplete.');
+      }
+      login(data.token, data.user);
+      navigate(redirectTo, { replace: true });
     } catch (err: any) {
       setError(err.message);
     } finally {

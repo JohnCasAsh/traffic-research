@@ -5,12 +5,15 @@
 const crypto = require('crypto');
 const express = require('express');
 const { body, validationResult } = require('express-validator');
+const jwt = require('jsonwebtoken');
 const { v4: uuidv4 } = require('uuid');
 const db = require('./database');
 const { sendMakeEvent } = require('./makeNotifier');
 const { logToNotionAsync } = require('./notionLogger');
 const { sendVerificationEmail, sendPasswordResetEmail } = require('./brevoMailer');
+const { createOriginPolicy } = require('./originPolicy');
 const {
+  decryptEmail,
   encryptEmail,
   hmacEmail,
   hashPassword,
@@ -39,6 +42,10 @@ const FRONTEND_URL = (
   process.env.FRONTEND_URL ||
   (process.env.NODE_ENV === 'production' ? 'https://www.navocs.com' : 'http://localhost:5173')
 ).replace(/\/+$/, '');
+const originPolicy = createOriginPolicy(process.env.ALLOWED_ORIGINS);
+const JWT_SECRET = process.env.JWT_SECRET;
+const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d';
+const PROFILE_PICTURE_MAX_LENGTH = 400000;
 const oauthStates = new Map();
 
 setInterval(() => {
@@ -66,10 +73,11 @@ function createPasswordResetToken() {
   return { token, tokenHash, expiresAt };
 }
 
-function createOauthState(provider) {
+function createOauthState(provider, frontendBaseUrl = FRONTEND_URL) {
   const state = crypto.randomBytes(24).toString('hex');
   oauthStates.set(state, {
     provider,
+    frontendBaseUrl,
     expiresAt: Date.now() + OAUTH_STATE_TTL_MS,
   });
 
@@ -78,25 +86,25 @@ function createOauthState(provider) {
 
 function consumeOauthState(provider, state) {
   if (!state || typeof state !== 'string') {
-    return false;
+    return null;
   }
 
   const entry = oauthStates.get(state);
   oauthStates.delete(state);
 
   if (!entry) {
-    return false;
+    return null;
   }
 
   if (entry.provider !== provider) {
-    return false;
+    return null;
   }
 
   if (entry.expiresAt < Date.now()) {
-    return false;
+    return null;
   }
 
-  return true;
+  return entry;
 }
 
 function providerLabel(provider) {
@@ -109,6 +117,57 @@ function providerLabel(provider) {
   }
 
   return 'OAuth';
+}
+
+function createEmptyAddress() {
+  return {
+    country: '',
+    province: '',
+    city: '',
+    barangay: '',
+    street: '',
+    houseNumber: '',
+    postalCode: '',
+  };
+}
+
+function normalizeTextField(value, maxLength) {
+  if (typeof value !== 'string') {
+    return '';
+  }
+
+  return value.trim().slice(0, maxLength);
+}
+
+function normalizeAddress(address) {
+  if (!address || typeof address !== 'object' || Array.isArray(address)) {
+    return createEmptyAddress();
+  }
+
+  return {
+    country: normalizeTextField(address.country, 100),
+    province: normalizeTextField(address.province, 100),
+    city: normalizeTextField(address.city, 100),
+    barangay: normalizeTextField(address.barangay, 120),
+    street: normalizeTextField(address.street, 120),
+    houseNumber: normalizeTextField(address.houseNumber, 40),
+    postalCode: normalizeTextField(address.postalCode, 20),
+  };
+}
+
+function isProfilePictureValueValid(value) {
+  if (value == null || value === '') {
+    return true;
+  }
+
+  if (typeof value !== 'string' || value.length > PROFILE_PICTURE_MAX_LENGTH) {
+    return false;
+  }
+
+  return (
+    /^https?:\/\//i.test(value) ||
+    /^data:image\/(?:png|jpeg|jpg|webp|gif);base64,/i.test(value)
+  );
 }
 
 function getAuthProviderList(user) {
@@ -143,10 +202,153 @@ function formatProviderList(providers) {
   return `${labels.slice(0, -1).join(', ')}, or ${labels[labels.length - 1]}`;
 }
 
+function normalizeEmailAddress(value) {
+  if (typeof value !== 'string') {
+    return '';
+  }
+
+  const trimmed = value.trim().toLowerCase();
+  if (!trimmed) {
+    return '';
+  }
+
+  const atIndex = trimmed.lastIndexOf('@');
+  if (atIndex <= 0 || atIndex >= trimmed.length - 1) {
+    return trimmed;
+  }
+
+  const localPart = trimmed.slice(0, atIndex);
+  let domainPart = trimmed.slice(atIndex + 1);
+
+  if (domainPart === 'googlemail.com') {
+    domainPart = 'gmail.com';
+  }
+
+  if (domainPart === 'gmail.com') {
+    const canonicalLocal = localPart.split('+')[0].replace(/\./g, '');
+    return `${canonicalLocal}@${domainPart}`;
+  }
+
+  return `${localPart}@${domainPart}`;
+}
+
+function buildEmailLookupCandidates(email) {
+  const trimmed = typeof email === 'string' ? email.trim().toLowerCase() : '';
+  if (!trimmed) {
+    return [];
+  }
+
+  const candidates = new Set([trimmed, normalizeEmailAddress(trimmed)]);
+  const atIndex = trimmed.lastIndexOf('@');
+  if (atIndex <= 0 || atIndex >= trimmed.length - 1) {
+    return Array.from(candidates).filter(Boolean);
+  }
+
+  const localPart = trimmed.slice(0, atIndex);
+  const domainPart = trimmed.slice(atIndex + 1);
+  const isGmailLike = domainPart === 'gmail.com' || domainPart === 'googlemail.com';
+
+  if (isGmailLike) {
+    const localWithoutSubAddress = localPart.split('+')[0];
+    const localWithoutDots = localWithoutSubAddress.replace(/\./g, '');
+
+    for (const gmailDomain of ['gmail.com', 'googlemail.com']) {
+      candidates.add(`${localPart}@${gmailDomain}`);
+      candidates.add(`${localWithoutSubAddress}@${gmailDomain}`);
+      candidates.add(`${localWithoutDots}@${gmailDomain}`);
+    }
+  }
+
+  return Array.from(candidates).filter(Boolean);
+}
+
+async function findUserByEmailVariants(email, hmacKey) {
+  const candidates = buildEmailLookupCandidates(email);
+  for (const candidate of candidates) {
+    const candidateHash = hmacEmail(candidate, hmacKey);
+    const user = await db.getUserByEmailHmac(candidateHash);
+    if (user) {
+      return { user, matchedEmail: candidate };
+    }
+  }
+
+  return {
+    user: null,
+    matchedEmail: normalizeEmailAddress(email),
+  };
+}
+
 function createCodeError(code, message) {
   const error = new Error(message);
   error.code = code;
   return error;
+}
+
+function issueAuthToken(user) {
+  return jwt.sign(
+    {
+      sub: user.id,
+    },
+    JWT_SECRET,
+    {
+      expiresIn: JWT_EXPIRES_IN,
+    }
+  );
+}
+
+function decodeUserEmail(user) {
+  if (!user?.email_encrypted || !user?.email_iv || !user?.email_auth_tag) {
+    return '';
+  }
+
+  try {
+    return decryptEmail(
+      user.email_encrypted,
+      user.email_iv,
+      user.email_auth_tag,
+      process.env.EMAIL_ENCRYPTION_KEY
+    );
+  } catch {
+    return '';
+  }
+}
+
+function buildUserResponse(user) {
+  return {
+    id: user.id,
+    email: decodeUserEmail(user),
+    firstName: user.first_name || '',
+    lastName: user.last_name || '',
+    role: user.role || 'driver',
+    profilePictureUrl: typeof user.profile_picture_url === 'string' ? user.profile_picture_url : '',
+    address: normalizeAddress(user.address),
+    authProviders: getAuthProviderList(user),
+    hasPassword: Boolean(user.password_hash),
+    emailVerified: user.email_verified !== false,
+  };
+}
+
+async function requireAuth(req, res, next) {
+  const authorization = req.get('authorization') || '';
+  const match = authorization.match(/^Bearer\s+(.+)$/i);
+
+  if (!match) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
+  try {
+    const payload = jwt.verify(match[1], JWT_SECRET);
+    const user = await db.getUserById(payload.sub);
+
+    if (!user) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    req.authUser = user;
+    return next();
+  } catch {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
 }
 
 function relaxOAuthRedirectHeaders(res) {
@@ -158,23 +360,48 @@ function relaxOAuthRedirectHeaders(res) {
   res.removeHeader('Cross-Origin-Opener-Policy');
 }
 
-function buildLoginRedirectUrl(params = {}) {
-  const search = new URLSearchParams(params).toString();
-  return `${FRONTEND_URL}/login${search ? `?${search}` : ''}`;
+function resolveFrontendBaseUrl(req) {
+  return originPolicy.resolveFrontendBaseUrl(
+    [
+      typeof req.query.frontendOrigin === 'string' ? req.query.frontendOrigin : '',
+      req.get('origin'),
+      req.get('referer'),
+    ],
+    FRONTEND_URL
+  );
 }
 
-function buildOauthErrorRedirectUrl(provider, reason) {
-  return buildLoginRedirectUrl({
+function buildVerificationUrl(token, frontendBaseUrl = FRONTEND_URL) {
+  const verificationUrl = new URL(`${VERIFY_API_BASE_URL}/api/auth/verify-email`);
+  verificationUrl.searchParams.set('token', token);
+  verificationUrl.searchParams.set('frontendOrigin', frontendBaseUrl);
+  return verificationUrl.toString();
+}
+
+function buildPasswordResetUrl(token, frontendBaseUrl = FRONTEND_URL) {
+  const resetUrl = new URL(`${frontendBaseUrl}/password-recovery`);
+  resetUrl.searchParams.set('token', token);
+  return resetUrl.toString();
+}
+
+function buildLoginRedirectUrl(frontendBaseUrl = FRONTEND_URL, params = {}) {
+  const search = new URLSearchParams(params).toString();
+  return `${frontendBaseUrl}/login${search ? `?${search}` : ''}`;
+}
+
+function buildOauthErrorRedirectUrl(provider, reason, frontendBaseUrl = FRONTEND_URL) {
+  return buildLoginRedirectUrl(frontendBaseUrl, {
     oauth: 'error',
     provider,
     reason,
   });
 }
 
-function buildOauthSuccessRedirectUrl(provider, user) {
-  return buildLoginRedirectUrl({
+function buildOauthSuccessRedirectUrl(provider, user, frontendBaseUrl = FRONTEND_URL) {
+  return buildLoginRedirectUrl(frontendBaseUrl, {
     oauth: 'success',
     provider,
+    token: issueAuthToken(user),
     userId: user.id,
     firstName: user.first_name || '',
     lastName: user.last_name || '',
@@ -358,15 +585,16 @@ async function fetchGitHubProfile(code) {
 async function findOrCreateOAuthUser({ provider, email, firstName, lastName, ipAddress }) {
   const hmacKey = process.env.EMAIL_HMAC_KEY;
   const encKey = process.env.EMAIL_ENCRYPTION_KEY;
-  const emailHash = hmacEmail(email, hmacKey);
-  const existingUser = await db.getUserByEmailHmac(emailHash);
+  const canonicalEmail = normalizeEmailAddress(email);
+  const emailHash = hmacEmail(canonicalEmail, hmacKey);
+  const { user: existingUser } = await findUserByEmailVariants(canonicalEmail, hmacKey);
 
   if (existingUser) {
     // Block OAuth login for accounts registered with email/password
     if (existingUser.password_hash) {
       throw createCodeError(
         'PASSWORD_ACCOUNT_EXISTS',
-        'This email is already registered with email and password sign-in. Please sign in with your password.'
+        'This account was created using email and password. Please return to login and sign in with your password.'
       );
     }
 
@@ -423,6 +651,8 @@ async function findOrCreateOAuthUser({ provider, email, firstName, lastName, ipA
     password_reset_requested_at: null,
     password_reset_request_date: null,
     password_reset_request_count: 0,
+    profile_picture_url: '',
+    address: createEmptyAddress(),
     auth_provider: provider,
     auth_providers: [provider],
   });
@@ -443,14 +673,14 @@ async function findOrCreateOAuthUser({ provider, email, firstName, lastName, ipA
   };
 }
 
-function redirectOAuthError(res, provider, reason) {
+function redirectOAuthError(res, provider, reason, frontendBaseUrl = FRONTEND_URL) {
   relaxOAuthRedirectHeaders(res);
-  return res.redirect(302, buildOauthErrorRedirectUrl(provider, reason));
+  return res.redirect(302, buildOauthErrorRedirectUrl(provider, reason, frontendBaseUrl));
 }
 
-function redirectOAuthSuccess(res, provider, user) {
+function redirectOAuthSuccess(res, provider, user, frontendBaseUrl = FRONTEND_URL) {
   relaxOAuthRedirectHeaders(res);
-  return res.redirect(302, buildOauthSuccessRedirectUrl(provider, user));
+  return res.redirect(302, buildOauthSuccessRedirectUrl(provider, user, frontendBaseUrl));
 }
 
 function sendVerifyResponse(req, res, statusCode, payload) {
@@ -459,11 +689,13 @@ function sendVerifyResponse(req, res, statusCode, payload) {
     return res.status(statusCode).json(payload);
   }
 
+  const frontendBaseUrl = resolveFrontendBaseUrl(req);
+
   if (payload.verified) {
-    return res.redirect(302, buildLoginRedirectUrl({ verified: '1' }));
+    return res.redirect(302, buildLoginRedirectUrl(frontendBaseUrl, { verified: '1' }));
   }
 
-  return res.redirect(302, buildLoginRedirectUrl({
+  return res.redirect(302, buildLoginRedirectUrl(frontendBaseUrl, {
     verified: '0',
     reason: payload.reason || 'verification_failed',
   }));
@@ -497,17 +729,30 @@ router.post(
       const pepper = process.env.PASSWORD_PEPPER;
       const encKey = process.env.EMAIL_ENCRYPTION_KEY;
       const hmacKey = process.env.EMAIL_HMAC_KEY;
+      const frontendBaseUrl = resolveFrontendBaseUrl(req);
       const nowIso = new Date().toISOString();
+      const canonicalEmail = normalizeEmailAddress(email);
 
       // Check if email already exists (using HMAC lookup — no decryption needed)
-      const emailHash = hmacEmail(email, hmacKey);
-      const existingUser = await db.getUserByEmailHmac(emailHash);
+      const emailHash = hmacEmail(canonicalEmail, hmacKey);
+      const { user: existingUser } = await findUserByEmailVariants(canonicalEmail, hmacKey);
       if (existingUser) {
-        return res.status(409).json({ error: 'An account with this email already exists' });
+        if (!existingUser.password_hash) {
+          const providers = formatProviderList(getAuthProviderList(existingUser));
+          return res.status(409).json({
+            error: `This account has been created using ${providers}. Please return to login and use the ${providers} sign-in button.`,
+            code: 'OAUTH_ACCOUNT_EXISTS',
+          });
+        }
+
+        return res.status(409).json({
+          error: 'An account with this email already exists',
+          code: 'EMAIL_ALREADY_EXISTS',
+        });
       }
 
       // Encrypt email (Confidentiality)
-      const { encrypted, iv, authTag } = encryptEmail(email, encKey);
+      const { encrypted, iv, authTag } = encryptEmail(canonicalEmail, encKey);
 
       // Hash password with Argon2id + salt + pepper (Confidentiality + Integrity)
       const passwordHash = await hashPassword(password, pepper);
@@ -542,6 +787,8 @@ router.post(
         password_reset_requested_at: null,
         password_reset_request_date: null,
         password_reset_request_count: 0,
+        profile_picture_url: '',
+        address: createEmptyAddress(),
       });
 
       // Audit log (Integrity — tracking all security events)
@@ -554,9 +801,9 @@ router.post(
 
       let verificationEmailSent = false;
       if (REQUIRE_EMAIL_VERIFICATION && verificationState) {
-        const verificationUrl = `${VERIFY_API_BASE_URL}/api/auth/verify-email?token=${verificationState.token}`;
+        const verificationUrl = buildVerificationUrl(verificationState.token, frontendBaseUrl);
         const emailResult = await sendVerificationEmail({
-          toEmail: email,
+          toEmail: canonicalEmail,
           firstName,
           verificationUrl,
         });
@@ -673,8 +920,8 @@ router.post(
 
       const { email } = req.body;
       const hmacKey = process.env.EMAIL_HMAC_KEY;
-      const emailHash = hmacEmail(email, hmacKey);
-      const user = await db.getUserByEmailHmac(emailHash);
+      const canonicalEmail = normalizeEmailAddress(email);
+      const { user } = await findUserByEmailVariants(canonicalEmail, hmacKey);
 
       if (!user) {
         return res.json({ message: 'If an account exists, a verification email has been sent.' });
@@ -685,15 +932,16 @@ router.post(
       }
 
       const verificationState = createEmailVerificationToken();
+      const frontendBaseUrl = resolveFrontendBaseUrl(req);
       await db.setUserEmailVerificationToken(
         user.id,
         verificationState.tokenHash,
         verificationState.expiresAt
       );
 
-      const verificationUrl = `${VERIFY_API_BASE_URL}/api/auth/verify-email?token=${verificationState.token}`;
+      const verificationUrl = buildVerificationUrl(verificationState.token, frontendBaseUrl);
       const emailResult = await sendVerificationEmail({
-        toEmail: email,
+        toEmail: canonicalEmail,
         firstName: user.first_name,
         verificationUrl,
       });
@@ -724,8 +972,8 @@ router.post(
 
       const { email } = req.body;
       const hmacKey = process.env.EMAIL_HMAC_KEY;
-      const emailHash = hmacEmail(email, hmacKey);
-      const user = await db.getUserByEmailHmac(emailHash);
+      const canonicalEmail = normalizeEmailAddress(email);
+      const { user } = await findUserByEmailVariants(canonicalEmail, hmacKey);
 
       if (!user) {
         return res.json({ message: 'If an account exists, a password reset email has been sent.' });
@@ -739,9 +987,8 @@ router.post(
           ip_address: req.ip,
           details: JSON.stringify({ providers }),
         });
-
         return res.status(400).json({
-          error: `This account uses ${providers}. Please sign in with ${providers}.`,
+          error: `This account was signed in using ${providers}. Please return to login and use ${providers} to sign in.`,
           code: 'OAUTH_ACCOUNT_NO_PASSWORD',
         });
       }
@@ -771,6 +1018,7 @@ router.post(
 
       const resetState = createPasswordResetToken();
       const nextCount = currentCount + 1;
+      const frontendBaseUrl = resolveFrontendBaseUrl(req);
       await db.setUserPasswordResetToken(
         user.id,
         resetState.tokenHash,
@@ -779,9 +1027,9 @@ router.post(
         nextCount
       );
 
-      const resetUrl = `${FRONTEND_URL}/password-recovery?token=${resetState.token}`;
+      const resetUrl = buildPasswordResetUrl(resetState.token, frontendBaseUrl);
       const emailResult = await sendPasswordResetEmail({
-        toEmail: email,
+        toEmail: canonicalEmail,
         firstName: user.first_name,
         resetUrl,
         expiresMinutes: PASSWORD_RESET_TTL_MINUTES,
@@ -862,7 +1110,7 @@ router.post(
       if (!user.password_hash) {
         const providers = formatProviderList(getAuthProviderList(user));
         return res.status(400).json({
-          error: `This account uses ${providers}. Please sign in with ${providers}.`,
+          error: `This account was signed in using ${providers}. Please return to login and use ${providers} to sign in.`,
           code: 'OAUTH_ACCOUNT_NO_PASSWORD',
         });
       }
@@ -885,7 +1133,9 @@ router.post(
       sendMakeEvent('auth_password_reset_success', resetSuccessPayload).catch(() => {});
       logToNotionAsync('auth_password_reset_success', resetSuccessPayload);
 
-      return res.json({ message: 'Password reset successful. You can sign in with your new password.' });
+      return res.json({
+        message: 'Password reset successful. You can sign in with your new password.',
+      });
     } catch (err) {
       console.error('Reset password error:', err);
       return res.status(500).json({ error: 'Internal server error' });
@@ -893,14 +1143,156 @@ router.post(
   }
 );
 
+router.get('/me', requireAuth, async (req, res) => {
+  return res.json({
+    user: buildUserResponse(req.authUser),
+  });
+});
+
+router.patch(
+  '/me',
+  requireAuth,
+  [
+    body('firstName').optional().isString().trim().isLength({ min: 1, max: 100 }),
+    body('lastName').optional().isString().trim().isLength({ max: 100 }),
+    body('profilePictureUrl')
+      .optional({ nullable: true })
+      .custom((value) => isProfilePictureValueValid(value)),
+    body('address').optional().custom((value) => {
+      return Boolean(value && typeof value === 'object' && !Array.isArray(value));
+    }),
+    body('address.country').optional().isString().trim().isLength({ max: 100 }),
+    body('address.province').optional().isString().trim().isLength({ max: 100 }),
+    body('address.city').optional().isString().trim().isLength({ max: 100 }),
+    body('address.barangay').optional().isString().trim().isLength({ max: 120 }),
+    body('address.street').optional().isString().trim().isLength({ max: 120 }),
+    body('address.houseNumber').optional().isString().trim().isLength({ max: 40 }),
+    body('address.postalCode').optional().isString().trim().isLength({ max: 20 }),
+  ],
+  async (req, res) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({ error: 'Validation failed', details: errors.array() });
+      }
+
+      const updates = {};
+
+      if (Object.prototype.hasOwnProperty.call(req.body, 'firstName')) {
+        updates.first_name = normalizeTextField(req.body.firstName, 100);
+      }
+
+      if (Object.prototype.hasOwnProperty.call(req.body, 'lastName')) {
+        updates.last_name = normalizeTextField(req.body.lastName, 100);
+      }
+
+      if (Object.prototype.hasOwnProperty.call(req.body, 'profilePictureUrl')) {
+        updates.profile_picture_url = typeof req.body.profilePictureUrl === 'string'
+          ? req.body.profilePictureUrl.trim()
+          : '';
+      }
+
+      if (Object.prototype.hasOwnProperty.call(req.body, 'address')) {
+        updates.address = normalizeAddress(req.body.address);
+      }
+
+      await db.updateUserProfile(req.authUser.id, updates);
+      const updatedUser = await db.getUserById(req.authUser.id);
+
+      await db.addAuditLog({
+        user_id: req.authUser.id,
+        action: 'PROFILE_UPDATED',
+        ip_address: req.ip,
+      });
+
+      return res.json({
+        message: 'Profile updated successfully',
+        user: buildUserResponse(updatedUser),
+      });
+    } catch (err) {
+      console.error('Profile update error:', err);
+      return res.status(500).json({ error: 'Internal server error' });
+    }
+  }
+);
+
+router.post(
+  '/change-password',
+  requireAuth,
+  [
+    body('currentPassword').isLength({ min: 1, max: 128 }),
+    body('newPassword')
+      .isLength({ min: 8, max: 128 })
+      .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/)
+      .withMessage('Password must have uppercase, lowercase, and number'),
+  ],
+  async (req, res) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({ error: 'Validation failed', details: errors.array() });
+      }
+
+      const user = req.authUser;
+      if (!user.password_hash) {
+        const providers = formatProviderList(getAuthProviderList(user));
+        return res.status(400).json({
+          error: `This account was created using ${providers}. Password changes are not available. Please use ${providers} to sign in.`,
+          code: 'OAUTH_ACCOUNT_NO_PASSWORD',
+        });
+      }
+
+      const { currentPassword, newPassword } = req.body;
+      const currentPepper = process.env.PASSWORD_PEPPER;
+      const previousPepper = process.env.PASSWORD_PEPPER_PREVIOUS || null;
+      const verificationResult = await verifyWithPepperRotation(
+        currentPassword,
+        user.password_hash,
+        currentPepper,
+        previousPepper
+      );
+
+      if (!verificationResult.verified) {
+        return res.status(400).json({ error: 'Current password is incorrect.' });
+      }
+
+      const pepperRow = await db.getCurrentPepperVersion();
+      const nextPasswordHash = await hashPassword(newPassword, currentPepper);
+      await db.updateUserPasswordHashAndPepperVersion(user.id, nextPasswordHash, pepperRow.version);
+      await db.resetUserLockout(user.id);
+
+      await db.addAuditLog({
+        user_id: user.id,
+        action: 'PASSWORD_CHANGED',
+        ip_address: req.ip,
+      });
+
+      return res.json({ message: 'Password updated successfully.' });
+    } catch (err) {
+      console.error('Change password error:', err);
+      return res.status(500).json({ error: 'Internal server error' });
+    }
+  }
+);
+
 // ---- OAUTH (GOOGLE/GITHUB) ----
 router.get('/oauth/google/start', (req, res) => {
+  const wantsJson = String(req.query.format || '').toLowerCase() === 'json';
+  const frontendBaseUrl = resolveFrontendBaseUrl(req);
+
   if (!isGoogleOAuthStartConfigured()) {
-    return redirectOAuthError(res, 'google', 'oauth_not_configured');
+    if (wantsJson) {
+      return res.status(503).json({
+        error: 'Google OAuth is not configured.',
+        code: 'OAUTH_NOT_CONFIGURED',
+      });
+    }
+
+    return redirectOAuthError(res, 'google', 'oauth_not_configured', frontendBaseUrl);
   }
 
   const config = getGoogleOAuthConfig();
-  const state = createOauthState('google');
+  const state = createOauthState('google', frontendBaseUrl);
   const params = new URLSearchParams({
     client_id: config.clientId,
     redirect_uri: config.redirectUri,
@@ -911,7 +1303,7 @@ router.get('/oauth/google/start', (req, res) => {
   });
 
   const googleAuthUrl = `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
-  if (String(req.query.format || '').toLowerCase() === 'json') {
+  if (wantsJson) {
     return res.json({ url: googleAuthUrl });
   }
 
@@ -923,17 +1315,19 @@ router.get('/oauth/google/callback', async (req, res) => {
   const code = typeof req.query.code === 'string' ? req.query.code : '';
   const state = typeof req.query.state === 'string' ? req.query.state : '';
   const providerError = typeof req.query.error === 'string' ? req.query.error : '';
+  const oauthState = consumeOauthState('google', state);
+  const frontendBaseUrl = oauthState?.frontendBaseUrl || FRONTEND_URL;
 
   if (providerError) {
-    return redirectOAuthError(res, 'google', 'provider_denied');
+    return redirectOAuthError(res, 'google', 'provider_denied', frontendBaseUrl);
   }
 
   if (!code) {
-    return redirectOAuthError(res, 'google', 'missing_code');
+    return redirectOAuthError(res, 'google', 'missing_code', frontendBaseUrl);
   }
 
-  if (!consumeOauthState('google', state)) {
-    return redirectOAuthError(res, 'google', 'invalid_state');
+  if (!oauthState) {
+    return redirectOAuthError(res, 'google', 'invalid_state', FRONTEND_URL);
   }
 
   try {
@@ -953,7 +1347,7 @@ router.get('/oauth/google/callback', async (req, res) => {
     sendMakeEvent('auth_oauth_login_success', successPayload).catch(() => {});
     logToNotionAsync('auth_oauth_login_success', successPayload);
 
-    return redirectOAuthSuccess(res, 'google', user);
+    return redirectOAuthSuccess(res, 'google', user, frontendBaseUrl);
   } catch (error) {
     console.error('Google OAuth callback error:', error);
     const errorPayload = {
@@ -971,17 +1365,27 @@ router.get('/oauth/google/callback', async (req, res) => {
         : error.code === 'PASSWORD_ACCOUNT_EXISTS'
           ? 'password_account_exists'
           : 'oauth_failed';
-    return redirectOAuthError(res, 'google', reason);
+    return redirectOAuthError(res, 'google', reason, frontendBaseUrl);
   }
 });
 
 router.get('/oauth/github/start', (req, res) => {
+  const wantsJson = String(req.query.format || '').toLowerCase() === 'json';
+  const frontendBaseUrl = resolveFrontendBaseUrl(req);
+
   if (!isGitHubOAuthStartConfigured()) {
-    return redirectOAuthError(res, 'github', 'oauth_not_configured');
+    if (wantsJson) {
+      return res.status(503).json({
+        error: 'GitHub OAuth is not configured.',
+        code: 'OAUTH_NOT_CONFIGURED',
+      });
+    }
+
+    return redirectOAuthError(res, 'github', 'oauth_not_configured', frontendBaseUrl);
   }
 
   const config = getGitHubOAuthConfig();
-  const state = createOauthState('github');
+  const state = createOauthState('github', frontendBaseUrl);
   const params = new URLSearchParams({
     client_id: config.clientId,
     redirect_uri: config.redirectUri,
@@ -990,7 +1394,7 @@ router.get('/oauth/github/start', (req, res) => {
   });
 
   const githubAuthUrl = `https://github.com/login/oauth/authorize?${params.toString()}`;
-  if (String(req.query.format || '').toLowerCase() === 'json') {
+  if (wantsJson) {
     return res.json({ url: githubAuthUrl });
   }
 
@@ -1002,17 +1406,19 @@ router.get('/oauth/github/callback', async (req, res) => {
   const code = typeof req.query.code === 'string' ? req.query.code : '';
   const state = typeof req.query.state === 'string' ? req.query.state : '';
   const providerError = typeof req.query.error === 'string' ? req.query.error : '';
+  const oauthState = consumeOauthState('github', state);
+  const frontendBaseUrl = oauthState?.frontendBaseUrl || FRONTEND_URL;
 
   if (providerError) {
-    return redirectOAuthError(res, 'github', 'provider_denied');
+    return redirectOAuthError(res, 'github', 'provider_denied', frontendBaseUrl);
   }
 
   if (!code) {
-    return redirectOAuthError(res, 'github', 'missing_code');
+    return redirectOAuthError(res, 'github', 'missing_code', frontendBaseUrl);
   }
 
-  if (!consumeOauthState('github', state)) {
-    return redirectOAuthError(res, 'github', 'invalid_state');
+  if (!oauthState) {
+    return redirectOAuthError(res, 'github', 'invalid_state', FRONTEND_URL);
   }
 
   try {
@@ -1032,7 +1438,7 @@ router.get('/oauth/github/callback', async (req, res) => {
     sendMakeEvent('auth_oauth_login_success', successPayload).catch(() => {});
     logToNotionAsync('auth_oauth_login_success', successPayload);
 
-    return redirectOAuthSuccess(res, 'github', user);
+    return redirectOAuthSuccess(res, 'github', user, frontendBaseUrl);
   } catch (error) {
     console.error('GitHub OAuth callback error:', error);
     const errorPayload = {
@@ -1050,7 +1456,7 @@ router.get('/oauth/github/callback', async (req, res) => {
         : error.code === 'PASSWORD_ACCOUNT_EXISTS'
           ? 'password_account_exists'
           : 'oauth_failed';
-    return redirectOAuthError(res, 'github', reason);
+    return redirectOAuthError(res, 'github', reason, frontendBaseUrl);
   }
 });
 
@@ -1072,10 +1478,10 @@ router.post(
       const hmacKey = process.env.EMAIL_HMAC_KEY;
       const currentPepper = process.env.PASSWORD_PEPPER;
       const previousPepper = process.env.PASSWORD_PEPPER_PREVIOUS || null;
+      const canonicalEmail = normalizeEmailAddress(email);
 
       // Find user by email HMAC (no decryption needed for lookup)
-      const emailHash = hmacEmail(email, hmacKey);
-      const user = await db.getUserByEmailHmac(emailHash);
+      const { user } = await findUserByEmailVariants(canonicalEmail, hmacKey);
 
       if (!user) {
         return res.status(401).json({ error: 'Invalid credentials' });
@@ -1095,7 +1501,7 @@ router.post(
           ? user.auth_providers.map(p => p === 'google' ? 'Google' : p === 'github' ? 'GitHub' : p).join(' or ')
           : 'social sign-in';
         return res.status(401).json({
-          error: `This account was created with ${providers}. Please use the social sign-in button to sign in.`,
+          error: `This account was created using ${providers}. Please return to login and use the ${providers} sign-in button.`,
           code: 'OAUTH_ACCOUNT_NO_PASSWORD',
         });
       }
@@ -1175,12 +1581,8 @@ router.post(
 
       res.json({
         message: 'Login successful',
-        user: {
-          id: user.id,
-          firstName: user.first_name,
-          lastName: user.last_name,
-          role: user.role,
-        },
+        token: issueAuthToken(user),
+        user: buildUserResponse(user),
       });
     } catch (err) {
       console.error('Login error:', err);

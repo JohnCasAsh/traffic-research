@@ -130,6 +130,22 @@ async function getUserByEmailHmac(emailHmac) {
   };
 }
 
+async function getUserById(userId) {
+  await ready();
+  const db = getFirestore();
+  const doc = await db.collection(COLLECTIONS.users).doc(userId).get();
+
+  if (!doc.exists) {
+    return null;
+  }
+
+  const data = doc.data();
+  return {
+    ...data,
+    id: data.id || doc.id,
+  };
+}
+
 async function getUserByVerificationTokenHash(tokenHash) {
   await ready();
   const db = getFirestore();
@@ -223,6 +239,15 @@ async function createUser(user) {
   await ready();
   const db = getFirestore();
   await db.collection(COLLECTIONS.users).doc(user.id).set(user);
+}
+
+async function updateUserProfile(userId, updates) {
+  await ready();
+  const db = getFirestore();
+  await db.collection(COLLECTIONS.users).doc(userId).set({
+    ...updates,
+    updated_at: new Date().toISOString(),
+  }, { merge: true });
 }
 
 async function addOAuthProviderToUser(userId, provider) {
@@ -361,10 +386,12 @@ async function countUsersWithPepperVersionLessThan(version) {
 
 module.exports = {
   ready,
+  getUserById,
   getUserByEmailHmac,
   getUserByVerificationTokenHash,
   getUserByPasswordResetTokenHash,
   createUser,
+  updateUserProfile,
   addOAuthProviderToUser,
   deleteUser,
   setUserEmailVerificationToken,
