@@ -70,11 +70,11 @@ const KALMAN_R = 1.2;
 const MIN_DELTA_TIME_SECONDS = 0.3; // FIX: was 0.5 — iOS can fire faster during warmup
 const MAX_EXPECTED_SPEED_MPS = 50;  // ~180 km/h hard cap
 const RESUME_GAP_REACQUIRE_SECONDS = 8;
-const REACQUIRE_SKIP_SAMPLES = 4;
-const RESUME_SPIKE_FILTER_SECONDS = 12;
-const RESUME_SPIKE_MIN_SPEED_MPS = 2.8;
-const RESUME_SPIKE_MAX_COMPUTED_MPS = 0.9;
-const RESUME_SPIKE_MIN_ACCURACY_FACTOR = 0.7;
+const REACQUIRE_SKIP_SAMPLES = 5;
+const RESUME_SPIKE_FILTER_SECONDS = 20;
+const RESUME_SPIKE_MIN_SPEED_MPS = 1.2;
+const RESUME_SPIKE_MAX_COMPUTED_MPS = 0.4;
+const RESUME_SPIKE_MIN_ACCURACY_FACTOR = 0.6;
 
 // FIX 4: Tighten max distance per sample — 120 m implied 432 km/h which is a
 // building reflection, not movement. 40 m is still generous for a runner (~144 km/h).
