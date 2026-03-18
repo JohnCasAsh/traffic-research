@@ -120,12 +120,8 @@ const MODE_SETTINGS: Record<SpeedMeterMode, ModeConfig> = {
   },
 };
 
-const MODE_OPTIONS: SpeedMeterMode[] = ['stable', 'balanced', 'responsive'];
-const ENV_OPTIONS: { value: Environment; label: string; desc: string }[] = [
-  { value: 'auto',     label: 'Auto',     desc: 'Middle-ground thresholds' },
-  { value: 'outdoors', label: 'Outdoors', desc: 'Tight — filters multipath near buildings' },
-  { value: 'indoors',  label: 'Indoors',  desc: 'Relaxed — GPS is always weak indoors' },
-];
+const DEFAULT_MODE: SpeedMeterMode = 'balanced';
+const DEFAULT_ENVIRONMENT: Environment = 'auto';
 
 // ─── Utilities ─────────────────────────────────────────────────────────────────
 
@@ -277,8 +273,6 @@ export function SpeedMeterPrototypePage() {
   const skippedRef = useRef(0);
   const stopConfidenceRef = useRef(0);
 
-  const [mode, setMode] = useState<SpeedMeterMode>('balanced');
-  const [environment, setEnvironment] = useState<Environment>('auto');
   const [isTracking, setIsTracking] = useState(false);
   const [isStarting, setIsStarting] = useState(false);
   const [statusMessage, setStatusMessage] = useState('Tap Start to begin live speed sampling.');
@@ -293,18 +287,9 @@ export function SpeedMeterPrototypePage() {
   const [skippedSamples, setSkippedSamples] = useState(0);
   const [samples, setSamples] = useState<SpeedSample[]>([]);
 
-  const modeRef = useRef<SpeedMeterMode>('balanced');
-  const modeConfigRef = useRef<ModeConfig>(MODE_SETTINGS.balanced);
-  const environmentRef = useRef<Environment>('auto');
-
-  useEffect(() => {
-    modeRef.current = mode;
-    modeConfigRef.current = MODE_SETTINGS[mode];
-  }, [mode]);
-
-  useEffect(() => {
-    environmentRef.current = environment;
-  }, [environment]);
+  const modeRef = useRef<SpeedMeterMode>(DEFAULT_MODE);
+  const modeConfigRef = useRef<ModeConfig>(MODE_SETTINGS[DEFAULT_MODE]);
+  const environmentRef = useRef<Environment>(DEFAULT_ENVIRONMENT);
 
   const stopWatcher = () => {
     if (watchIdRef.current != null && typeof navigator !== 'undefined' && navigator.geolocation) {
@@ -588,7 +573,6 @@ export function SpeedMeterPrototypePage() {
   const currentPaceText = useMemo(() => formatPaceMinutesPerKm(currentSpeedMps), [currentSpeedMps]);
   const latestAccuracyText = useMemo(() => formatLocationAccuracy(latestAccuracyMeters), [latestAccuracyMeters]);
   const signalQuality = useMemo(() => getSignalQuality(latestAccuracyMeters), [latestAccuracyMeters]);
-  const activeModeLabel = MODE_SETTINGS[mode].label;
 
   const exportCsv = () => {
     if (samples.length === 0) { setStatusMessage('No samples yet. Start tracking first.'); return; }
@@ -612,9 +596,6 @@ export function SpeedMeterPrototypePage() {
     signalQuality === 'good' ? CheckCircle2 :
     signalQuality === 'ok' ? Wifi :
     signalQuality === 'poor' ? AlertTriangle : WifiOff;
-
-  const activeEnvLabel = ENV_OPTIONS.find((e) => e.value === environment)?.label ?? 'Auto';
-  const accuracyThresholdLabel = `${ACCURACY_THRESHOLD[environment]} m gate`;
 
   return (
     <div className="min-h-[calc(100vh-4rem)] bg-slate-50 py-8">
@@ -677,51 +658,6 @@ export function SpeedMeterPrototypePage() {
             </button>
           </div>
 
-          <div className="mt-3 flex flex-wrap items-center gap-2">
-            <span className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500 mr-1">
-              Kalman mode
-            </span>
-            {MODE_OPTIONS.map((value) => (
-              <button
-                key={value}
-                type="button"
-                onClick={() => setMode(value)}
-                className={`rounded-lg px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.12em] transition ${
-                  mode === value
-                    ? 'bg-slate-900 text-white'
-                    : 'border border-slate-300 bg-white text-slate-700 hover:border-slate-400'
-                }`}
-              >
-                {MODE_SETTINGS[value].label}
-              </button>
-            ))}
-            <span className="text-xs text-slate-500">Active: {activeModeLabel}</span>
-          </div>
-
-          {/* Environment selector — NEW */}
-          <div className="mt-2 flex flex-wrap items-center gap-2">
-            <span className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500 mr-1">
-              Environment
-            </span>
-            {ENV_OPTIONS.map(({ value, label }) => (
-              <button
-                key={value}
-                type="button"
-                onClick={() => setEnvironment(value)}
-                className={`rounded-lg px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.12em] transition ${
-                  environment === value
-                    ? 'bg-blue-600 text-white'
-                    : 'border border-slate-300 bg-white text-slate-700 hover:border-slate-400'
-                }`}
-              >
-                {label}
-              </button>
-            ))}
-            <span className="text-xs text-slate-500">
-              Active: {activeEnvLabel} · {accuracyThresholdLabel}
-            </span>
-          </div>
-
           <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
             <div className="font-medium text-slate-900">
               {isTracking ? 'Tracking is active' : 'Tracking is not active'}
@@ -773,11 +709,8 @@ export function SpeedMeterPrototypePage() {
 
           <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800">
             <span className="font-semibold">Accuracy tip: </span>
-            Select the correct <strong>Environment</strong> above before you start.
-            <strong> Outdoors</strong> uses a tight 15 m accuracy gate to reject multipath spikes near buildings.
-            <strong> Indoors</strong> relaxes it to 50 m so you still get readings despite poor satellite visibility.
-            <strong> Auto</strong> is a 25 m middle ground for mixed use.
-            GPS must lock onto satellites for Doppler speed to work — check the badge.
+            Wait a few seconds after pressing Start so GPS can stabilize, and test in open-sky areas when possible.
+            The tracker automatically applies filtering in the background while recording live samples.
             {skippedSamples > 0 && (
               <span className="ml-1 font-semibold text-amber-900">
                 ({skippedSamples} sample{skippedSamples !== 1 ? 's' : ''} rejected so far.)
@@ -858,7 +791,6 @@ export function SpeedMeterPrototypePage() {
                     <th className="px-3 py-2">Smoothed m/s</th>
                     <th className="px-3 py-2">Source</th>
                     <th className="px-3 py-2">Accuracy</th>
-                    <th className="px-3 py-2">Env</th>
                     <th className="px-3 py-2">Δ Dist</th>
                     <th className="px-3 py-2">Lat, Lng</th>
                   </tr>
@@ -888,9 +820,6 @@ export function SpeedMeterPrototypePage() {
                         <span className={sample.positionReliable ? 'text-emerald-700' : 'text-amber-700'}>
                           {formatLocationAccuracy(sample.accuracyMeters) || '--'}
                         </span>
-                      </td>
-                      <td className="whitespace-nowrap px-3 py-2 capitalize text-slate-500 text-xs">
-                        {sample.environment}
                       </td>
                       <td className="whitespace-nowrap px-3 py-2">{sample.distanceDeltaMeters.toFixed(2)} m</td>
                       <td className="whitespace-nowrap px-3 py-2">
