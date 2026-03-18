@@ -70,7 +70,11 @@ const KALMAN_R = 1.2;
 const MIN_DELTA_TIME_SECONDS = 0.3; // FIX: was 0.5 — iOS can fire faster during warmup
 const MAX_EXPECTED_SPEED_MPS = 50;  // ~180 km/h hard cap
 const RESUME_GAP_REACQUIRE_SECONDS = 8;
-const REACQUIRE_SKIP_SAMPLES = 2;
+const REACQUIRE_SKIP_SAMPLES = 4;
+const RESUME_SPIKE_FILTER_SECONDS = 12;
+const RESUME_SPIKE_MIN_SPEED_MPS = 2.8;
+const RESUME_SPIKE_MAX_COMPUTED_MPS = 0.9;
+const RESUME_SPIKE_MIN_ACCURACY_FACTOR = 0.7;
 
 // FIX 4: Tighten max distance per sample — 120 m implied 432 km/h which is a
 // building reflection, not movement. 40 m is still generous for a runner (~144 km/h).
@@ -266,6 +270,7 @@ export function SpeedMeterPrototypePage() {
   const lastPointRef = useRef<LastPoint | null>(null);
   const lastCallbackMsRef = useRef<number | null>(null);
   const resumeGuardRemainingRef = useRef(0);
+  const resumeSpikeFilterUntilMsRef = useRef(0);
   const kalmanRef = useRef<KalmanState>({ estimate: 0, errorCovariance: 1 });
   const totalDistanceMetersRef = useRef(0);
   const maxSpeedMpsRef = useRef(0);
@@ -337,6 +342,7 @@ export function SpeedMeterPrototypePage() {
     setStatusMessage('Live. GPS warming up for the first few seconds...');
     lastCallbackMsRef.current = null;
     resumeGuardRemainingRef.current = 0;
+    resumeSpikeFilterUntilMsRef.current = 0;
     sessionStartMsRef.current = Date.now();
 
     const watchId = navigator.geolocation.watchPosition(
@@ -355,6 +361,7 @@ export function SpeedMeterPrototypePage() {
           if (callbackGapSec >= RESUME_GAP_REACQUIRE_SECONDS) {
             // Device sleep/app background/restart can cause GPS reacquisition spikes.
             resumeGuardRemainingRef.current = REACQUIRE_SKIP_SAMPLES;
+            resumeSpikeFilterUntilMsRef.current = nowMs + RESUME_SPIKE_FILTER_SECONDS * 1000;
             kalmanRef.current = { estimate: 0, errorCovariance: 1 };
             stopConfidenceRef.current = 0;
             setStatusMessage('GPS resumed after sleep/restart. Stabilizing signal...');
@@ -417,6 +424,25 @@ export function SpeedMeterPrototypePage() {
           skippedRef.current += 1;
           setSkippedSamples(skippedRef.current);
           lastPointRef.current = { lat, lng, timestampMs: nowMs, accuracyMeters };
+          return;
+        }
+
+        const computedSpeedMps = rawDistanceMeters / deltaTimeSec;
+
+        // Extra wake-up protection: during a short post-resume window,
+        // reject high Doppler speed if position-delta speed stays near-zero.
+        const inResumeSpikeFilterWindow = nowMs < resumeSpikeFilterUntilMsRef.current;
+        const wakeSpikeLikely =
+          inResumeSpikeFilterWindow &&
+          speedMps >= RESUME_SPIKE_MIN_SPEED_MPS &&
+          computedSpeedMps <= RESUME_SPIKE_MAX_COMPUTED_MPS &&
+          accuracyMeters >= accuracyThreshold * RESUME_SPIKE_MIN_ACCURACY_FACTOR;
+
+        if (wakeSpikeLikely) {
+          skippedRef.current += 1;
+          setSkippedSamples(skippedRef.current);
+          lastPointRef.current = { lat, lng, timestampMs: nowMs, accuracyMeters };
+          setStatusMessage('Filtering wake-up GPS spike...');
           return;
         }
 
@@ -486,7 +512,7 @@ export function SpeedMeterPrototypePage() {
           instantSpeedMps: speedMps,
           // FIX: store the actual raw value from the chip, not the sanitised speedMps
           rawSpeedMps: Number.isFinite(rawSpeedMps) ? rawSpeedMps : -1,
-          computedSpeedMps: rawDistanceMeters / deltaTimeSec, // position-delta for reference
+          computedSpeedMps, // position-delta for reference
           kalmanSpeedMps: smoothedSpeedMps,
           analysisMode: modeRef.current,
           environment: env,
@@ -535,6 +561,7 @@ export function SpeedMeterPrototypePage() {
     lastPointRef.current = null;
     lastCallbackMsRef.current = null;
     resumeGuardRemainingRef.current = 0;
+    resumeSpikeFilterUntilMsRef.current = 0;
     kalmanRef.current = { estimate: 0, errorCovariance: 1 };
     totalDistanceMetersRef.current = 0;
     maxSpeedMpsRef.current = 0;
