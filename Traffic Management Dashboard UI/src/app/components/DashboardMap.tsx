@@ -8,7 +8,7 @@ import {
   parseCoordinateInput,
 } from '../location';
 
-const DEFAULT_CENTER = { lat: 14.5995, lng: 120.9842 }; // Manila
+const DEFAULT_CENTER = { lat: 17.6132, lng: 121.7270 }; // Tuguegarao City
 const DEFAULT_ZOOM = 12;
 const LOCAL_TRAFFIC_STREAM_RADIUS_KM = 5;
 const TRAFFIC_STREAM_RECENTER_METERS = 800;

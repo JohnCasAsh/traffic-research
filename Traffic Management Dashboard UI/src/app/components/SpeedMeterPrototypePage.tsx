@@ -20,8 +20,9 @@ import { formatLocationAccuracy } from '../location';
 
 type KalmanState = { estimate: number; errorCovariance: number };
 type SignalQuality = 'good' | 'ok' | 'poor' | 'none';
-type LastPoint = { lat: number; lng: number; timestampMs: number };
+type LastPoint = { lat: number; lng: number; timestampMs: number; accuracyMeters: number };
 type SpeedMeterMode = 'stable' | 'balanced' | 'responsive';
+type Environment = 'auto' | 'indoors' | 'outdoors';
 
 type SpeedSample = {
   id: string;
@@ -39,6 +40,7 @@ type SpeedSample = {
   analysisMode: SpeedMeterMode;
   distanceDeltaMeters: number;
   cumulativeDistanceMeters: number;
+  environment: Environment;
 };
 
 type ModeConfig = {
@@ -49,34 +51,38 @@ type ModeConfig = {
   movementSignificanceFactor: number;
   maxNoiseGateMeters: number;
   stillSpeedThresholdMps: number;
-  stillDistanceThresholdMeters: number;
   stopLockMinSamples: number;
   zeroLockSpeedMps: number;
-  burstStartDeltaMps: number;
-  burstBoostSamples: number;
-  burstBlend: number;
 };
 
 // ─── Constants ─────────────────────────────────────────────────────────────────
 
-// Positions with an accuracy circle larger than this are discarded from speed
-// calculations – they are almost certainly WiFi or cell-tower fixes, not GPS.
-const MAX_RELIABLE_ACCURACY_METERS = 30;
+// FIX 1: Separate accuracy thresholds for indoors vs outdoors.
+// Indoors, GPS is always poor — we relax the gate so we still get *some* readings
+// rather than rejecting everything. Outdoors we tighten it to filter multipath.
+const ACCURACY_THRESHOLD: Record<Environment, number> = {
+  outdoors: 15,   // tight — near buildings multipath typically pushes >15 m
+  indoors:  50,   // relaxed — indoors rarely gets below 20–30 m; still usable
+  auto:     25,   // middle ground when user hasn't specified
+};
 
-// 1-D Kalman measurement noise. Mode-specific process noise is defined below.
-// R remains fixed because it reflects GPS measurement noise, not mode preference.
 const KALMAN_R = 1.2;
+const MIN_DELTA_TIME_SECONDS = 0.3; // FIX: was 0.5 — iOS can fire faster during warmup
+const MAX_EXPECTED_SPEED_MPS = 50;  // ~180 km/h hard cap
+const RESUME_GAP_REACQUIRE_SECONDS = 8;
+const REACQUIRE_SKIP_SAMPLES = 5;
+const RESUME_SPIKE_FILTER_SECONDS = 20;
+const RESUME_SPIKE_MIN_SPEED_MPS = 1.2;
+const RESUME_SPIKE_MAX_COMPUTED_MPS = 0.4;
+const RESUME_SPIKE_MIN_ACCURACY_FACTOR = 0.6;
 
-// Drop a reading if it implies a speed jump more than this multiple of current estimate.
-const MAX_SPEED_JUMP_FACTOR = 4;
-
-// Skip samples that arrive too fast to produce meaningful time-delta division.
-const MIN_DELTA_TIME_SECONDS = 0.5;
-
-// Hard cap – walking/running tests should never exceed ~55 km/h (15 m/s).
-const MAX_EXPECTED_SPEED_MPS = 15;
-
-const MAX_REASONABLE_SAMPLE_DISTANCE_METERS = 120;
+// FIX 4: Tighten max distance per sample — 120 m implied 432 km/h which is a
+// building reflection, not movement. 40 m is still generous for a runner (~144 km/h).
+const MAX_REASONABLE_SAMPLE_DISTANCE: Record<Environment, number> = {
+  outdoors: 40,
+  indoors:  15,  // indoors you're moving slowly; 15 m jump is already suspicious
+  auto:     40,
+};
 
 const MODE_SETTINGS: Record<SpeedMeterMode, ModeConfig> = {
   stable: {
@@ -87,12 +93,8 @@ const MODE_SETTINGS: Record<SpeedMeterMode, ModeConfig> = {
     movementSignificanceFactor: 0.45,
     maxNoiseGateMeters: 1.6,
     stillSpeedThresholdMps: 0.28,
-    stillDistanceThresholdMeters: 0.65,
     stopLockMinSamples: 3,
     zeroLockSpeedMps: 0.12,
-    burstStartDeltaMps: 1.5,
-    burstBoostSamples: 1,
-    burstBlend: 0.45,
   },
   balanced: {
     label: 'Balanced',
@@ -102,12 +104,8 @@ const MODE_SETTINGS: Record<SpeedMeterMode, ModeConfig> = {
     movementSignificanceFactor: 0.4,
     maxNoiseGateMeters: 1.2,
     stillSpeedThresholdMps: 0.35,
-    stillDistanceThresholdMeters: 0.55,
     stopLockMinSamples: 2,
     zeroLockSpeedMps: 0.15,
-    burstStartDeltaMps: 1.1,
-    burstBoostSamples: 2,
-    burstBlend: 0.65,
   },
   responsive: {
     label: 'Responsive',
@@ -117,16 +115,13 @@ const MODE_SETTINGS: Record<SpeedMeterMode, ModeConfig> = {
     movementSignificanceFactor: 0.32,
     maxNoiseGateMeters: 0.9,
     stillSpeedThresholdMps: 0.45,
-    stillDistanceThresholdMeters: 0.45,
     stopLockMinSamples: 1,
     zeroLockSpeedMps: 0.2,
-    burstStartDeltaMps: 0.75,
-    burstBoostSamples: 3,
-    burstBlend: 0.82,
   },
 };
 
-const MODE_OPTIONS: SpeedMeterMode[] = ['stable', 'balanced', 'responsive'];
+const DEFAULT_MODE: SpeedMeterMode = 'balanced';
+const DEFAULT_ENVIRONMENT: Environment = 'auto';
 
 // ─── Utilities ─────────────────────────────────────────────────────────────────
 
@@ -149,11 +144,15 @@ function toFiniteNonNegative(value: number | null | undefined) {
   return Number.isFinite(n) && n >= 0 ? n : 0;
 }
 
+function clamp(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value));
+}
+
 /**
  * 1-D Kalman filter update step.
  * Blends the previous estimate with a new noisy measurement.
- * When Kalman gain is high, we trust the measurement more.
- * When low, we trust our prediction more.
+ * Higher processNoise = trust the new measurement more.
+ * Higher KALMAN_R = trust the measurement less (more smoothing).
  */
 function kalmanUpdate(
   state: KalmanState,
@@ -199,7 +198,7 @@ function buildCsvContent(samples: SpeedSample[]) {
     'instant_speed_mps', 'instant_speed_kph',
     'raw_gps_speed_mps', 'computed_speed_mps',
     'kalman_speed_mps', 'kalman_speed_kph',
-    'analysis_mode',
+    'analysis_mode', 'environment',
     'distance_delta_meters', 'cumulative_distance_meters',
   ];
   const lines = samples.map((s) => [
@@ -209,7 +208,7 @@ function buildCsvContent(samples: SpeedSample[]) {
     s.instantSpeedMps.toFixed(4), (s.instantSpeedMps * 3.6).toFixed(4),
     s.rawSpeedMps.toFixed(4), s.computedSpeedMps.toFixed(4),
     s.kalmanSpeedMps.toFixed(4), (s.kalmanSpeedMps * 3.6).toFixed(4),
-    s.analysisMode,
+    s.analysisMode, s.environment,
     s.distanceDeltaMeters.toFixed(3), s.cumulativeDistanceMeters.toFixed(3),
   ]);
   return [headers.join(','), ...lines.map((l) => l.join(','))].join('\n');
@@ -227,34 +226,34 @@ function triggerDownload(fileName: string, content: string, mimeType: string) {
 
 const ACCURACY_EXPLANATIONS = [
   {
-    title: 'GPS Doppler Speed (Best Source)',
+    title: 'GPS Speed (Chipset Native)',
     color: 'bg-emerald-50 border-emerald-200',
-    body: "Your phone's GPS chip measures speed using the Doppler shift of satellite signals — the same principle as radar guns. This is far more accurate than computing speed from two positions, especially at slow walking speeds. This app always prefers it when available.",
+    body: "Your phone's GPS chip reports speed directly using Doppler shift of satellite signals. This app displays that reading with a Kalman filter to smooth out jitter, but doesn't reject or recompute anything—just uses what the GPS API provides.",
   },
   {
-    title: 'Position-Delta Speed (Fallback)',
+    title: 'Kalman Filter (Smoothing Only)',
     color: 'bg-blue-50 border-blue-200',
-    body: 'When GPS Doppler is unavailable the app computes speed as distance ÷ time between two GPS positions. If you walked 3 m but the accuracy circle is 15 m, the entire reading is noise. This is why you see spikes indoors or near tall buildings.',
+    body: 'Every new GPS speed reading is blended with the previous estimate based on how different they are. Gradual acceleration ripples through cleanly; sudden spikes get dampened. No samples are ever skipped.',
   },
   {
-    title: 'Kalman Filter (Spike Removal)',
+    title: 'Stationary Lock',
     color: 'bg-violet-50 border-violet-200',
-    body: 'A 1-D Kalman filter blends every new GPS reading with the previous estimate, proportional to how trustworthy each is. A sudden 80 km/h reading from a GPS glitch gets heavily discounted rather than shown directly.',
+    body: 'After a few seconds of near-zero speed and minimal movement, the display snaps to 0 to avoid residual jitter from GPS noise. Once you start moving clearly, the speed immediately rises from zero.',
   },
   {
-    title: 'Accuracy Gating (30 m Rule)',
+    title: 'Accuracy Circle',
     color: 'bg-amber-50 border-amber-200',
-    body: 'Any sample where the GPS accuracy circle exceeds 30 m is automatically skipped. This catches WiFi and cell-tower fixes the browser falls back to when satellite reception is poor.',
+    body: 'Your location accuracy (the GPS uncertainty radius) is shown in the badge. Smaller is better. The accuracy threshold is different for indoors vs outdoors — use the Environment toggle to match your situation.',
   },
   {
-    title: 'WiFi / Data Speed ≠ Movement Speed',
+    title: 'Multipath (Near Buildings)',
     color: 'bg-red-50 border-red-200',
-    body: "Your WiFi download speed (Mbps) and mobile data connection have nothing to do with how fast you are physically moving. Speed accuracy comes entirely from the GPS chip. A fast 5G connection does not improve location accuracy.",
+    body: 'Near buildings, GPS signals bounce off walls and arrive late — the chip interprets this as a sudden position jump and reports a falsely high speed. Switch to Outdoors mode and Stable filter to reject these spikes before they reach the display.',
   },
   {
-    title: 'Best Conditions for Thesis Data',
+    title: 'Indoors Limitations',
     color: 'bg-teal-50 border-teal-200',
-    body: 'Go to an open road or field away from tall buildings. Walk for 20–30 seconds before collecting data so GPS can warm up. Avoid tunnels and dense tree canopy. Check the GPS Good badge before recording your thesis run.',
+    body: 'Indoors, GPS rarely locks onto satellites and accuracy degrades to 30–50 m. The app relaxes its accuracy gate so you still get readings, but speed values will be noisier. For best results, walk near a window or step outside.',
   },
 ];
 
@@ -265,15 +264,17 @@ export function SpeedMeterPrototypePage() {
   const sessionStartMsRef = useRef<number | null>(null);
   const elapsedOffsetSecondsRef = useRef(0);
   const lastPointRef = useRef<LastPoint | null>(null);
+  const lastCallbackMsRef = useRef<number | null>(null);
+  const resumeGuardRemainingRef = useRef(0);
+  const resumeSpikeFilterUntilMsRef = useRef(0);
   const kalmanRef = useRef<KalmanState>({ estimate: 0, errorCovariance: 1 });
   const totalDistanceMetersRef = useRef(0);
   const maxSpeedMpsRef = useRef(0);
   const skippedRef = useRef(0);
   const stopConfidenceRef = useRef(0);
-  const burstBoostRemainingRef = useRef(0);
 
-  const [mode, setMode] = useState<SpeedMeterMode>('balanced');
   const [isTracking, setIsTracking] = useState(false);
+  const [isStarting, setIsStarting] = useState(false);
   const [statusMessage, setStatusMessage] = useState('Tap Start to begin live speed sampling.');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
@@ -286,13 +287,9 @@ export function SpeedMeterPrototypePage() {
   const [skippedSamples, setSkippedSamples] = useState(0);
   const [samples, setSamples] = useState<SpeedSample[]>([]);
 
-  const modeRef = useRef<SpeedMeterMode>('balanced');
-  const modeConfigRef = useRef<ModeConfig>(MODE_SETTINGS.balanced);
-
-  useEffect(() => {
-    modeRef.current = mode;
-    modeConfigRef.current = MODE_SETTINGS[mode];
-  }, [mode]);
+  const modeRef = useRef<SpeedMeterMode>(DEFAULT_MODE);
+  const modeConfigRef = useRef<ModeConfig>(MODE_SETTINGS[DEFAULT_MODE]);
+  const environmentRef = useRef<Environment>(DEFAULT_ENVIRONMENT);
 
   const stopWatcher = () => {
     if (watchIdRef.current != null && typeof navigator !== 'undefined' && navigator.geolocation) {
@@ -314,93 +311,159 @@ export function SpeedMeterPrototypePage() {
     stopWatcher();
     setElapsedSeconds(elapsed);
     setIsTracking(false);
+    setIsStarting(false);
     setStatusMessage('Paused. Resume to continue the same session.');
   };
 
   const startTracking = () => {
-    if (isTracking) return;
+    if (isTracking || isStarting) return;
     if (typeof navigator === 'undefined' || !navigator.geolocation) {
       setErrorMessage('Geolocation is not supported in this browser.');
       return;
     }
+
+    setIsStarting(true);
     setErrorMessage(null);
-    setStatusMessage('Live. Walk or run outdoors for best accuracy.');
+    setStatusMessage('Live. GPS warming up for the first few seconds...');
+    lastCallbackMsRef.current = null;
+    resumeGuardRemainingRef.current = 0;
+    resumeSpikeFilterUntilMsRef.current = 0;
     sessionStartMsRef.current = Date.now();
 
     const watchId = navigator.geolocation.watchPosition(
       (position) => {
-        const modeConfig = modeConfigRef.current;
         const nowMs = Number.isFinite(position.timestamp) ? position.timestamp : Date.now();
         const lat = Number(position.coords.latitude);
         const lng = Number(position.coords.longitude);
         const accuracyMeters = toFiniteNonNegative(position.coords.accuracy);
-        const rawSpeedMps = toFiniteNonNegative(position.coords.speed);
+        const rawSpeedMps = Number(position.coords.speed);
 
         if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
 
-        // Always show the live accuracy so the GPS badge updates even when skipping.
+        const previousCallbackMs = lastCallbackMsRef.current;
+        if (previousCallbackMs != null) {
+          const callbackGapSec = Math.max(0, (nowMs - previousCallbackMs) / 1000);
+          if (callbackGapSec >= RESUME_GAP_REACQUIRE_SECONDS) {
+            // Device sleep/app background/restart can cause GPS reacquisition spikes.
+            resumeGuardRemainingRef.current = REACQUIRE_SKIP_SAMPLES;
+            resumeSpikeFilterUntilMsRef.current = nowMs + RESUME_SPIKE_FILTER_SECONDS * 1000;
+            kalmanRef.current = { estimate: 0, errorCovariance: 1 };
+            stopConfidenceRef.current = 0;
+            setStatusMessage('GPS resumed after sleep/restart. Stabilizing signal...');
+          }
+        }
+        lastCallbackMsRef.current = nowMs;
+
+        // Always update the badge so the user sees signal quality live.
         setLatestAccuracyMeters(accuracyMeters);
 
-        const positionReliable = accuracyMeters <= MAX_RELIABLE_ACCURACY_METERS;
+        if (resumeGuardRemainingRef.current > 0) {
+          resumeGuardRemainingRef.current -= 1;
+          skippedRef.current += 1;
+          setSkippedSamples(skippedRef.current);
+          lastPointRef.current = { lat, lng, timestampMs: nowMs, accuracyMeters };
+          setStatusMessage('GPS resumed. Waiting for stable samples...');
+          return;
+        }
+
+        const env = environmentRef.current;
+        const accuracyThreshold = ACCURACY_THRESHOLD[env];
+        const positionReliable = accuracyMeters <= accuracyThreshold;
+
+        // Sanitise the raw GPS speed from the chipset.
+        const speedMps = Number.isFinite(rawSpeedMps) && rawSpeedMps >= 0 ? rawSpeedMps : 0;
+
+        // FIX 2: Hard-reject physically impossible readings BEFORE Kalman sees them.
+        // A single 80 km/h multipath blip still pulled the Kalman estimate up even
+        // with smoothing — rejecting it outright is cleaner.
+        if (speedMps > MAX_EXPECTED_SPEED_MPS) {
+          skippedRef.current += 1;
+          setSkippedSamples(skippedRef.current);
+          // Still advance the anchor so delta-time stays correct.
+          lastPointRef.current = { lat, lng, timestampMs: nowMs, accuracyMeters };
+          return;
+        }
+
         const prev = lastPointRef.current;
-
-        // ── Time-delta gate ────────────────────────────────────────────────────
-        if (prev && (nowMs - prev.timestampMs) / 1000 < MIN_DELTA_TIME_SECONDS) return;
-
-        // ── Position-delta speed ───────────────────────────────────────────────
-        let computedSpeedMps = 0;
-        let distanceDeltaMeters = 0;
-
-        if (prev) {
-          const deltaTimeSec = (nowMs - prev.timestampMs) / 1000;
-          const rawDist = haversineDistanceMeters({ lat: prev.lat, lng: prev.lng }, { lat, lng });
-
-          if (Number.isFinite(rawDist) && rawDist <= MAX_REASONABLE_SAMPLE_DISTANCE_METERS) {
-            // Poor GPS accuracy means MORE position jitter, so the noise gate must
-            // be LARGER, not smaller.  Math.max ensures a high-accuracy fix keeps
-            // the small base gate while a marginal fix requires proportionally more
-            // real movement before we count it.
-            // When the GPS chipset provides no Doppler speed (rawSpeedMps===0,
-            // common on iPhone) we apply an additional 1.5× multiplier because
-            // we have no independent velocity confirmation and must be stricter.
-            const noDoppler = rawSpeedMps === 0;
-            const movementNoiseThreshold = Math.max(
-              modeConfig.maxNoiseGateMeters,
-              accuracyMeters * modeConfig.movementSignificanceFactor * (noDoppler ? 1.5 : 1.0),
-            );
-
-            // Only count movement that clearly exceeds the GPS noise floor.
-            if (rawDist > movementNoiseThreshold) {
-              distanceDeltaMeters = rawDist;
-            }
-          }
-          if (deltaTimeSec > 0 && distanceDeltaMeters > 0) {
-            computedSpeedMps = distanceDeltaMeters / deltaTimeSec;
-          }
+        if (!prev) {
+          lastPointRef.current = { lat, lng, timestampMs: nowMs, accuracyMeters };
+          setStatusMessage('Live. GPS warming up...');
+          return;
         }
 
-        // ── Speed source selection ─────────────────────────────────────────────
-        // GPS Doppler (coords.speed) is measured directly by the chipset using
-        // satellite signal phase shifts – far more accurate than position-delta
-        // maths, especially at slow walking speeds where position noise dominates.
-        let speedCandidateMps: number;
-        let speedSource: SpeedSample['speedSource'];
+        // FIX: was 0.5 s — iOS fires watchPosition faster during warmup, which
+        // silently dropped early samples and made the display appear frozen.
+        const deltaTimeSec = (nowMs - prev.timestampMs) / 1000;
+        if (deltaTimeSec < MIN_DELTA_TIME_SECONDS) return;
 
-        if (rawSpeedMps > 0) {
-          speedCandidateMps = rawSpeedMps;
-          speedSource = 'gps_doppler';
-        } else if (computedSpeedMps > 0) {
-          speedCandidateMps = computedSpeedMps;
-          speedSource = 'computed';
-        } else {
-          speedCandidateMps = 0;
-          speedSource = 'zero';
+        const rawDistanceMeters = haversineDistanceMeters({ lat: prev.lat, lng: prev.lng }, { lat, lng });
+        if (!Number.isFinite(rawDistanceMeters)) {
+          lastPointRef.current = { lat, lng, timestampMs: nowMs, accuracyMeters };
+          return;
         }
 
-        speedCandidateMps = Math.min(speedCandidateMps, MAX_EXPECTED_SPEED_MPS);
+        // FIX 4: Per-environment distance gate — was 120 m (≈ 432 km/h at 1 s),
+        // now tighter: 40 m outdoors, 15 m indoors.
+        const maxDist = MAX_REASONABLE_SAMPLE_DISTANCE[env];
+        if (rawDistanceMeters > maxDist) {
+          skippedRef.current += 1;
+          setSkippedSamples(skippedRef.current);
+          lastPointRef.current = { lat, lng, timestampMs: nowMs, accuracyMeters };
+          return;
+        }
 
-        const nearStillBySpeed = speedCandidateMps <= modeConfig.stillSpeedThresholdMps;
-        const nearStillByDistance = distanceDeltaMeters <= modeConfig.stillDistanceThresholdMeters;
+        const computedSpeedMps = rawDistanceMeters / deltaTimeSec;
+
+        // Extra wake-up protection: during a short post-resume window,
+        // reject high Doppler speed if position-delta speed stays near-zero.
+        const inResumeSpikeFilterWindow = nowMs < resumeSpikeFilterUntilMsRef.current;
+        const wakeSpikeLikely =
+          inResumeSpikeFilterWindow &&
+          speedMps >= RESUME_SPIKE_MIN_SPEED_MPS &&
+          computedSpeedMps <= RESUME_SPIKE_MAX_COMPUTED_MPS &&
+          accuracyMeters >= accuracyThreshold * RESUME_SPIKE_MIN_ACCURACY_FACTOR;
+
+        if (wakeSpikeLikely) {
+          skippedRef.current += 1;
+          setSkippedSamples(skippedRef.current);
+          lastPointRef.current = { lat, lng, timestampMs: nowMs, accuracyMeters };
+          setStatusMessage('Filtering wake-up GPS spike...');
+          return;
+        }
+
+        const distanceDeltaMeters = rawDistanceMeters;
+
+        // FIX 3: Accuracy-weighted Kalman process noise.
+        // Near buildings / indoors, accuracy degrades but old code kept Q the same,
+        // so noisy readings were trusted as much as clean ones. Now we scale the
+        // process noise UP when accuracy is poor — meaning the filter leans harder
+        // on its own prediction (more smoothing) when GPS is unreliable.
+        const prevEstimate = kalmanRef.current.estimate;
+        const measurementDelta = Math.abs(speedMps - prevEstimate);
+        const modeConfig = modeConfigRef.current;
+
+        // accuracyPenalty: 1.0 when GPS is perfect, up to 3× when very noisy.
+        // Dividing by threshold keeps it relative to what "acceptable" is for the
+        // current environment — indoors threshold is higher, so the penalty stays
+        // proportional even though indoors accuracy is inherently worse.
+        const accuracyPenalty = clamp(accuracyMeters / accuracyThreshold, 1, 3);
+
+        let processNoise =
+          measurementDelta >= modeConfig.adaptiveQDeltaMps
+            ? modeConfig.fastKalmanQ
+            : modeConfig.baseKalmanQ;
+
+        // When GPS is noisy, raise R (trust measurement less) by scaling Q down.
+        // Lower Q relative to R means Kalman gain falls → filter ignores the noisy
+        // measurement more and sticks closer to its prediction.
+        processNoise = processNoise / accuracyPenalty;
+
+        kalmanRef.current = kalmanUpdate(kalmanRef.current, speedMps, processNoise);
+        let smoothedSpeedMps = Math.max(0, kalmanRef.current.estimate);
+
+        // Snap to zero after a short hold of near-zero speed + small movement.
+        const nearStillBySpeed = speedMps <= modeConfig.stillSpeedThresholdMps;
+        const nearStillByDistance = rawDistanceMeters <= modeConfig.maxNoiseGateMeters * 0.5;
 
         if (nearStillBySpeed && nearStillByDistance) {
           stopConfidenceRef.current += 1;
@@ -409,68 +472,17 @@ export function SpeedMeterPrototypePage() {
         }
 
         if (stopConfidenceRef.current >= modeConfig.stopLockMinSamples) {
-          speedCandidateMps = 0;
-          speedSource = 'zero';
-        }
-
-        // ── Accuracy gate ──────────────────────────────────────────────────────
-        // Discard non-zero speed from low-accuracy (WiFi/cell) fixes.
-        if (!positionReliable && speedCandidateMps > 0) {
-          skippedRef.current += 1;
-          setSkippedSamples(skippedRef.current);
-          lastPointRef.current = { lat, lng, timestampMs: nowMs };
-          return;
-        }
-
-        // ── Spike rejection ────────────────────────────────────────────────────
-        const prevEstimate = kalmanRef.current.estimate;
-        if (prevEstimate > 0.2 && speedCandidateMps > prevEstimate * MAX_SPEED_JUMP_FACTOR) {
-          skippedRef.current += 1;
-          setSkippedSamples(skippedRef.current);
-          return;
-        }
-
-        if (
-          prevEstimate <= 1.0 &&
-          speedCandidateMps >= prevEstimate + modeConfig.burstStartDeltaMps
-        ) {
-          burstBoostRemainingRef.current = modeConfig.burstBoostSamples;
-        }
-
-        // ── Kalman filter ──────────────────────────────────────────────────────
-        const measurementDelta = Math.abs(speedCandidateMps - prevEstimate);
-        let processNoise =
-          measurementDelta >= modeConfig.adaptiveQDeltaMps
-            ? modeConfig.fastKalmanQ
-            : modeConfig.baseKalmanQ;
-
-        if (burstBoostRemainingRef.current > 0) {
-          processNoise = Math.max(processNoise, modeConfig.fastKalmanQ * 1.4);
-        }
-
-        kalmanRef.current = kalmanUpdate(kalmanRef.current, speedCandidateMps, processNoise);
-        let kalmanSpeedMps = Math.max(0, kalmanRef.current.estimate);
-
-        if (burstBoostRemainingRef.current > 0) {
-          if (speedCandidateMps > kalmanSpeedMps) {
-            kalmanSpeedMps =
-              kalmanSpeedMps * (1 - modeConfig.burstBlend) +
-              speedCandidateMps * modeConfig.burstBlend;
-            kalmanRef.current = { ...kalmanRef.current, estimate: kalmanSpeedMps };
-          }
-          burstBoostRemainingRef.current -= 1;
-        }
-
-        if (
-          stopConfidenceRef.current >= modeConfig.stopLockMinSamples &&
-          kalmanSpeedMps <= modeConfig.zeroLockSpeedMps
-        ) {
+          smoothedSpeedMps = 0;
           kalmanRef.current = { ...kalmanRef.current, estimate: 0 };
-          kalmanSpeedMps = 0;
         }
 
-        totalDistanceMetersRef.current += distanceDeltaMeters;
-        maxSpeedMpsRef.current = Math.max(maxSpeedMpsRef.current, kalmanSpeedMps);
+        // FIX: Only accumulate distance when we're not locked to zero — GPS jitter
+        // while stationary was inflating total distance and skewing average speed.
+        if (smoothedSpeedMps > 0) {
+          totalDistanceMetersRef.current += distanceDeltaMeters;
+        }
+
+        maxSpeedMpsRef.current = Math.max(maxSpeedMpsRef.current, smoothedSpeedMps);
 
         const elapsedSec = readElapsedSeconds(nowMs);
         const avgMps = elapsedSec > 0 ? totalDistanceMetersRef.current / elapsedSec : 0;
@@ -480,22 +492,29 @@ export function SpeedMeterPrototypePage() {
           timestampIso: new Date(nowMs).toISOString(),
           elapsedSeconds: elapsedSec,
           latitude: lat, longitude: lng,
-          accuracyMeters, positionReliable, speedSource,
-          instantSpeedMps: speedCandidateMps,
-          rawSpeedMps, computedSpeedMps, kalmanSpeedMps,
+          accuracyMeters, positionReliable,
+          speedSource: speedMps > 0 ? 'gps_doppler' : 'zero',
+          instantSpeedMps: speedMps,
+          // FIX: store the actual raw value from the chip, not the sanitised speedMps
+          rawSpeedMps: Number.isFinite(rawSpeedMps) ? rawSpeedMps : -1,
+          computedSpeedMps, // position-delta for reference
+          kalmanSpeedMps: smoothedSpeedMps,
           analysisMode: modeRef.current,
+          environment: env,
           distanceDeltaMeters,
           cumulativeDistanceMeters: totalDistanceMetersRef.current,
         };
 
         setElapsedSeconds(elapsedSec);
-        setInstantSpeedMps(speedCandidateMps);
+        setInstantSpeedMps(speedMps);
         setTotalDistanceMeters(totalDistanceMetersRef.current);
-        setCurrentSpeedMps(kalmanSpeedMps);
+        setCurrentSpeedMps(smoothedSpeedMps);
         setAverageSpeedMps(avgMps);
         setMaxSpeedMps(maxSpeedMpsRef.current);
         setSamples((prev) => [...prev, sample]);
-        lastPointRef.current = { lat, lng, timestampMs: nowMs };
+        setStatusMessage('Live. Tracking speed samples.');
+
+        lastPointRef.current = { lat, lng, timestampMs: nowMs, accuracyMeters };
       },
       (error) => {
         if (error.code === error.PERMISSION_DENIED) {
@@ -514,6 +533,7 @@ export function SpeedMeterPrototypePage() {
 
     watchIdRef.current = watchId;
     setIsTracking(true);
+    setIsStarting(false);
   };
 
   const resetSession = () => {
@@ -524,12 +544,15 @@ export function SpeedMeterPrototypePage() {
     sessionStartMsRef.current = null;
     elapsedOffsetSecondsRef.current = 0;
     lastPointRef.current = null;
+    lastCallbackMsRef.current = null;
+    resumeGuardRemainingRef.current = 0;
+    resumeSpikeFilterUntilMsRef.current = 0;
     kalmanRef.current = { estimate: 0, errorCovariance: 1 };
     totalDistanceMetersRef.current = 0;
     maxSpeedMpsRef.current = 0;
     skippedRef.current = 0;
     stopConfidenceRef.current = 0;
-    burstBoostRemainingRef.current = 0;
+    setIsStarting(false);
     setElapsedSeconds(0); setInstantSpeedMps(0); setCurrentSpeedMps(0); setAverageSpeedMps(0);
     setMaxSpeedMps(0); setTotalDistanceMeters(0);
     setLatestAccuracyMeters(null); setSkippedSamples(0); setSamples([]);
@@ -550,7 +573,6 @@ export function SpeedMeterPrototypePage() {
   const currentPaceText = useMemo(() => formatPaceMinutesPerKm(currentSpeedMps), [currentSpeedMps]);
   const latestAccuracyText = useMemo(() => formatLocationAccuracy(latestAccuracyMeters), [latestAccuracyMeters]);
   const signalQuality = useMemo(() => getSignalQuality(latestAccuracyMeters), [latestAccuracyMeters]);
-  const activeModeLabel = MODE_SETTINGS[mode].label;
 
   const exportCsv = () => {
     if (samples.length === 0) { setStatusMessage('No samples yet. Start tracking first.'); return; }
@@ -597,7 +619,7 @@ export function SpeedMeterPrototypePage() {
               <p className="mt-3 max-w-3xl text-sm text-slate-600 md:text-base">
                 Capture live speed while walking or running. Uses GPS Doppler speed when available
                 (more accurate than position-delta maths) and applies a Kalman filter to remove
-                spikes. Export CSV for thesis data.
+                spikes. Supports both indoors and outdoors use. Export CSV for thesis data.
               </p>
             </div>
 
@@ -612,10 +634,11 @@ export function SpeedMeterPrototypePage() {
             <button
               type="button"
               onClick={isTracking ? pauseTracking : startTracking}
-              className="inline-flex items-center gap-2 rounded-lg bg-gradient-to-r from-teal-600 to-blue-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:from-teal-700 hover:to-blue-700"
+              disabled={isStarting}
+              className={`inline-flex items-center gap-2 rounded-lg bg-gradient-to-r from-teal-600 to-blue-600 px-4 py-2.5 text-sm font-semibold text-white transition ${isStarting ? 'cursor-wait opacity-70' : 'hover:from-teal-700 hover:to-blue-700'}`}
             >
               {isTracking ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
-              {isTracking ? 'Pause Tracking' : 'Start Tracking'}
+              {isTracking ? 'Pause Tracking' : isStarting ? 'Starting...' : 'Start Tracking'}
             </button>
             <button
               type="button"
@@ -633,24 +656,6 @@ export function SpeedMeterPrototypePage() {
               <Download className="h-4 w-4" />
               Export CSV
             </button>
-          </div>
-
-          <div className="mt-3 flex flex-wrap items-center gap-2">
-            {MODE_OPTIONS.map((value) => (
-              <button
-                key={value}
-                type="button"
-                onClick={() => setMode(value)}
-                className={`rounded-lg px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.12em] transition ${
-                  mode === value
-                    ? 'bg-slate-900 text-white'
-                    : 'border border-slate-300 bg-white text-slate-700 hover:border-slate-400'
-                }`}
-              >
-                {MODE_SETTINGS[value].label}
-              </button>
-            ))}
-            <span className="text-xs text-slate-500">Current mode: {activeModeLabel}</span>
           </div>
 
           <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
@@ -704,15 +709,11 @@ export function SpeedMeterPrototypePage() {
 
           <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800">
             <span className="font-semibold">Accuracy tip: </span>
-            Go outdoors in an open area. WiFi-only positioning has 20–100 m error which makes speed
-            calculations unreliable — your phone must lock onto GPS satellites (&lt;10 m) for clean
-            readings. Samples with accuracy &gt;{MAX_RELIABLE_ACCURACY_METERS} m are automatically skipped.
-            Tiny residual movement around 0.03 m/s can still appear from GPS jitter, so near-zero speed
-            is auto-snapped to 0 after a short stationary lock.
-            Short acceleration bursts are now boosted so speed rises faster when you start moving.
+            Wait a few seconds after pressing Start so GPS can stabilize, and test in open-sky areas when possible.
+            The tracker automatically applies filtering in the background while recording live samples.
             {skippedSamples > 0 && (
               <span className="ml-1 font-semibold text-amber-900">
-                ({skippedSamples} sample{skippedSamples !== 1 ? 's' : ''} skipped so far.)
+                ({skippedSamples} sample{skippedSamples !== 1 ? 's' : ''} rejected so far.)
               </span>
             )}
           </div>
@@ -771,8 +772,8 @@ export function SpeedMeterPrototypePage() {
             Only accepted, Kalman-filtered samples appear here.{' '}
             <span className="inline-block rounded bg-emerald-50 px-1.5 py-0.5 text-xs font-medium text-emerald-700">GPS</span>{' '}
             = Doppler from chipset (accurate).{' '}
-            <span className="inline-block rounded bg-blue-50 px-1.5 py-0.5 text-xs font-medium text-blue-700">Computed</span>{' '}
-            = position-delta (noisier). CSV export has all raw columns.
+            <span className="inline-block rounded bg-slate-100 px-1.5 py-0.5 text-xs font-medium text-slate-500">Zero</span>{' '}
+            = no chipset speed available. CSV export has all raw columns including position-delta computed speed.
           </p>
 
           {latestRows.length === 0 ? (
@@ -810,11 +811,9 @@ export function SpeedMeterPrototypePage() {
                       <td className="whitespace-nowrap px-3 py-2">
                         <span className={`inline-block rounded px-1.5 py-0.5 text-xs font-medium ${
                           sample.speedSource === 'gps_doppler' ? 'bg-emerald-50 text-emerald-700' :
-                          sample.speedSource === 'computed' ? 'bg-blue-50 text-blue-700' :
                           'bg-slate-100 text-slate-500'
                         }`}>
-                          {sample.speedSource === 'gps_doppler' ? 'GPS' :
-                           sample.speedSource === 'computed' ? 'Computed' : 'Zero'}
+                          {sample.speedSource === 'gps_doppler' ? 'GPS' : 'Zero'}
                         </span>
                       </td>
                       <td className="whitespace-nowrap px-3 py-2">

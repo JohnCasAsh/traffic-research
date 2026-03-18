@@ -18,8 +18,11 @@ $UIFolder = Join-Path $ProjectRoot "Traffic Management Dashboard UI"
 $StaticWebAppName = "tmresearch-green-johncasash"
 $ResourceGroup = "traffic-management-rg"
 
-# Azure deployment token
-$GreenToken = "1f0d359479f271506b2aca9a355ac95b5d6ebc129ad9321b6519ddbe45f99d4004-478d80e9-b00d-480c-81e8-239e63a16564000292109f897900"
+# Azure deployment token (never hardcode secrets in source control)
+$GreenToken = $env:SWA_DEPLOYMENT_TOKEN_GREEN
+if (-not $GreenToken) {
+    $GreenToken = $env:AZURE_STATIC_WEB_APPS_API_TOKEN
+}
 
 # Azure URL
 $GreenURL = "https://witty-pond-09f897900.4.azurestaticapps.net"
@@ -34,6 +37,19 @@ Write-Host ""
 # Step 1: Git commit and push
 Write-Host "[1/4] Checking for changes..." -ForegroundColor Yellow
 Set-Location $ProjectRoot
+
+$sensitivePathPattern = '(^|[\\/])\.env($|[\\/])|(^|[\\/])\.env\.(local|development|production|test)(\.local)?$|firebase-service-account.*\.json$|\.pem$|\.key$|id_rsa'
+$pendingPaths = git status --porcelain | ForEach-Object {
+    if ($_.Length -ge 4) { $_.Substring(3).Trim() }
+} | Where-Object { $_ }
+
+$sensitivePending = $pendingPaths | Where-Object { $_ -match $sensitivePathPattern }
+if ($sensitivePending) {
+    Write-Host "  Commit blocked: possible sensitive files detected in working tree." -ForegroundColor Red
+    $sensitivePending | Sort-Object -Unique | ForEach-Object { Write-Host "    - $_" -ForegroundColor Red }
+    Write-Host "  Move secrets to environment variables or secure vault, then retry." -ForegroundColor Yellow
+    exit 1
+}
 
 $changes = git status --porcelain
 if ($changes) {
@@ -99,6 +115,11 @@ Write-Host "  Build complete and map key verified in bundle." -ForegroundColor G
 
 # Step 4: Deploy to Azure Green
 Write-Host "[4/4] Deploying to Azure GREEN (staging)..." -ForegroundColor Yellow
+if (-not $GreenToken) {
+    Write-Host "  Missing deployment token. Set SWA_DEPLOYMENT_TOKEN_GREEN or AZURE_STATIC_WEB_APPS_API_TOKEN in your environment." -ForegroundColor Red
+    exit 1
+}
+
 swa deploy ./dist --deployment-token $GreenToken --env production
 Write-Host "  GREEN deployed: $GreenURL" -ForegroundColor Green
 
