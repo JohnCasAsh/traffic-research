@@ -69,6 +69,8 @@ const ACCURACY_THRESHOLD: Record<Environment, number> = {
 const KALMAN_R = 1.2;
 const MIN_DELTA_TIME_SECONDS = 0.3; // FIX: was 0.5 — iOS can fire faster during warmup
 const MAX_EXPECTED_SPEED_MPS = 50;  // ~180 km/h hard cap
+const RESUME_GAP_REACQUIRE_SECONDS = 8;
+const REACQUIRE_SKIP_SAMPLES = 2;
 
 // FIX 4: Tighten max distance per sample — 120 m implied 432 km/h which is a
 // building reflection, not movement. 40 m is still generous for a runner (~144 km/h).
@@ -262,6 +264,8 @@ export function SpeedMeterPrototypePage() {
   const sessionStartMsRef = useRef<number | null>(null);
   const elapsedOffsetSecondsRef = useRef(0);
   const lastPointRef = useRef<LastPoint | null>(null);
+  const lastCallbackMsRef = useRef<number | null>(null);
+  const resumeGuardRemainingRef = useRef(0);
   const kalmanRef = useRef<KalmanState>({ estimate: 0, errorCovariance: 1 });
   const totalDistanceMetersRef = useRef(0);
   const maxSpeedMpsRef = useRef(0);
@@ -331,6 +335,8 @@ export function SpeedMeterPrototypePage() {
     setIsStarting(true);
     setErrorMessage(null);
     setStatusMessage('Live. GPS warming up for the first few seconds...');
+    lastCallbackMsRef.current = null;
+    resumeGuardRemainingRef.current = 0;
     sessionStartMsRef.current = Date.now();
 
     const watchId = navigator.geolocation.watchPosition(
@@ -343,8 +349,30 @@ export function SpeedMeterPrototypePage() {
 
         if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
 
+        const previousCallbackMs = lastCallbackMsRef.current;
+        if (previousCallbackMs != null) {
+          const callbackGapSec = Math.max(0, (nowMs - previousCallbackMs) / 1000);
+          if (callbackGapSec >= RESUME_GAP_REACQUIRE_SECONDS) {
+            // Device sleep/app background/restart can cause GPS reacquisition spikes.
+            resumeGuardRemainingRef.current = REACQUIRE_SKIP_SAMPLES;
+            kalmanRef.current = { estimate: 0, errorCovariance: 1 };
+            stopConfidenceRef.current = 0;
+            setStatusMessage('GPS resumed after sleep/restart. Stabilizing signal...');
+          }
+        }
+        lastCallbackMsRef.current = nowMs;
+
         // Always update the badge so the user sees signal quality live.
         setLatestAccuracyMeters(accuracyMeters);
+
+        if (resumeGuardRemainingRef.current > 0) {
+          resumeGuardRemainingRef.current -= 1;
+          skippedRef.current += 1;
+          setSkippedSamples(skippedRef.current);
+          lastPointRef.current = { lat, lng, timestampMs: nowMs, accuracyMeters };
+          setStatusMessage('GPS resumed. Waiting for stable samples...');
+          return;
+        }
 
         const env = environmentRef.current;
         const accuracyThreshold = ACCURACY_THRESHOLD[env];
@@ -505,6 +533,8 @@ export function SpeedMeterPrototypePage() {
     sessionStartMsRef.current = null;
     elapsedOffsetSecondsRef.current = 0;
     lastPointRef.current = null;
+    lastCallbackMsRef.current = null;
+    resumeGuardRemainingRef.current = 0;
     kalmanRef.current = { estimate: 0, errorCovariance: 1 };
     totalDistanceMetersRef.current = 0;
     maxSpeedMpsRef.current = 0;
