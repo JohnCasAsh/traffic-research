@@ -309,6 +309,26 @@ type RouteOption = RouteSummary & {
   resultRouteIndex: number;
 };
 
+function compareRouteOptionsByShortest(a: RouteOption, b: RouteOption) {
+  const legA = a?.directionsResult?.routes?.[a.resultRouteIndex]?.legs?.[0];
+  const legB = b?.directionsResult?.routes?.[b.resultRouteIndex]?.legs?.[0];
+
+  const distanceA = Number(legA?.distance?.value ?? Number.POSITIVE_INFINITY);
+  const distanceB = Number(legB?.distance?.value ?? Number.POSITIVE_INFINITY);
+  const durationA = Number(legA?.duration?.value ?? Number.POSITIVE_INFINITY);
+  const durationB = Number(legB?.duration?.value ?? Number.POSITIVE_INFINITY);
+
+  if (distanceA !== distanceB) {
+    return distanceA - distanceB;
+  }
+
+  if (durationA !== durationB) {
+    return durationA - durationB;
+  }
+
+  return a.summaryText.localeCompare(b.summaryText);
+}
+
 type TrafficLevel = 'low' | 'moderate' | 'heavy';
 
 type LiveTrackingVehicle = {
@@ -512,12 +532,31 @@ export function DashboardMap({ origin, destination, liveTrackingEnabled = false 
     setCurrentLocationMessage('Finding your current location...');
 
     try {
-      const { position, accuracyMeters, precise } = await getReliableCurrentPosition({
-        desiredAccuracyMeters: 40,
-        maxAcceptableAccuracyMeters: 90,
-        timeoutMs: 25000,
-        settleTimeMs: 4000,
-      });
+      let locationResult;
+      try {
+        locationResult = await getReliableCurrentPosition({
+          desiredAccuracyMeters: 35,
+          maxAcceptableAccuracyMeters: 85,
+          timeoutMs: 28000,
+          settleTimeMs: 4500,
+        });
+      } catch (error) {
+        if (
+          error instanceof GeolocationLookupError &&
+          (error.code === 'coarse-location' || error.code === 'timeout')
+        ) {
+          locationResult = await getReliableCurrentPosition({
+            desiredAccuracyMeters: 55,
+            maxAcceptableAccuracyMeters: 140,
+            timeoutMs: 20000,
+            settleTimeMs: 3500,
+          });
+        } else {
+          throw error;
+        }
+      }
+
+      const { position, accuracyMeters, precise } = locationResult;
 
       updateCurrentLocationOverlay(
         position.coords.latitude,
@@ -1007,23 +1046,25 @@ export function DashboardMap({ origin, destination, liveTrackingEnabled = false 
 
           setRouteNotice(routeNotes.length > 0 ? routeNotes.join(' ') : null);
 
-          let normalizedRouteOptions = nextRouteOptions.slice(0, MAX_ROUTE_OPTIONS);
+          let normalizedRouteOptions = [...nextRouteOptions]
+            .sort(compareRouteOptionsByShortest)
+            .slice(0, MAX_ROUTE_OPTIONS);
           if (steelBridgePreferenceRequested) {
-            normalizedRouteOptions = [...normalizedRouteOptions].sort((a, b) => {
-              if (a.usesSteelBridge === b.usesSteelBridge) {
-                return 0;
-              }
-
-              return a.usesSteelBridge ? -1 : 1;
-            });
+            const steelRoutes = normalizedRouteOptions
+              .filter((route) => route.usesSteelBridge)
+              .sort(compareRouteOptionsByShortest);
+            const otherRoutes = normalizedRouteOptions
+              .filter((route) => !route.usesSteelBridge)
+              .sort(compareRouteOptionsByShortest);
+            normalizedRouteOptions = [...steelRoutes, ...otherRoutes].slice(0, MAX_ROUTE_OPTIONS);
           } else if (!bridgeIsOpen) {
-            normalizedRouteOptions = [...normalizedRouteOptions].sort((a, b) => {
-              if (a.usesSteelBridge === b.usesSteelBridge) {
-                return 0;
-              }
-
-              return a.usesSteelBridge ? 1 : -1;
-            });
+            const nonSteelRoutes = normalizedRouteOptions
+              .filter((route) => !route.usesSteelBridge)
+              .sort(compareRouteOptionsByShortest);
+            const steelRoutes = normalizedRouteOptions
+              .filter((route) => route.usesSteelBridge)
+              .sort(compareRouteOptionsByShortest);
+            normalizedRouteOptions = [...nonSteelRoutes, ...steelRoutes].slice(0, MAX_ROUTE_OPTIONS);
           }
 
           const relabeledRouteOptions = normalizedRouteOptions.map((option, index) => ({
@@ -1593,6 +1634,12 @@ export function DashboardMap({ origin, destination, liveTrackingEnabled = false 
       {isMapActivated && routeError && !configurationError && (
         <div className="absolute top-4 left-1/2 -translate-x-1/2 z-20 bg-red-50 border border-red-200 text-red-700 rounded-full px-4 py-2 text-xs font-medium">
           {routeError}
+        </div>
+      )}
+
+      {isMapActivated && routeNotice && !configurationError && (
+        <div className="absolute top-14 left-1/2 -translate-x-1/2 z-20 bg-amber-50 border border-amber-200 text-amber-800 rounded-full px-4 py-2 text-xs font-medium">
+          {routeNotice}
         </div>
       )}
 

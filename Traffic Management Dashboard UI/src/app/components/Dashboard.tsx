@@ -43,7 +43,26 @@ export function Dashboard() {
     setOriginLocationStatus(null);
 
     try {
-      const { position, accuracyMeters, precise } = await getReliableCurrentPosition();
+      let locationResult;
+      try {
+        locationResult = await getReliableCurrentPosition({
+          desiredAccuracyMeters: 55,
+          maxAcceptableAccuracyMeters: 130,
+          timeoutMs: 22000,
+          settleTimeMs: 3500,
+        });
+      } catch (error) {
+        if (
+          error instanceof GeolocationLookupError &&
+          (error.code === 'coarse-location' || error.code === 'timeout')
+        ) {
+          locationResult = await getReliableCurrentPosition();
+        } else {
+          throw error;
+        }
+      }
+
+      const { position, accuracyMeters, precise } = locationResult;
       const latitude = position.coords.latitude;
       const longitude = position.coords.longitude;
       const coordinateText = `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`;
