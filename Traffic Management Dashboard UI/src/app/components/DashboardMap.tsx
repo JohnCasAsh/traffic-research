@@ -1,10 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { importLibrary, setOptions } from '@googlemaps/js-api-loader';
 import { motion } from 'motion/react';
-import { LocateFixed, MapPin } from 'lucide-react';
+import { MapPin } from 'lucide-react';
 import { useLocationConsent } from '../LocationConsentContext';
 import {
-  formatLocationAccuracy,
   parseCoordinateInput,
 } from '../location';
 
@@ -390,14 +389,12 @@ type DashboardMapProps = {
   origin: string;
   destination: string;
   liveTrackingEnabled?: boolean;
-  onUseTrackedLocation?: (location: { lat: number; lng: number; accuracy: number }) => void;
 };
 
 export function DashboardMap({
   origin,
   destination,
   liveTrackingEnabled = false,
-  onUseTrackedLocation,
 }: DashboardMapProps) {
   const { currentLocation, setCurrentLocation } = useLocationConsent();
   
@@ -407,9 +404,7 @@ export function DashboardMap({
   const directionsRendererRef = useRef<any>(null);
   const liveMarkersRef = useRef<Map<string, any>>(new Map());
   const livePolylinesRef = useRef<Map<string, any[]>>(new Map());
-  const originPreviewMarkerRef = useRef<any>(null);
   const currentLocationMarkerRef = useRef<any>(null);
-  const currentLocationAccuracyCircleRef = useRef<any>(null);
   const lastAcceptedLocationRef = useRef<{ lat: number; lng: number; accuracy: number } | null>(null);
 
   const [isMapActivated, setIsMapActivated] = useState(false);
@@ -425,7 +420,6 @@ export function DashboardMap({
   const [bridgeOpenNow, setBridgeOpenNow] = useState(true);
   const [streamConnected, setStreamConnected] = useState(false);
   const [trackingStatusMessage, setTrackingStatusMessage] = useState<string | null>(null);
-  const [currentLocationMessage, setCurrentLocationMessage] = useState<string | null>(null);
   const [activeTrafficAlerts, setActiveTrafficAlerts] = useState<LiveTrackingAlert[]>([]);
   const [trafficLevelCounts, setTrafficLevelCounts] = useState({ low: 0, moderate: 0, heavy: 0 });
 
@@ -468,29 +462,16 @@ export function DashboardMap({
   const normalizedOrigin = origin.trim();
   const normalizedDestination = destination.trim();
 
-  const clearOriginPreviewMarker = () => {
-    if (originPreviewMarkerRef.current) {
-      originPreviewMarkerRef.current.setMap(null);
-      originPreviewMarkerRef.current = null;
-    }
-  };
-
   const clearCurrentLocationOverlay = () => {
     if (currentLocationMarkerRef.current) {
       currentLocationMarkerRef.current.setMap(null);
       currentLocationMarkerRef.current = null;
-    }
-
-    if (currentLocationAccuracyCircleRef.current) {
-      currentLocationAccuracyCircleRef.current.setMap(null);
-      currentLocationAccuracyCircleRef.current = null;
     }
   };
 
   const updateCurrentLocationOverlay = (
     latitude: number,
     longitude: number,
-    accuracyMeters?: number,
     recenter = false
   ) => {
     const gmaps = (window as any).google?.maps;
@@ -520,56 +501,11 @@ export function DashboardMap({
       });
     }
 
-    const safeAccuracy = Number(accuracyMeters);
-    if (Number.isFinite(safeAccuracy) && safeAccuracy > 0) {
-      if (currentLocationAccuracyCircleRef.current) {
-        currentLocationAccuracyCircleRef.current.setCenter(position);
-        currentLocationAccuracyCircleRef.current.setRadius(safeAccuracy);
-      } else {
-        currentLocationAccuracyCircleRef.current = new gmaps.Circle({
-          map,
-          center: position,
-          radius: safeAccuracy,
-          strokeColor: '#3b82f6',
-          strokeOpacity: 0.35,
-          strokeWeight: 1,
-          fillColor: '#93c5fd',
-          fillOpacity: 0.16,
-          zIndex: 1280,
-        });
-      }
-    } else if (currentLocationAccuracyCircleRef.current) {
-      currentLocationAccuracyCircleRef.current.setMap(null);
-      currentLocationAccuracyCircleRef.current = null;
-    }
-
     if (recenter) {
       map.panTo(position);
       const currentZoom = Number(map.getZoom() || DEFAULT_ZOOM);
       map.setZoom(Math.max(currentZoom, 16));
     }
-  };
-
-  const handleLocateCurrentLocation = () => {
-    if (!currentLocation) {
-      setCurrentLocationMessage('Live location is not ready yet. Wait a few seconds and try again.');
-      return;
-    }
-
-    onUseTrackedLocation?.({
-      lat: currentLocation.lat,
-      lng: currentLocation.lng,
-      accuracy: currentLocation.accuracy,
-    });
-
-    updateCurrentLocationOverlay(currentLocation.lat, currentLocation.lng, currentLocation.accuracy, true);
-
-    const accuracyText = formatLocationAccuracy(currentLocation.accuracy);
-    setCurrentLocationMessage(
-      `Current location: ${currentLocation.lat.toFixed(6)}, ${currentLocation.lng.toFixed(6)}${
-        accuracyText ? ` (${accuracyText})` : ''
-      }`
-    );
   };
 
   useEffect(() => {
@@ -644,7 +580,6 @@ export function DashboardMap({
       if (directionsRendererRef.current) {
         directionsRendererRef.current.setMap(null);
       }
-      clearOriginPreviewMarker();
       clearCurrentLocationOverlay();
       mapRef.current = null;
       directionsServiceRef.current = null;
@@ -1093,49 +1028,6 @@ export function DashboardMap({
   }, [isMapActivated, mapReady, routeOptions, selectedRouteId]);
 
   useEffect(() => {
-    if (!isMapActivated || !mapReady || !mapRef.current) {
-      clearOriginPreviewMarker();
-      return;
-    }
-
-    const gmaps = (window as any).google?.maps;
-    if (!gmaps) {
-      return;
-    }
-
-    const originCoordinates = parseCoordinateInput(normalizedOrigin);
-    if (!originCoordinates) {
-      clearOriginPreviewMarker();
-      return;
-    }
-
-    if (originPreviewMarkerRef.current) {
-      originPreviewMarkerRef.current.setPosition(originCoordinates);
-    } else {
-      originPreviewMarkerRef.current = new gmaps.Marker({
-        map: mapRef.current,
-        position: originCoordinates,
-        title: 'Origin coordinates',
-        zIndex: 1290,
-        icon: {
-          path: gmaps.SymbolPath.BACKWARD_CLOSED_ARROW,
-          scale: 5,
-          fillColor: '#0ea5e9',
-          fillOpacity: 0.95,
-          strokeColor: '#ffffff',
-          strokeWeight: 1.5,
-        },
-      });
-    }
-
-    if (!normalizedDestination && !routeSummary) {
-      mapRef.current.panTo(originCoordinates);
-      const currentZoom = Number(mapRef.current.getZoom() || DEFAULT_ZOOM);
-      mapRef.current.setZoom(Math.max(currentZoom, 15));
-    }
-  }, [isMapActivated, mapReady, normalizedOrigin, normalizedDestination, routeSummary]);
-
-  useEffect(() => {
     if (!isMapActivated || !mapReady || !apiBaseUrl || !mapRef.current) {
       return;
     }
@@ -1213,6 +1105,10 @@ export function DashboardMap({
       const nextCounts = { low: 0, moderate: 0, heavy: 0 };
 
       for (const vehicle of vehicles) {
+        if (vehicle.vehicleId === localVehicleId) {
+          continue;
+        }
+
         if (!Number.isFinite(vehicle.lat) || !Number.isFinite(vehicle.lng)) {
           continue;
         }
@@ -1417,7 +1313,7 @@ export function DashboardMap({
     }
 
     if (typeof navigator === 'undefined' || !navigator.geolocation) {
-      setCurrentLocationMessage('Browser geolocation is not supported on this device.');
+      setTrackingStatusMessage('Browser geolocation is not supported on this device.');
       return;
     }
 
@@ -1488,14 +1384,7 @@ export function DashboardMap({
           timestamp: Date.now(),
         });
 
-        updateCurrentLocationOverlay(nextLatitude, nextLongitude, normalizedAccuracy, false);
-
-        const accuracyText = formatLocationAccuracy(normalizedAccuracy);
-        setCurrentLocationMessage(
-          `Current location: ${nextLatitude.toFixed(6)}, ${nextLongitude.toFixed(6)}${
-            accuracyText ? ` (${accuracyText})` : ''
-          }`
-        );
+        updateCurrentLocationOverlay(nextLatitude, nextLongitude, false);
 
         if (!liveTrackingEnabled || !apiBaseUrl) {
           return;
@@ -1520,12 +1409,11 @@ export function DashboardMap({
       },
       (error) => {
         if (error.code === error.PERMISSION_DENIED) {
-          setCurrentLocationMessage('Location permission was denied. Allow location to show your live coordinates.');
           setTrackingStatusMessage('Location permission was denied.');
           return;
         }
 
-        setCurrentLocationMessage('Unable to read live location right now. Retrying automatically...');
+        setTrackingStatusMessage('Unable to read live location right now. Retrying automatically...');
       },
       {
         enableHighAccuracy: true,
@@ -1685,12 +1573,6 @@ export function DashboardMap({
         </div>
       )}
 
-      {isMapActivated && currentLocationMessage && !configurationError && (
-        <div className="absolute top-16 left-1/2 -translate-x-1/2 z-20 bg-blue-50 border border-blue-200 text-blue-700 rounded-full px-4 py-2 text-xs font-medium">
-          {currentLocationMessage}
-        </div>
-      )}
-
       {isMapActivated && liveTrackingEnabled && !configurationError && (
         <div className="absolute top-20 right-4 z-20 max-w-[260px] rounded-lg border border-slate-200 bg-white/95 px-3 py-2 text-[11px] text-slate-700 shadow">
           <div className="font-semibold text-slate-800">Live Tracking</div>
@@ -1726,19 +1608,6 @@ export function DashboardMap({
         <>
           {isMapActivated && (
             <div className="absolute top-4 right-4 space-y-2 z-20">
-            <motion.button
-              whileHover={{ scale: 1.1 }}
-              whileTap={{ scale: 0.9 }}
-              onClick={() => {
-                handleLocateCurrentLocation();
-              }}
-              className="w-10 h-10 bg-white rounded-lg shadow-md flex items-center justify-center hover:bg-slate-50 transition-colors"
-              aria-label="Locate current location from tracking"
-              title="Show your location from Live Tracking"
-              type="button"
-            >
-              <LocateFixed className="w-4 h-4 text-blue-600" />
-            </motion.button>
             <motion.button
               whileHover={{ scale: 1.1 }}
               whileTap={{ scale: 0.9 }}

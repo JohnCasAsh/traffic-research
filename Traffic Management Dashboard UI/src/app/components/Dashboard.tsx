@@ -58,10 +58,6 @@ export function Dashboard() {
     applyTrackedLocationToOrigin(currentLocation);
   };
 
-  const handleMapUseTrackedLocation = (location: { lat: number; lng: number; accuracy: number }) => {
-    applyTrackedLocationToOrigin(location);
-  };
-
   return (
     <div className="min-h-[calc(100vh-4rem)] bg-slate-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -340,7 +336,6 @@ export function Dashboard() {
                 origin={formData.origin}
                 destination={formData.destination}
                 liveTrackingEnabled={consent.isConsented}
-                onUseTrackedLocation={handleMapUseTrackedLocation}
               />
             </div>
           </motion.div>
