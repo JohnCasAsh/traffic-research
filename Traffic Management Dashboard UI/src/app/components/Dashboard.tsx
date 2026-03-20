@@ -38,7 +38,7 @@ export function Dashboard() {
   const handleUseCurrentLocation = () => {
     // Simply use location from tracking live if available
     if (!currentLocation) {
-      setOriginLocationStatus('Enable Live Tracking to autofill your current location.');
+      setOriginLocationStatus('Waiting for live GPS fix. Please try again in a few seconds.');
       return;
     }
 

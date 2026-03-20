@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useState } from 'react';
 
 export type LocationConsent = {
   isConsented: boolean;
@@ -56,13 +56,6 @@ export function LocationConsentProvider({ children }: { children: React.ReactNod
     setConsentState(newConsent);
   };
 
-  // If user hasn't provided consent but we have location data, clear it
-  useEffect(() => {
-    if (!consent.isConsented && currentLocation) {
-      setCurrentLocation(null);
-    }
-  }, [consent.isConsented, currentLocation]);
-
   const isSharingLocation = consent.isConsented && currentLocation !== null;
 
   return (
@@ -70,8 +63,8 @@ export function LocationConsentProvider({ children }: { children: React.ReactNod
       value={{
         consent,
         setConsent,
-        currentLocation: isSharingLocation ? currentLocation : null,
-        setCurrentLocation: consent.isConsented ? setCurrentLocation : () => {},
+        currentLocation,
+        setCurrentLocation,
         isSharingLocation,
       }}
     >

@@ -372,7 +372,7 @@ type DashboardMapProps = {
 };
 
 export function DashboardMap({ origin, destination, liveTrackingEnabled = false }: DashboardMapProps) {
-  const { consent, setConsent, currentLocation, setCurrentLocation } = useLocationConsent();
+  const { currentLocation, setCurrentLocation } = useLocationConsent();
   
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<any>(null);
@@ -523,10 +523,8 @@ export function DashboardMap({ origin, destination, liveTrackingEnabled = false 
   };
 
   const handleLocateCurrentLocation = () => {
-    // Simply point to the user's own location from tracking live
-    // Only works if Live Tracking is enabled and user has consented
     if (!currentLocation) {
-      setCurrentLocationMessage('Enable Live Tracking to see your location.');
+      setCurrentLocationMessage('Live location is not ready yet. Wait a few seconds and try again.');
       return;
     }
 
@@ -534,9 +532,9 @@ export function DashboardMap({ origin, destination, liveTrackingEnabled = false 
 
     const accuracyText = formatLocationAccuracy(currentLocation.accuracy);
     setCurrentLocationMessage(
-      accuracyText
-        ? `Your location from Live Tracking (about ${accuracyText}).`
-        : 'Your location from Live Tracking.'
+      `Current location: ${currentLocation.lat.toFixed(6)}, ${currentLocation.lng.toFixed(6)}${
+        accuracyText ? ` (${accuracyText})` : ''
+      }`
     );
   };
 
@@ -1380,35 +1378,49 @@ export function DashboardMap({ origin, destination, liveTrackingEnabled = false 
   }, [apiBaseUrl, isMapActivated, localVehicleId, mapReady, liveTrackingEnabled]);
 
   useEffect(() => {
-    if (!liveTrackingEnabled) {
-      setTrackingStatusMessage(null);
-      return;
-    }
-
-    if (!apiBaseUrl) {
-      setTrackingStatusMessage('Live tracking unavailable: VITE_API_URL is not configured.');
+    if (!isMapActivated) {
       return;
     }
 
     if (typeof navigator === 'undefined' || !navigator.geolocation) {
-      setTrackingStatusMessage('Live tracking unavailable: browser geolocation is not supported.');
+      setCurrentLocationMessage('Browser geolocation is not supported on this device.');
       return;
     }
 
-    setTrackingStatusMessage('Live tracking enabled. Sharing location updates.');
+    setTrackingStatusMessage(
+      liveTrackingEnabled
+        ? 'Live tracking enabled. Sharing location updates.'
+        : 'Live location active (private mode).'
+    );
 
     const watchId = navigator.geolocation.watchPosition(
       (position) => {
         const coords = position.coords;
+        const latitude = Number(coords.latitude);
+        const longitude = Number(coords.longitude);
+        const accuracy = Number(coords.accuracy);
         const speedMps = Number(coords.speed);
         const speedKph = Number.isFinite(speedMps) && speedMps > 0 ? speedMps * 3.6 : 0;
 
-        updateCurrentLocationOverlay(
-          coords.latitude,
-          coords.longitude,
-          Number(coords.accuracy),
-          false
+        setCurrentLocation({
+          lat: latitude,
+          lng: longitude,
+          accuracy: Number.isFinite(accuracy) ? accuracy : 0,
+          timestamp: Date.now(),
+        });
+
+        updateCurrentLocationOverlay(latitude, longitude, accuracy, false);
+
+        const accuracyText = formatLocationAccuracy(accuracy);
+        setCurrentLocationMessage(
+          `Current location: ${latitude.toFixed(6)}, ${longitude.toFixed(6)}${
+            accuracyText ? ` (${accuracyText})` : ''
+          }`
         );
+
+        if (!liveTrackingEnabled || !apiBaseUrl) {
+          return;
+        }
 
         fetch(`${apiBaseUrl}/api/tracking/update`, {
           method: 'POST',
@@ -1417,10 +1429,11 @@ export function DashboardMap({ origin, destination, liveTrackingEnabled = false 
           },
           body: JSON.stringify({
             vehicleId: localVehicleId,
-            lat: coords.latitude,
-            lng: coords.longitude,
+            lat: latitude,
+            lng: longitude,
             speedKph,
             heading: Number.isFinite(Number(coords.heading)) ? Number(coords.heading) : null,
+            shareLocation: true,
           }),
         }).catch(() => {
           setTrackingStatusMessage('Live tracking is on, but location sync failed. Retrying...');
@@ -1428,23 +1441,24 @@ export function DashboardMap({ origin, destination, liveTrackingEnabled = false 
       },
       (error) => {
         if (error.code === error.PERMISSION_DENIED) {
-          setTrackingStatusMessage('Location permission was denied. Enable location access to track live traffic.');
+          setCurrentLocationMessage('Location permission was denied. Allow location to show your live coordinates.');
+          setTrackingStatusMessage('Location permission was denied.');
           return;
         }
 
-        setTrackingStatusMessage('Unable to read your location right now. Live tracking will retry automatically.');
+        setCurrentLocationMessage('Unable to read live location right now. Retrying automatically...');
       },
       {
         enableHighAccuracy: true,
-        maximumAge: 5000,
-        timeout: 12000,
+        maximumAge: 2000,
+        timeout: 10000,
       }
     );
 
     return () => {
       navigator.geolocation.clearWatch(watchId);
     };
-  }, [apiBaseUrl, liveTrackingEnabled, localVehicleId]);
+  }, [apiBaseUrl, isMapActivated, liveTrackingEnabled, localVehicleId, setCurrentLocation]);
 
   const changeZoom = (delta: number) => {
     const map = mapRef.current;
