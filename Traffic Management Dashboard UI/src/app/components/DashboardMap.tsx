@@ -637,7 +637,11 @@ export function DashboardMap({
             normalizeText(`${normalizedOrigin} ${normalizedDestination}`),
             TIMED_BRIDGE_KEYWORDS
           );
-          const steelBridgePreferenceRequested = steelBridgeExplicitRequest;
+          const solanaTripHint = includesAnyKeyword(
+            normalizeText(`${normalizedOrigin} ${normalizedDestination}`),
+            ['solana', 'solana bridge']
+          );
+          const steelBridgePreferenceRequested = steelBridgeExplicitRequest || solanaTripHint;
           const shouldPrioritizeBridgeRoutes = isCagayanTrip || bridgeRequested;
           const routingOriginCandidates = buildRouteLocationCandidates(
             resolvedOrigin,
