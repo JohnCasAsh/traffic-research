@@ -15,8 +15,6 @@ const MIN_MOVEMENT_FOR_WEAK_SIGNAL_METERS = 35;
 const MAX_ROUTE_OPTIONS = 3;
 const MAX_ALLOWED_FORCED_DETOUR_RATIO = 1.2;
 const MAX_ALLOWED_BRIDGE_DETOUR_RATIO = 1.7;
-const BRIDGE_OPEN_HOUR = 6; // 6:00 AM
-const BRIDGE_CLOSE_HOUR = 18; // 6:00 PM
 const BRIDGE_MATCH_RADIUS_DEGREES = 0.0065;
 const STEEL_BRIDGE_COORD = { lat: 17.6409, lng: 121.7015 };
 const BUNTUN_BRIDGE_COORD = { lat: 17.6185, lng: 121.6889 };
@@ -238,21 +236,6 @@ function isLikelyCagayanTrip(origin: string, destination: string) {
   return hasTextHint || hasCoordinateHint;
 }
 
-function getManilaHour() {
-  const hourText = new Intl.DateTimeFormat('en-GB', {
-    hour: '2-digit',
-    hour12: false,
-    timeZone: 'Asia/Manila',
-  }).format(new Date());
-  const hour = Number.parseInt(hourText, 10);
-
-  return Number.isFinite(hour) ? hour : new Date().getHours();
-}
-
-function isBridgeOpenNow() {
-  const hour = getManilaHour();
-  return hour >= BRIDGE_OPEN_HOUR && hour < BRIDGE_CLOSE_HOUR;
-}
 
 function routeContainsKeyword(route: any, keywords: string[]) {
   const summaryText = String(route?.summary || '').toLowerCase();
@@ -463,7 +446,6 @@ export function DashboardMap({
   const [routeOptions, setRouteOptions] = useState<RouteOption[]>([]);
   const [selectedRouteId, setSelectedRouteId] = useState<string | null>(null);
   const [bridgeStatusMessage, setBridgeStatusMessage] = useState<string | null>(null);
-  const [bridgeOpenNow, setBridgeOpenNow] = useState(true);
   const [streamConnected, setStreamConnected] = useState(false);
   const [trackingStatusMessage, setTrackingStatusMessage] = useState<string | null>(null);
   const [activeTrafficAlerts, setActiveTrafficAlerts] = useState<LiveTrackingAlert[]>([]);
@@ -724,12 +706,8 @@ export function DashboardMap({
             throw new Error('No valid route candidates available for this trip.');
           }
 
-          const bridgeIsOpen = isBridgeOpenNow();
-          setBridgeOpenNow(bridgeIsOpen);
           setBridgeStatusMessage(
-            bridgeIsOpen
-              ? 'Bridge schedule: Steel bridge open 6:00 AM to 6:00 PM (PH time).'
-              : 'Bridge schedule: Steel bridge closed now (opens at 6:00 AM, PH time).'
+            'Steel bridge hours: 6:00 AM – 6:00 PM (PH time). Plan your trip accordingly.'
           );
 
           const nextRouteOptions: RouteOption[] = [];
@@ -766,10 +744,6 @@ export function DashboardMap({
 
             if (usesSecondBridge && !summaryLower.includes('buntun bridge')) {
               summaryText = `${summaryText} (Buntun Bridge)`;
-            }
-
-            if (usesSteelBridge && !bridgeIsOpen && !summaryLower.includes('closed')) {
-              summaryText = `${summaryText} (Bridge Closed Now)`;
             }
 
             if (usesSteelBridge) {
@@ -895,8 +869,18 @@ export function DashboardMap({
             addRouteOption(primaryResult, routeIndex, `Alternative ${routeIndex + 1}`);
           }
 
-          if (bridgeRequested) {
-            for (const bridgeRoute of FORCED_BRIDGE_WAYPOINTS) {
+          // Detect Solana trips: when destination or origin text resolves to Solana,
+          // force the Steel Bridge waypoint so it always appears as a route option.
+          // Google Maps doesn't return the Steel Bridge naturally for plain "solana" queries.
+          const isSolanaTrip =
+            compactAddressText(normalizedDestination) === 'solana' ||
+            compactAddressText(normalizedOrigin) === 'solana';
+
+          if (bridgeRequested || isSolanaTrip) {
+            const bridgesToForce = bridgeRequested
+              ? FORCED_BRIDGE_WAYPOINTS
+              : FORCED_BRIDGE_WAYPOINTS.filter((b) => b.expectedBridge === 'steel');
+            for (const bridgeRoute of bridgesToForce) {
               for (const waypointCandidate of bridgeRoute.waypointCandidates) {
                 try {
                   const forcedBridgeResult = await directionsServiceRef.current.route({
@@ -1617,7 +1601,7 @@ export function DashboardMap({
             <span>{routeSummary.durationText}</span>
           </div>
           {bridgeStatusMessage && routeSummary.usesSteelBridge && (
-            <div className={`mt-2 max-w-[260px] text-[10px] ${bridgeOpenNow ? 'text-emerald-700' : 'text-amber-700'}`}>
+            <div className="mt-2 max-w-[260px] text-[10px] text-sky-700">
               {bridgeStatusMessage}
             </div>
           )}
