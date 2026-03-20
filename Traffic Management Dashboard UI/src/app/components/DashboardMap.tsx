@@ -633,6 +633,10 @@ export function DashboardMap({
             normalizeText(`${normalizedOrigin} ${normalizedDestination}`),
             ALL_BRIDGE_KEYWORDS
           );
+          const steelBridgeExplicitRequest = includesAnyKeyword(
+            normalizeText(`${normalizedOrigin} ${normalizedDestination}`),
+            TIMED_BRIDGE_KEYWORDS
+          );
           const steelBridgePreferenceRequested = includesAnyKeyword(
             normalizeText(`${normalizedOrigin} ${normalizedDestination}`),
             [...ALL_BRIDGE_KEYWORDS, 'solana']
@@ -944,7 +948,7 @@ export function DashboardMap({
 
           const routeNotes: string[] = [];
 
-          if (shouldPrioritizeBridgeRoutes && steelRouteIncludedCount === 0) {
+          if (steelBridgeExplicitRequest && steelRouteIncludedCount === 0) {
             routeNotes.push(
               'Steel Bridge route could not be generated from current Google road data for this request. Try a nearby origin/destination pin for that bridge.'
             );
