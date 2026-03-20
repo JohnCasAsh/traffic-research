@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { importLibrary, setOptions } from '@googlemaps/js-api-loader';
 import { motion } from 'motion/react';
 import { LocateFixed, MapPin } from 'lucide-react';
+import { useLocationConsent } from '../LocationConsentContext';
 import {
   formatLocationAccuracy,
   GeolocationLookupError,
@@ -373,6 +374,8 @@ type DashboardMapProps = {
 };
 
 export function DashboardMap({ origin, destination, liveTrackingEnabled = false }: DashboardMapProps) {
+  const { consent, setConsent, currentLocation, setCurrentLocation } = useLocationConsent();
+  
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<any>(null);
   const directionsServiceRef = useRef<any>(null);
@@ -564,6 +567,16 @@ export function DashboardMap({ origin, destination, liveTrackingEnabled = false 
         accuracyMeters,
         true
       );
+
+      // Update location consent context if user has shared location
+      if (consent.isConsented) {
+        setCurrentLocation({
+          lat: position.coords.latitude,
+          lng: position.coords.longitude,
+          accuracy: accuracyMeters,
+          timestamp: Date.now(),
+        });
+      }
 
       const accuracyText = formatLocationAccuracy(accuracyMeters);
       setCurrentLocationMessage(

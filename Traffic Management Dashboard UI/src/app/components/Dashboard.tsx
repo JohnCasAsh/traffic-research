@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import { motion } from 'motion/react';
-import { MapPin, Navigation, Fuel, DollarSign, Car, Zap, TrendingUp, Settings, Info } from 'lucide-react';
+import { MapPin, Navigation, Fuel, DollarSign, Car, Zap, TrendingUp, Settings, Info, X, AlertCircle } from 'lucide-react';
 import { DashboardMap } from './DashboardMap';
+import { useLocationConsent } from '../LocationConsentContext';
 import {
   formatLocationAccuracy,
   GeolocationLookupError,
@@ -11,10 +12,12 @@ import {
 
 export function Dashboard() {
   const navigate = useNavigate();
+  const { consent, setConsent, isSharingLocation } = useLocationConsent();
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [liveTrackingEnabled, setLiveTrackingEnabled] = useState(false);
   const [isLocatingOrigin, setIsLocatingOrigin] = useState(false);
   const [originLocationStatus, setOriginLocationStatus] = useState<string | null>(null);
+  const [showPrivacyModal, setShowPrivacyModal] = useState(false);
   const [formData, setFormData] = useState({
     origin: '',
     destination: '',
@@ -72,6 +75,12 @@ export function Dashboard() {
         ...previous,
         origin: coordinateText,
       }));
+      
+      // Update location consent context if user has consented
+      if (consent.isConsented) {
+        // This will be handled by the map component
+      }
+
       setOriginLocationStatus(
         precise
           ? accuracyText
@@ -298,16 +307,23 @@ export function Dashboard() {
               <div className="flex gap-3 pt-2">
                 <button 
                   type="button" 
-                  title={liveTrackingEnabled ? 'Stop sharing your live location' : 'Share your live location while driving'}
-                  onClick={() => setLiveTrackingEnabled((previous) => !previous)}
+                  title={consent.isConsented ? 'Stop sharing your live location' : 'Share your live location with the app'}
+                  onClick={() => {
+                    if (!consent.isConsented) {
+                      setShowPrivacyModal(true);
+                    } else {
+                      setConsent(false);
+                      setLiveTrackingEnabled(false);
+                    }
+                  }}
                   className={`flex-1 py-3 px-4 border rounded-xl text-sm font-medium flex items-center justify-center space-x-2 transition-colors ${
-                    liveTrackingEnabled
+                    consent.isConsented
                       ? 'border-emerald-300 bg-emerald-50 text-emerald-700'
                       : 'border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100'
                   }`}
                 >
                   <Navigation className="w-4 h-4" />
-                  <span>{liveTrackingEnabled ? 'Tracking Live' : 'Live Tracking'}</span>
+                  <span>{consent.isConsented ? 'Tracking Live' : 'Enable Live Tracking'}</span>
                 </button>
                 <button 
                   type="button" 
@@ -379,12 +395,75 @@ export function Dashboard() {
               <DashboardMap
                 origin={formData.origin}
                 destination={formData.destination}
-                liveTrackingEnabled={liveTrackingEnabled}
+                liveTrackingEnabled={consent.isConsented}
               />
             </div>
           </motion.div>
         </div>
       </div>
+
+      {/* Privacy Consent Modal */}
+      {showPrivacyModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6"
+          >
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
+                <AlertCircle className="w-6 h-6 text-amber-600" />
+                Location Privacy
+              </h2>
+              <button
+                onClick={() => setShowPrivacyModal(false)}
+                className="text-slate-400 hover:text-slate-600 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-3 mb-6 text-sm text-slate-600">
+              <p>
+                <strong>Live Tracking</strong> shares your real-time location with the app to:
+              </p>
+              <ul className="ml-4 space-y-2 list-disc">
+                <li>Display your location on the map</li>
+                <li>Show traffic conditions and your position to other users</li>
+                <li>Calculate accurate route information</li>
+                <li>Provide navigation assistance</li>
+              </ul>
+              <p className="mt-4 border-t border-slate-200 pt-4">
+                <strong>Privacy Assurance:</strong> Your location is only visible while you're actively using the app. 
+                You can disable this at any time. No permanent records are stored unless you explicitly save them.
+              </p>
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowPrivacyModal(false)}
+                className="flex-1 px-4 py-2 border border-slate-300 rounded-lg text-slate-700 font-medium hover:bg-slate-50 transition-colors"
+              >
+                Decline
+              </button>
+              <button
+                onClick={() => {
+                  setConsent(true);
+                  setLiveTrackingEnabled(true);
+                  setShowPrivacyModal(false);
+                }}
+                className="flex-1 px-4 py-2 bg-teal-600 text-white rounded-lg font-medium hover:bg-teal-700 transition-colors"
+              >
+                Enable & Share
+              </button>
+            </div>
+
+            <p className="text-xs text-slate-500 mt-4 text-center">
+              You can change this setting anytime in the app settings
+            </p>
+          </motion.div>
+        </div>
+      )}
     </div>
   );
 }
