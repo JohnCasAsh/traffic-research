@@ -170,6 +170,13 @@ function applyLocalAddressHint(routeInput: WaypointCandidate, useCagayanHint: bo
     return trimmedInput;
   }
 
+  // Only append the Cagayan hint for known Cagayan place names.
+  // Without this guard, destinations like "manila", "baguio", "laoag" would become
+  // "manila, Cagayan, Philippines" and resolve to a barangay instead of the real city.
+  if (!includesAnyKeyword(compactInput, CAGAYAN_AREA_HINTS)) {
+    return trimmedInput;
+  }
+
   return `${trimmedInput}, Cagayan, Philippines`;
 }
 
