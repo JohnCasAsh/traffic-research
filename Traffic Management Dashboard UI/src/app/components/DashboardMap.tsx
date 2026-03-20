@@ -13,10 +13,12 @@ const MAX_INITIAL_TRACKING_ACCURACY_METERS = 140;
 const MAX_STEADY_TRACKING_ACCURACY_METERS = 95;
 const MIN_MOVEMENT_FOR_WEAK_SIGNAL_METERS = 35;
 const MAX_ROUTE_OPTIONS = 3;
-const MAX_ALLOWED_FORCED_DETOUR_RATIO = 1.4;
+const MAX_ALLOWED_FORCED_DETOUR_RATIO = 1.2;
+const MAX_ALLOWED_BRIDGE_DETOUR_RATIO = 1.7;
+const MAX_ALTERNATIVE_ROUTE_RATIO = 1.10; // alternatives must be within 10% of best in both distance AND duration
 const BRIDGE_OPEN_HOUR = 6; // 6:00 AM
 const BRIDGE_CLOSE_HOUR = 18; // 6:00 PM
-const BRIDGE_MATCH_RADIUS_DEGREES = 0.004;
+const BRIDGE_MATCH_RADIUS_DEGREES = 0.0065;
 const STEEL_BRIDGE_COORD = { lat: 17.6409, lng: 121.7015 };
 const BUNTUN_BRIDGE_COORD = { lat: 17.6185, lng: 121.6889 };
 const SOLANA_TOWN_CENTER_COORD = { lat: 17.6528, lng: 121.6907 };
@@ -39,12 +41,18 @@ const CAGAYAN_AREA_HINTS = [
   'cagayan',
   'buntun',
   'steel bridge',
+  // Cagayan province municipalities and common barangays
+  'piat', 'carig', 'aparri', 'abulug', 'alcala', 'allacapan', 'baggao',
+  'ballesteros', 'buguey', 'calayan', 'claveria', 'enrile', 'gattaran',
+  'gonzaga', 'iguig', 'lasam', 'lal-lo', 'pamplona', 'penablanca',
+  'peñablanca', 'santa ana', 'santa praxedes', 'santa teresita', 'tuao',
+  'amulung', 'calabayog', 'magapit', 'linao', 'nassiping', 'ugac',
 ];
 const CAGAYAN_ROUTE_BOUNDS = {
-  minLat: 17.45,
-  maxLat: 17.78,
-  minLng: 121.58,
-  maxLng: 121.84,
+  minLat: 17.1,
+  maxLat: 18.8,
+  minLng: 121.3,
+  maxLng: 122.8,
 };
 const LOCAL_LOCATION_ALIASES: Record<string, string> = {
   bunton: 'Buntun Bridge, Tuguegarao City, Cagayan, Philippines',
@@ -637,11 +645,6 @@ export function DashboardMap({
             normalizeText(`${normalizedOrigin} ${normalizedDestination}`),
             TIMED_BRIDGE_KEYWORDS
           );
-          const solanaTripHint = includesAnyKeyword(
-            normalizeText(`${normalizedOrigin} ${normalizedDestination}`),
-            ['solana', 'solana bridge']
-          );
-          const steelBridgePreferenceRequested = steelBridgeExplicitRequest || solanaTripHint;
           const shouldPrioritizeBridgeRoutes = isCagayanTrip || bridgeRequested;
           const routingOriginCandidates = buildRouteLocationCandidates(
             resolvedOrigin,
@@ -700,10 +703,6 @@ export function DashboardMap({
             fallbackLabel: string,
             expectedBridge?: 'steel' | 'buntun'
           ) => {
-            if (nextRouteOptions.length >= MAX_ROUTE_OPTIONS) {
-              return false;
-            }
-
             const route = result?.routes?.[routeIndex];
             if (!route) {
               return false;
@@ -711,14 +710,6 @@ export function DashboardMap({
 
             const usesSteelBridge = routeUsesTimedBridge(route);
             const usesSecondBridge = routeUsesSecondBridge(route);
-
-            if (expectedBridge === 'steel' && !usesSteelBridge) {
-              return false;
-            }
-
-            if (expectedBridge === 'buntun' && !usesSecondBridge) {
-              return false;
-            }
 
             const fingerprint = buildRouteFingerprint(route);
             if (seenRouteFingerprints.has(fingerprint)) {
@@ -766,7 +757,8 @@ export function DashboardMap({
           const isReasonableAlternative = (
             route: any,
             baselineDistanceValue: number | null,
-            baselineDurationValue: number | null
+            baselineDurationValue: number | null,
+            ratio = MAX_ALLOWED_FORCED_DETOUR_RATIO
           ) => {
             if (baselineDistanceValue == null || baselineDurationValue == null) {
               return true;
@@ -780,8 +772,8 @@ export function DashboardMap({
             }
 
             return (
-              distanceValue <= baselineDistanceValue * MAX_ALLOWED_FORCED_DETOUR_RATIO &&
-              durationValue <= baselineDurationValue * MAX_ALLOWED_FORCED_DETOUR_RATIO
+              distanceValue <= baselineDistanceValue * ratio &&
+              durationValue <= baselineDurationValue * ratio
             );
           };
 
@@ -856,7 +848,8 @@ export function DashboardMap({
             ? baselineDurationValue
             : null;
 
-          for (let routeIndex = 0; routeIndex < MAX_ROUTE_OPTIONS; routeIndex += 1) {
+          const primaryRouteCount = Number(primaryResult?.routes?.length || 0);
+          for (let routeIndex = 0; routeIndex < primaryRouteCount; routeIndex += 1) {
             if (!primaryResult?.routes?.[routeIndex]) {
               break;
             }
@@ -864,17 +857,9 @@ export function DashboardMap({
             addRouteOption(primaryResult, routeIndex, `Alternative ${routeIndex + 1}`);
           }
 
-          if (shouldPrioritizeBridgeRoutes) {
+          if (bridgeRequested) {
             for (const bridgeRoute of FORCED_BRIDGE_WAYPOINTS) {
-              if (nextRouteOptions.length >= MAX_ROUTE_OPTIONS) {
-                break;
-              }
-
               for (const waypointCandidate of bridgeRoute.waypointCandidates) {
-                if (nextRouteOptions.length >= MAX_ROUTE_OPTIONS) {
-                  break;
-                }
-
                 try {
                   const forcedBridgeResult = await directionsServiceRef.current.route({
                     ...planningRequest,
@@ -891,18 +876,14 @@ export function DashboardMap({
                     !isReasonableAlternative(
                       forcedRoute,
                       safeBaselineDistance,
-                      safeBaselineDuration
+                      safeBaselineDuration,
+                      MAX_ALLOWED_BRIDGE_DETOUR_RATIO
                     )
                   ) {
                     continue;
                   }
 
-                  const wasAdded = addRouteOption(
-                    forcedBridgeResult,
-                    0,
-                    bridgeRoute.label,
-                    bridgeRoute.expectedBridge
-                  );
+                  const wasAdded = addRouteOption(forcedBridgeResult, 0, bridgeRoute.label);
 
                   if (wasAdded) {
                     break;
@@ -922,10 +903,6 @@ export function DashboardMap({
           ];
 
           for (const strategy of fallbackStrategies) {
-            if (nextRouteOptions.length >= MAX_ROUTE_OPTIONS) {
-              break;
-            }
-
             try {
               const fallbackResult = await directionsServiceRef.current.route({
                 ...baseRequest,
@@ -974,18 +951,75 @@ export function DashboardMap({
 
           setRouteNotice(routeNotes.length > 0 ? routeNotes.join(' ') : null);
 
-          let normalizedRouteOptions = [...nextRouteOptions]
-            .sort(compareRouteOptionsByShortest)
-            .slice(0, MAX_ROUTE_OPTIONS);
-          if (steelBridgePreferenceRequested && bridgeIsOpen) {
-            const steelRoutes = normalizedRouteOptions
-              .filter((route) => route.usesSteelBridge)
-              .sort(compareRouteOptionsByShortest);
-            const otherRoutes = normalizedRouteOptions
-              .filter((route) => !route.usesSteelBridge)
-              .sort(compareRouteOptionsByShortest);
-            normalizedRouteOptions = [...steelRoutes, ...otherRoutes].slice(0, MAX_ROUTE_OPTIONS);
+          let normalizedRouteOptions = [...nextRouteOptions].sort(compareRouteOptionsByShortest);
+
+          // If the user didn't explicitly request a bridge route, drop routes that detour
+          // via a specific bridge (Steel or Buntun) when shorter alternatives that avoid
+          // that bridge already exist. This prevents "joyride" routes — e.g. going south
+          // to Buntun Bridge then north to Claveria, or west via Solana then north to Laoag —
+          // from appearing when a more direct road is available.
+          if (!bridgeRequested) {
+            const routeDistMeters = (r: RouteOption) =>
+              Number(
+                r.directionsResult?.routes?.[r.resultRouteIndex]?.legs?.[0]?.distance?.value ??
+                  Number.POSITIVE_INFINITY
+              );
+
+            const dropIfShorterAlternativeExists = (
+              usesBridge: (r: RouteOption) => boolean
+            ) => {
+              const shortestWithout = normalizedRouteOptions
+                .filter((r) => !usesBridge(r))
+                .reduce((best, r) => Math.min(best, routeDistMeters(r)), Number.POSITIVE_INFINITY);
+
+              if (Number.isFinite(shortestWithout)) {
+                normalizedRouteOptions = normalizedRouteOptions.filter((r) => {
+                  if (!usesBridge(r)) return true;
+                  return routeDistMeters(r) <= shortestWithout;
+                });
+              }
+            };
+
+            dropIfShorterAlternativeExists((r) => r.usesSteelBridge);
+            dropIfShorterAlternativeExists((r) => r.usesSecondBridge);
           }
+
+          // Drop alternatives that are worse than the best route by both distance AND
+          // duration. Using AND (not OR) catches "joyride" routes that backtrack to a
+          // bridge and return — they cover similar distance but take much longer.
+          // e.g. going south to Buntun Bridge then north to Claveria looks close in km
+          // but is 15-20% slower, so it fails the duration check and gets dropped.
+          if (normalizedRouteOptions.length > 1) {
+            const bestLeg =
+              normalizedRouteOptions[0].directionsResult?.routes?.[
+                normalizedRouteOptions[0].resultRouteIndex
+              ]?.legs?.[0];
+            const bestDistMeters = Number(
+              bestLeg?.distance?.value ?? Number.POSITIVE_INFINITY
+            );
+            const bestDurSeconds = Number(
+              bestLeg?.duration?.value ?? Number.POSITIVE_INFINITY
+            );
+
+            if (Number.isFinite(bestDistMeters) && Number.isFinite(bestDurSeconds)) {
+              normalizedRouteOptions = normalizedRouteOptions.filter((r, i) => {
+                if (i === 0) return true;
+                const leg =
+                  r.directionsResult?.routes?.[r.resultRouteIndex]?.legs?.[0];
+                const dist = Number(leg?.distance?.value ?? Number.POSITIVE_INFINITY);
+                const dur = Number(leg?.duration?.value ?? Number.POSITIVE_INFINITY);
+                // Both distance AND duration must be within the threshold.
+                // A route that backtracks (similar distance, much longer time) fails
+                // the duration check and is excluded.
+                return (
+                  dist <= bestDistMeters * MAX_ALTERNATIVE_ROUTE_RATIO &&
+                  dur <= bestDurSeconds * MAX_ALTERNATIVE_ROUTE_RATIO
+                );
+              });
+            }
+          }
+
+          normalizedRouteOptions = normalizedRouteOptions.slice(0, MAX_ROUTE_OPTIONS);
 
           const relabeledRouteOptions = normalizedRouteOptions.map((option, index) => ({
             ...option,
