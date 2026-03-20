@@ -1,7 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { importLibrary, setOptions } from '@googlemaps/js-api-loader';
 import { motion } from 'motion/react';
-import { MapPin } from 'lucide-react';
+import { LocateFixed, MapPin } from 'lucide-react';
+import {
+  formatLocationAccuracy,
+  GeolocationLookupError,
+  getReliableCurrentPosition,
+  MAX_LIVE_TRACKING_ACCURACY_METERS,
+  parseCoordinateInput,
+} from '../location';
 
 const DEFAULT_CENTER = { lat: 17.6132, lng: 121.7270 }; // Tuguegarao City
 const DEFAULT_ZOOM = 12;
@@ -209,6 +216,9 @@ export function DashboardMap({ origin, destination, liveTrackingEnabled = false 
   const directionsRendererRef = useRef<any>(null);
   const liveMarkersRef = useRef<Map<string, any>>(new Map());
   const livePolylinesRef = useRef<Map<string, any[]>>(new Map());
+  const originPreviewMarkerRef = useRef<any>(null);
+  const currentLocationMarkerRef = useRef<any>(null);
+  const currentLocationAccuracyCircleRef = useRef<any>(null);
 
   const [isMapActivated, setIsMapActivated] = useState(false);
   const [mapReady, setMapReady] = useState(false);
@@ -223,6 +233,8 @@ export function DashboardMap({ origin, destination, liveTrackingEnabled = false 
   const [bridgeOpenNow, setBridgeOpenNow] = useState(true);
   const [streamConnected, setStreamConnected] = useState(false);
   const [trackingStatusMessage, setTrackingStatusMessage] = useState<string | null>(null);
+  const [currentLocationMessage, setCurrentLocationMessage] = useState<string | null>(null);
+  const [isLocatingCurrentLocation, setIsLocatingCurrentLocation] = useState(false);
   const [activeTrafficAlerts, setActiveTrafficAlerts] = useState<LiveTrackingAlert[]>([]);
   const [trafficLevelCounts, setTrafficLevelCounts] = useState({ low: 0, moderate: 0, heavy: 0 });
 
@@ -264,6 +276,148 @@ export function DashboardMap({ origin, destination, liveTrackingEnabled = false 
 
   const normalizedOrigin = origin.trim();
   const normalizedDestination = destination.trim();
+
+  const clearOriginPreviewMarker = () => {
+    if (originPreviewMarkerRef.current) {
+      originPreviewMarkerRef.current.setMap(null);
+      originPreviewMarkerRef.current = null;
+    }
+  };
+
+  const clearCurrentLocationOverlay = () => {
+    if (currentLocationMarkerRef.current) {
+      currentLocationMarkerRef.current.setMap(null);
+      currentLocationMarkerRef.current = null;
+    }
+
+    if (currentLocationAccuracyCircleRef.current) {
+      currentLocationAccuracyCircleRef.current.setMap(null);
+      currentLocationAccuracyCircleRef.current = null;
+    }
+  };
+
+  const updateCurrentLocationOverlay = (
+    latitude: number,
+    longitude: number,
+    accuracyMeters?: number,
+    recenter = false
+  ) => {
+    const gmaps = (window as any).google?.maps;
+    if (!gmaps || !mapRef.current || !Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+      return;
+    }
+
+    const map = mapRef.current;
+    const position = { lat: latitude, lng: longitude };
+
+    if (currentLocationMarkerRef.current) {
+      currentLocationMarkerRef.current.setPosition(position);
+    } else {
+      currentLocationMarkerRef.current = new gmaps.Marker({
+        map,
+        position,
+        title: 'Your current location',
+        zIndex: 1305,
+        icon: {
+          path: gmaps.SymbolPath.CIRCLE,
+          scale: 7,
+          fillColor: '#2563eb',
+          fillOpacity: 0.95,
+          strokeColor: '#ffffff',
+          strokeWeight: 2,
+        },
+      });
+    }
+
+    const safeAccuracy = Number(accuracyMeters);
+    if (Number.isFinite(safeAccuracy) && safeAccuracy > 0) {
+      if (currentLocationAccuracyCircleRef.current) {
+        currentLocationAccuracyCircleRef.current.setCenter(position);
+        currentLocationAccuracyCircleRef.current.setRadius(safeAccuracy);
+      } else {
+        currentLocationAccuracyCircleRef.current = new gmaps.Circle({
+          map,
+          center: position,
+          radius: safeAccuracy,
+          strokeColor: '#3b82f6',
+          strokeOpacity: 0.35,
+          strokeWeight: 1,
+          fillColor: '#93c5fd',
+          fillOpacity: 0.16,
+          zIndex: 1280,
+        });
+      }
+    } else if (currentLocationAccuracyCircleRef.current) {
+      currentLocationAccuracyCircleRef.current.setMap(null);
+      currentLocationAccuracyCircleRef.current = null;
+    }
+
+    if (recenter) {
+      map.panTo(position);
+      const currentZoom = Number(map.getZoom() || DEFAULT_ZOOM);
+      map.setZoom(Math.max(currentZoom, 16));
+    }
+  };
+
+  const handleLocateCurrentLocation = async () => {
+    if (!isMapActivated || !mapReady || !mapRef.current) {
+      setCurrentLocationMessage('Map is still loading. Try again in a moment.');
+      return;
+    }
+
+    setIsLocatingCurrentLocation(true);
+    setCurrentLocationMessage('Finding your current location...');
+
+    try {
+      const { position, accuracyMeters, precise } = await getReliableCurrentPosition({
+        desiredAccuracyMeters: 120,
+        maxAcceptableAccuracyMeters: Math.max(MAX_LIVE_TRACKING_ACCURACY_METERS * 2, 600),
+        timeoutMs: 15000,
+        settleTimeMs: 3000,
+      });
+
+      updateCurrentLocationOverlay(
+        position.coords.latitude,
+        position.coords.longitude,
+        accuracyMeters,
+        true
+      );
+
+      const accuracyText = formatLocationAccuracy(accuracyMeters);
+      setCurrentLocationMessage(
+        precise
+          ? accuracyText
+            ? `Current location pinned (about ${accuracyText}).`
+            : 'Current location pinned.'
+          : accuracyText
+            ? `Approximate location pinned (about ${accuracyText}).`
+            : 'Approximate location pinned.'
+      );
+    } catch (error) {
+      if (error instanceof GeolocationLookupError) {
+        if (error.code === 'permission-denied') {
+          setCurrentLocationMessage('Location permission was denied. Enable location access and try again.');
+        } else if (error.code === 'unsupported') {
+          setCurrentLocationMessage('Device location is not supported in this browser.');
+        } else if (error.code === 'coarse-location') {
+          const accuracyText = formatLocationAccuracy(error.accuracyMeters);
+          setCurrentLocationMessage(
+            accuracyText
+              ? `Location is too broad right now (about ${accuracyText}). Move to a clearer signal and retry.`
+              : 'Location is too broad right now. Move to a clearer signal and retry.'
+          );
+        } else if (error.code === 'timeout') {
+          setCurrentLocationMessage('Location lookup timed out. Try again in a few seconds.');
+        } else {
+          setCurrentLocationMessage('Unable to read your current location right now.');
+        }
+      } else {
+        setCurrentLocationMessage('Unable to read your current location right now.');
+      }
+    } finally {
+      setIsLocatingCurrentLocation(false);
+    }
+  };
 
   useEffect(() => {
     if (!isMapActivated) {
@@ -337,6 +491,8 @@ export function DashboardMap({ origin, destination, liveTrackingEnabled = false 
       if (directionsRendererRef.current) {
         directionsRendererRef.current.setMap(null);
       }
+      clearOriginPreviewMarker();
+      clearCurrentLocationOverlay();
       mapRef.current = null;
       directionsServiceRef.current = null;
       directionsRendererRef.current = null;
@@ -714,6 +870,49 @@ export function DashboardMap({ origin, destination, liveTrackingEnabled = false 
   }, [isMapActivated, mapReady, routeOptions, selectedRouteId]);
 
   useEffect(() => {
+    if (!isMapActivated || !mapReady || !mapRef.current) {
+      clearOriginPreviewMarker();
+      return;
+    }
+
+    const gmaps = (window as any).google?.maps;
+    if (!gmaps) {
+      return;
+    }
+
+    const originCoordinates = parseCoordinateInput(normalizedOrigin);
+    if (!originCoordinates) {
+      clearOriginPreviewMarker();
+      return;
+    }
+
+    if (originPreviewMarkerRef.current) {
+      originPreviewMarkerRef.current.setPosition(originCoordinates);
+    } else {
+      originPreviewMarkerRef.current = new gmaps.Marker({
+        map: mapRef.current,
+        position: originCoordinates,
+        title: 'Origin coordinates',
+        zIndex: 1290,
+        icon: {
+          path: gmaps.SymbolPath.BACKWARD_CLOSED_ARROW,
+          scale: 5,
+          fillColor: '#0ea5e9',
+          fillOpacity: 0.95,
+          strokeColor: '#ffffff',
+          strokeWeight: 1.5,
+        },
+      });
+    }
+
+    if (!normalizedDestination && !routeSummary) {
+      mapRef.current.panTo(originCoordinates);
+      const currentZoom = Number(mapRef.current.getZoom() || DEFAULT_ZOOM);
+      mapRef.current.setZoom(Math.max(currentZoom, 15));
+    }
+  }, [isMapActivated, mapReady, normalizedOrigin, normalizedDestination, routeSummary]);
+
+  useEffect(() => {
     if (!isMapActivated || !mapReady || !apiBaseUrl || !mapRef.current) {
       return;
     }
@@ -1003,6 +1202,13 @@ export function DashboardMap({ origin, destination, liveTrackingEnabled = false 
         const speedMps = Number(coords.speed);
         const speedKph = Number.isFinite(speedMps) && speedMps > 0 ? speedMps * 3.6 : 0;
 
+        updateCurrentLocationOverlay(
+          coords.latitude,
+          coords.longitude,
+          Number(coords.accuracy),
+          false
+        );
+
         fetch(`${apiBaseUrl}/api/tracking/update`, {
           method: 'POST',
           headers: {
@@ -1179,6 +1385,12 @@ export function DashboardMap({ origin, destination, liveTrackingEnabled = false 
         </div>
       )}
 
+      {isMapActivated && currentLocationMessage && !configurationError && (
+        <div className="absolute top-16 left-1/2 -translate-x-1/2 z-20 bg-blue-50 border border-blue-200 text-blue-700 rounded-full px-4 py-2 text-xs font-medium">
+          {currentLocationMessage}
+        </div>
+      )}
+
       {isMapActivated && liveTrackingEnabled && !configurationError && (
         <div className="absolute top-20 right-4 z-20 max-w-[260px] rounded-lg border border-slate-200 bg-white/95 px-3 py-2 text-[11px] text-slate-700 shadow">
           <div className="font-semibold text-slate-800">Live Tracking</div>
@@ -1214,6 +1426,20 @@ export function DashboardMap({ origin, destination, liveTrackingEnabled = false 
         <>
           {isMapActivated && (
             <div className="absolute top-4 right-4 space-y-2 z-20">
+            <motion.button
+              whileHover={{ scale: 1.1 }}
+              whileTap={{ scale: 0.9 }}
+              onClick={() => {
+                void handleLocateCurrentLocation();
+              }}
+              disabled={isLocatingCurrentLocation}
+              className="w-10 h-10 bg-white rounded-lg shadow-md flex items-center justify-center hover:bg-slate-50 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+              aria-label="Locate current location"
+              title={isLocatingCurrentLocation ? 'Locating current location...' : 'Locate current location'}
+              type="button"
+            >
+              <LocateFixed className="w-4 h-4 text-blue-600" />
+            </motion.button>
             <motion.button
               whileHover={{ scale: 1.1 }}
               whileTap={{ scale: 0.9 }}
