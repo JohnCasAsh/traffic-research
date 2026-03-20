@@ -31,6 +31,15 @@ const TIMED_BRIDGE_KEYWORDS = [
 ];
 const SECOND_BRIDGE_KEYWORDS = ['buntun bridge', 'buntun brg'];
 const CAGAYAN_AREA_HINTS = ['caggay', 'tuguegarao', 'solana', 'cagayan'];
+const LOCAL_LOCATION_ALIASES: Record<string, string> = {
+  bunton: 'Buntun Bridge, Tuguegarao City, Cagayan, Philippines',
+  buntun: 'Buntun Bridge, Tuguegarao City, Cagayan, Philippines',
+  'buntun bridge': 'Buntun Bridge, Tuguegarao City, Cagayan, Philippines',
+  'buntun brg': 'Buntun Bridge, Tuguegarao City, Cagayan, Philippines',
+  solana: 'Solana, Cagayan, Philippines',
+  tuguegarao: 'Tuguegarao City, Cagayan, Philippines',
+  'tuguegarao city': 'Tuguegarao City, Cagayan, Philippines',
+};
 
 type WaypointCandidate = string | { lat: number; lng: number };
 type ForcedBridgeWaypoint = {
@@ -67,6 +76,40 @@ function includesAnyKeyword(text: string, keywords: string[]) {
 function isLikelyCagayanTrip(origin: string, destination: string) {
   const combined = `${normalizeText(origin)} ${normalizeText(destination)}`;
   return includesAnyKeyword(combined, CAGAYAN_AREA_HINTS);
+}
+
+function compactAddressText(value: string) {
+  return normalizeText(value)
+    .replace(/[.,]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function applyLocalAddressHint(routeInput: WaypointCandidate, isCagayanTrip: boolean): WaypointCandidate {
+  if (typeof routeInput !== 'string') {
+    return routeInput;
+  }
+
+  const trimmedInput = routeInput.trim();
+  if (!trimmedInput) {
+    return routeInput;
+  }
+
+  const compactInput = compactAddressText(trimmedInput);
+  const aliasedValue = LOCAL_LOCATION_ALIASES[compactInput];
+  if (aliasedValue) {
+    return aliasedValue;
+  }
+
+  if (!isCagayanTrip) {
+    return trimmedInput;
+  }
+
+  if (trimmedInput.includes(',') || compactInput.includes('philippines') || compactInput.includes('cagayan')) {
+    return trimmedInput;
+  }
+
+  return `${trimmedInput}, Cagayan, Philippines`;
 }
 
 function getManilaHour() {
@@ -455,6 +498,8 @@ export function DashboardMap({ origin, destination, liveTrackingEnabled = false 
       }
 
       const fetchRouteOptions = async () => {
+        const isCagayanTrip = isLikelyCagayanTrip(normalizedOrigin, normalizedDestination);
+
         try {
           setIsRouting(true);
 
@@ -463,7 +508,9 @@ export function DashboardMap({ origin, destination, liveTrackingEnabled = false 
             throw new Error('Google Maps runtime not available.');
           }
 
-          const isCagayanTrip = isLikelyCagayanTrip(normalizedOrigin, normalizedDestination);
+          const routingOrigin = applyLocalAddressHint(resolvedOrigin, isCagayanTrip);
+          const routingDestination = applyLocalAddressHint(resolvedDestination, isCagayanTrip);
+
           const drivingOptions = gmaps.TrafficModel
             ? {
                 departureTime: new Date(),
@@ -472,18 +519,20 @@ export function DashboardMap({ origin, destination, liveTrackingEnabled = false 
             : { departureTime: new Date() };
 
           const baseRequest = {
-            origin: resolvedOrigin,
-            destination: resolvedDestination,
+            origin: routingOrigin,
+            destination: routingDestination,
             travelMode: gmaps.TravelMode.DRIVING,
             unitSystem: gmaps.UnitSystem.METRIC,
             drivingOptions,
+            region: 'ph',
           };
 
           const planningRequest = {
-            origin: resolvedOrigin,
-            destination: resolvedDestination,
+            origin: routingOrigin,
+            destination: routingDestination,
             travelMode: gmaps.TravelMode.DRIVING,
             unitSystem: gmaps.UnitSystem.METRIC,
+            region: 'ph',
           };
 
           const bridgeIsOpen = isBridgeOpenNow();
@@ -761,7 +810,10 @@ export function DashboardMap({ origin, destination, liveTrackingEnabled = false 
           setRouteOptions([]);
           setSelectedRouteId(null);
           setRouteNotice(null);
-          setRouteError('Unable to plot this route. Check the addresses and try again.');
+          const troubleshootingHint = isCagayanTrip
+            ? 'Try specific local names like "Buntun Bridge, Tuguegarao" and "Solana, Cagayan".'
+            : 'Try a more specific address or coordinates like "17.6185, 121.6889".';
+          setRouteError(`Unable to plot this route. ${troubleshootingHint}`);
         } finally {
           if (!cancelled) {
             setIsRouting(false);
