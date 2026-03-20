@@ -637,10 +637,7 @@ export function DashboardMap({
             normalizeText(`${normalizedOrigin} ${normalizedDestination}`),
             TIMED_BRIDGE_KEYWORDS
           );
-          const steelBridgePreferenceRequested = includesAnyKeyword(
-            normalizeText(`${normalizedOrigin} ${normalizedDestination}`),
-            [...ALL_BRIDGE_KEYWORDS, 'solana']
-          );
+          const steelBridgePreferenceRequested = steelBridgeExplicitRequest;
           const shouldPrioritizeBridgeRoutes = isCagayanTrip || bridgeRequested;
           const routingOriginCandidates = buildRouteLocationCandidates(
             resolvedOrigin,
@@ -959,7 +956,7 @@ export function DashboardMap({
           let normalizedRouteOptions = [...nextRouteOptions]
             .sort(compareRouteOptionsByShortest)
             .slice(0, MAX_ROUTE_OPTIONS);
-          if (steelBridgePreferenceRequested) {
+          if (steelBridgePreferenceRequested && bridgeIsOpen) {
             const steelRoutes = normalizedRouteOptions
               .filter((route) => route.usesSteelBridge)
               .sort(compareRouteOptionsByShortest);
