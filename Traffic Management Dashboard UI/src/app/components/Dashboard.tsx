@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import { motion } from 'motion/react';
-import { MapPin, Navigation, Fuel, DollarSign, Car, Zap, TrendingUp, Settings, Info, X, AlertCircle } from 'lucide-react';
+import { MapPin, Navigation, Fuel, DollarSign, Car, Zap, TrendingUp, Settings, Info, X, AlertCircle, ArrowUpDown } from 'lucide-react';
 import { DashboardMap } from './DashboardMap';
 import { useLocationConsent } from '../LocationConsentContext';
 import { formatLocationAccuracy } from '../location';
@@ -56,6 +56,15 @@ export function Dashboard() {
     }
 
     applyTrackedLocationToOrigin(currentLocation);
+  };
+
+  const handleSwapLocations = () => {
+    setOriginLocationStatus(null);
+    setFormData((previous) => ({
+      ...previous,
+      origin: previous.destination,
+      destination: previous.origin,
+    }));
   };
 
   return (
@@ -118,6 +127,18 @@ export function Dashboard() {
                   <p className="text-xs mt-2 text-slate-600">{originLocationStatus}</p>
                 )}
               </motion.div>
+
+              <div className="flex justify-center -my-1">
+                <button
+                  type="button"
+                  onClick={handleSwapLocations}
+                  className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50"
+                  title="Swap origin and destination"
+                >
+                  <ArrowUpDown className="h-3.5 w-3.5" />
+                  Swap A/B
+                </button>
+              </div>
 
               {/* Destination */}
               <motion.div

@@ -784,6 +784,8 @@ export function DashboardMap({
           let primaryResult: any = null;
           let lastRouteLookupError: any = null;
           let activeRoutePair = requestPairs[0];
+          let bestPrimaryDistance = Number.POSITIVE_INFINITY;
+          let bestPrimaryDuration = Number.POSITIVE_INFINITY;
           for (const pair of requestPairs) {
             try {
               const candidateResult = await directionsServiceRef.current.route({
@@ -797,9 +799,24 @@ export function DashboardMap({
                 return;
               }
 
-              primaryResult = candidateResult;
-              activeRoutePair = pair;
-              break;
+              const candidateLeg = candidateResult?.routes?.[0]?.legs?.[0];
+              const candidateDistance = Number(
+                candidateLeg?.distance?.value ?? Number.POSITIVE_INFINITY
+              );
+              const candidateDuration = Number(
+                candidateLeg?.duration?.value ?? Number.POSITIVE_INFINITY
+              );
+
+              if (
+                !primaryResult ||
+                candidateDistance < bestPrimaryDistance ||
+                (candidateDistance === bestPrimaryDistance && candidateDuration < bestPrimaryDuration)
+              ) {
+                primaryResult = candidateResult;
+                activeRoutePair = pair;
+                bestPrimaryDistance = candidateDistance;
+                bestPrimaryDuration = candidateDuration;
+              }
             } catch (error) {
               lastRouteLookupError = error;
             }
@@ -964,14 +981,6 @@ export function DashboardMap({
               .filter((route) => !route.usesSteelBridge)
               .sort(compareRouteOptionsByShortest);
             normalizedRouteOptions = [...steelRoutes, ...otherRoutes].slice(0, MAX_ROUTE_OPTIONS);
-          } else if (!bridgeIsOpen) {
-            const nonSteelRoutes = normalizedRouteOptions
-              .filter((route) => !route.usesSteelBridge)
-              .sort(compareRouteOptionsByShortest);
-            const steelRoutes = normalizedRouteOptions
-              .filter((route) => route.usesSteelBridge)
-              .sort(compareRouteOptionsByShortest);
-            normalizedRouteOptions = [...nonSteelRoutes, ...steelRoutes].slice(0, MAX_ROUTE_OPTIONS);
           }
 
           const relabeledRouteOptions = normalizedRouteOptions.map((option, index) => ({
