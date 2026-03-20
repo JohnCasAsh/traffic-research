@@ -12,8 +12,8 @@ const DEFAULT_ZOOM = 12;
 const MAX_INITIAL_TRACKING_ACCURACY_METERS = 140;
 const MAX_STEADY_TRACKING_ACCURACY_METERS = 95;
 const MIN_MOVEMENT_FOR_WEAK_SIGNAL_METERS = 35;
-const MAX_ROUTE_OPTIONS = 3;
-const MAX_ALLOWED_FORCED_DETOUR_RATIO = 1.2;
+const MAX_ROUTE_OPTIONS = 5;
+const MAX_ALLOWED_FORCED_DETOUR_RATIO = 2.5;
 const MAX_ALLOWED_BRIDGE_DETOUR_RATIO = 1.7;
 const BRIDGE_MATCH_RADIUS_DEGREES = 0.0065;
 const STEEL_BRIDGE_COORD = { lat: 17.6409, lng: 121.7015 };
@@ -929,6 +929,9 @@ export function DashboardMap({
             { avoidTolls: true, label: 'Avoid tolls' },
             { avoidFerries: true, label: 'Avoid ferries' },
             { avoidHighways: true, avoidTolls: true, label: 'Avoid highways and tolls' },
+            { avoidHighways: true, avoidFerries: true, label: 'Avoid highways and ferries' },
+            { avoidTolls: true, avoidFerries: true, label: 'Avoid tolls and ferries' },
+            { avoidHighways: true, avoidTolls: true, avoidFerries: true, label: 'Backroads only' },
           ];
 
           for (const strategy of fallbackStrategies) {
