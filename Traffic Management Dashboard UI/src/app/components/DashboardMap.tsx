@@ -975,11 +975,11 @@ export function DashboardMap({
 
           let normalizedRouteOptions = [...nextRouteOptions].sort(compareRouteOptionsByShortest);
 
-          // If the user didn't explicitly request a bridge route, drop routes that detour
-          // via a specific bridge (Steel or Buntun) when shorter alternatives that avoid
-          // that bridge already exist. This prevents "joyride" routes — e.g. going south
-          // to Buntun Bridge then north to Claveria, or west via Solana then north to Laoag —
-          // from appearing when a more direct road is available.
+          // Drop bridge routes only when a genuinely road-only (no bridge) alternative is
+          // shorter. Bridge-vs-bridge comparisons are intentionally kept so the user always
+          // has a fallback: e.g. for Solana trips both the Steel Bridge (shortest) and the
+          // Buntun Bridge (backup) remain visible. Bridge routes are still removed when a
+          // direct road is available — preventing joyrides to Laoag/Claveria via Solana.
           if (!bridgeRequested) {
             const routeDistMeters = (r: RouteOption) =>
               Number(
@@ -987,23 +987,16 @@ export function DashboardMap({
                   Number.POSITIVE_INFINITY
               );
 
-            const dropIfShorterAlternativeExists = (
-              usesBridge: (r: RouteOption) => boolean
-            ) => {
-              const shortestWithout = normalizedRouteOptions
-                .filter((r) => !usesBridge(r))
-                .reduce((best, r) => Math.min(best, routeDistMeters(r)), Number.POSITIVE_INFINITY);
+            const shortestNoBridgeRoute = normalizedRouteOptions
+              .filter((r) => !r.usesSteelBridge && !r.usesSecondBridge)
+              .reduce((best, r) => Math.min(best, routeDistMeters(r)), Number.POSITIVE_INFINITY);
 
-              if (Number.isFinite(shortestWithout)) {
-                normalizedRouteOptions = normalizedRouteOptions.filter((r) => {
-                  if (!usesBridge(r)) return true;
-                  return routeDistMeters(r) <= shortestWithout;
-                });
-              }
-            };
-
-            dropIfShorterAlternativeExists((r) => r.usesSteelBridge);
-            dropIfShorterAlternativeExists((r) => r.usesSecondBridge);
+            if (Number.isFinite(shortestNoBridgeRoute)) {
+              normalizedRouteOptions = normalizedRouteOptions.filter((r) => {
+                if (!r.usesSteelBridge && !r.usesSecondBridge) return true;
+                return routeDistMeters(r) <= shortestNoBridgeRoute * MAX_ALLOWED_BRIDGE_DETOUR_RATIO;
+              });
+            }
           }
 
           // Drop routes that start travelling significantly in the WRONG direction.
