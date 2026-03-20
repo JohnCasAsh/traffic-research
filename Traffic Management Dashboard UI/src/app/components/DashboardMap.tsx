@@ -15,7 +15,6 @@ const MIN_MOVEMENT_FOR_WEAK_SIGNAL_METERS = 35;
 const MAX_ROUTE_OPTIONS = 3;
 const MAX_ALLOWED_FORCED_DETOUR_RATIO = 1.2;
 const MAX_ALLOWED_BRIDGE_DETOUR_RATIO = 1.7;
-const MAX_ALTERNATIVE_ROUTE_RATIO = 1.10; // alternatives must be within 10% of best in both distance AND duration
 const BRIDGE_OPEN_HOUR = 6; // 6:00 AM
 const BRIDGE_CLOSE_HOUR = 18; // 6:00 PM
 const BRIDGE_MATCH_RADIUS_DEGREES = 0.0065;
@@ -302,6 +301,45 @@ function routeUsesTimedBridge(route: any) {
 
 function routeUsesSecondBridge(route: any) {
   return routeContainsKeyword(route, SECOND_BRIDGE_KEYWORDS) || routePassesNearCoordinate(route, BUNTUN_BRIDGE_COORD);
+}
+
+// Returns true when a route initially travels significantly in the OPPOSITE
+// direction from the destination — the hallmark of a "joyride" route.
+// e.g. origin=Solana (lat 17.65), destination=Claveria (north, lat 18.3):
+//   a route that starts south toward Buntun Bridge (lat 17.618) backtracks
+//   0.032° (~3.6 km) before heading north — clearly wrong, drop it.
+function routeHasDirectionalBacktrack(
+  route: any,
+  backtrackThresholdDeg = 0.008
+): boolean {
+  const leg = route?.legs?.[0];
+  if (!leg) return false;
+
+  const startPoint = getPointLatLng(leg.start_location);
+  const endPoint = getPointLatLng(leg.end_location);
+  if (!startPoint || !endPoint) return false;
+
+  // Only apply to trips with a clear north-south component (> ~5.5 km lat diff)
+  const latDiff = endPoint.lat - startPoint.lat;
+  if (Math.abs(latDiff) < 0.05) return false;
+
+  const goingNorth = latDiff > 0;
+  const overviewPath: any[] = Array.isArray(route?.overview_path) ? route.overview_path : [];
+  const checkCount = Math.min(Math.ceil(overviewPath.length * 0.15) + 2, 20);
+  const initialPoints = overviewPath
+    .slice(0, checkCount)
+    .map((p: any) => getPointLatLng(p))
+    .filter(Boolean) as { lat: number; lng: number }[];
+
+  if (initialPoints.length < 3) return false;
+
+  if (goingNorth) {
+    const minLat = initialPoints.reduce((m, p) => Math.min(m, p.lat), startPoint.lat);
+    return startPoint.lat - minLat > backtrackThresholdDeg;
+  } else {
+    const maxLat = initialPoints.reduce((m, p) => Math.max(m, p.lat), startPoint.lat);
+    return maxLat - startPoint.lat > backtrackThresholdDeg;
+  }
 }
 
 function buildRouteFingerprint(route: any) {
@@ -984,37 +1022,20 @@ export function DashboardMap({
             dropIfShorterAlternativeExists((r) => r.usesSecondBridge);
           }
 
-          // Drop alternatives that are worse than the best route by both distance AND
-          // duration. Using AND (not OR) catches "joyride" routes that backtrack to a
-          // bridge and return — they cover similar distance but take much longer.
-          // e.g. going south to Buntun Bridge then north to Claveria looks close in km
-          // but is 15-20% slower, so it fails the duration check and gets dropped.
-          if (normalizedRouteOptions.length > 1) {
-            const bestLeg =
-              normalizedRouteOptions[0].directionsResult?.routes?.[
-                normalizedRouteOptions[0].resultRouteIndex
-              ]?.legs?.[0];
-            const bestDistMeters = Number(
-              bestLeg?.distance?.value ?? Number.POSITIVE_INFINITY
-            );
-            const bestDurSeconds = Number(
-              bestLeg?.duration?.value ?? Number.POSITIVE_INFINITY
-            );
-
-            if (Number.isFinite(bestDistMeters) && Number.isFinite(bestDurSeconds)) {
-              normalizedRouteOptions = normalizedRouteOptions.filter((r, i) => {
-                if (i === 0) return true;
-                const leg =
-                  r.directionsResult?.routes?.[r.resultRouteIndex]?.legs?.[0];
-                const dist = Number(leg?.distance?.value ?? Number.POSITIVE_INFINITY);
-                const dur = Number(leg?.duration?.value ?? Number.POSITIVE_INFINITY);
-                // Both distance AND duration must be within the threshold.
-                // A route that backtracks (similar distance, much longer time) fails
-                // the duration check and is excluded.
-                return (
-                  dist <= bestDistMeters * MAX_ALTERNATIVE_ROUTE_RATIO &&
-                  dur <= bestDurSeconds * MAX_ALTERNATIVE_ROUTE_RATIO
-                );
+          // Drop routes that start travelling significantly in the WRONG direction.
+          // e.g. Solana→Claveria: a route going south to Buntun Bridge first backtracks
+          // ~3 km before heading north — that's a joyride, not an efficient route.
+          // This replaces the old distance/duration ratio filter which was too aggressive
+          // and incorrectly dropped good direct alternatives (leaving only joyrides).
+          if (!bridgeRequested) {
+            const hasForwardRoute = normalizedRouteOptions.some((r) => {
+              const route = r.directionsResult?.routes?.[r.resultRouteIndex];
+              return !routeHasDirectionalBacktrack(route);
+            });
+            if (hasForwardRoute) {
+              normalizedRouteOptions = normalizedRouteOptions.filter((r) => {
+                const route = r.directionsResult?.routes?.[r.resultRouteIndex];
+                return !routeHasDirectionalBacktrack(route);
               });
             }
           }
