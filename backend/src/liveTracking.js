@@ -1007,6 +1007,17 @@ router.get('/analytics', (req, res) => {
 
 router.post('/update', (req, res) => {
   const nowMs = Date.now();
+  
+  // Check if user has consented to share location
+  const shareLocation = req.body?.shareLocation !== false; // Default is true for backwards compatibility
+  if (!shareLocation) {
+    // User has not consented to share location
+    return res.status(403).json({ 
+      error: 'Location sharing not consented',
+      message: 'User has not consented to share their location'
+    });
+  }
+
   const staleRemovedCount = pruneStaleVehicles(nowMs);
   if (staleRemovedCount > 0) {
     scheduleLocalStorePersist();

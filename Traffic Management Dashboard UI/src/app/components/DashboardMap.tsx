@@ -2,23 +2,25 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { importLibrary, setOptions } from '@googlemaps/js-api-loader';
 import { motion } from 'motion/react';
 import { MapPin } from 'lucide-react';
+import { useLocationConsent } from '../LocationConsentContext';
 import {
-  formatLocationAccuracy,
-  MAX_LIVE_TRACKING_ACCURACY_METERS,
   parseCoordinateInput,
 } from '../location';
 
 const DEFAULT_CENTER = { lat: 17.6132, lng: 121.7270 }; // Tuguegarao City
 const DEFAULT_ZOOM = 12;
-const LOCAL_TRAFFIC_STREAM_RADIUS_KM = 5;
-const TRAFFIC_STREAM_RECENTER_METERS = 800;
+const MAX_INITIAL_TRACKING_ACCURACY_METERS = 140;
+const MAX_STEADY_TRACKING_ACCURACY_METERS = 95;
+const MIN_MOVEMENT_FOR_WEAK_SIGNAL_METERS = 35;
 const MAX_ROUTE_OPTIONS = 3;
-const MAX_ALLOWED_FORCED_DETOUR_RATIO = 1.4;
+const MAX_ALLOWED_FORCED_DETOUR_RATIO = 1.2;
+const MAX_ALLOWED_BRIDGE_DETOUR_RATIO = 1.7;
 const BRIDGE_OPEN_HOUR = 6; // 6:00 AM
 const BRIDGE_CLOSE_HOUR = 18; // 6:00 PM
-const BRIDGE_MATCH_RADIUS_DEGREES = 0.004;
+const BRIDGE_MATCH_RADIUS_DEGREES = 0.0065;
 const STEEL_BRIDGE_COORD = { lat: 17.6409, lng: 121.7015 };
 const BUNTUN_BRIDGE_COORD = { lat: 17.6185, lng: 121.6889 };
+const SOLANA_TOWN_CENTER_COORD = { lat: 17.6528, lng: 121.6907 };
 const TIMED_BRIDGE_KEYWORDS = [
   'tuguegarao solana steel brg',
   'tuguegarao-solana steel bridge',
@@ -30,7 +32,47 @@ const TIMED_BRIDGE_KEYWORDS = [
   'steal bridge',
 ];
 const SECOND_BRIDGE_KEYWORDS = ['buntun bridge', 'buntun brg'];
-const CAGAYAN_AREA_HINTS = ['caggay', 'tuguegarao', 'solana', 'cagayan'];
+const ALL_BRIDGE_KEYWORDS = [...TIMED_BRIDGE_KEYWORDS, ...SECOND_BRIDGE_KEYWORDS];
+const CAGAYAN_AREA_HINTS = [
+  'caggay',
+  'tuguegarao',
+  'solana',
+  'cagayan',
+  'buntun',
+  'steel bridge',
+  // Cagayan province municipalities and common barangays
+  'piat', 'carig', 'aparri', 'abulug', 'alcala', 'allacapan', 'baggao',
+  'ballesteros', 'buguey', 'calayan', 'claveria', 'enrile', 'gattaran',
+  'gonzaga', 'iguig', 'lasam', 'lal-lo', 'pamplona', 'penablanca',
+  'peñablanca', 'santa ana', 'santa praxedes', 'santa teresita', 'tuao',
+  'amulung', 'calabayog', 'magapit', 'linao', 'nassiping', 'ugac',
+];
+const CAGAYAN_ROUTE_BOUNDS = {
+  minLat: 17.1,
+  maxLat: 18.8,
+  minLng: 121.3,
+  maxLng: 122.8,
+};
+const LOCAL_LOCATION_ALIASES: Record<string, string> = {
+  bunton: 'Buntun Bridge, Tuguegarao City, Cagayan, Philippines',
+  buntun: 'Buntun Bridge, Tuguegarao City, Cagayan, Philippines',
+  'buntun bridge': 'Buntun Bridge, Tuguegarao City, Cagayan, Philippines',
+  'buntun brg': 'Buntun Bridge, Tuguegarao City, Cagayan, Philippines',
+  solana: 'Solana, Cagayan, Philippines',
+  'solana bridge': 'Tuguegarao-Solana Steel Bridge, Tuguegarao, Cagayan, Philippines',
+  'steel bridge': 'Tuguegarao-Solana Steel Bridge, Tuguegarao, Cagayan, Philippines',
+  tuguegarao: 'Tuguegarao City, Cagayan, Philippines',
+  'tuguegarao city': 'Tuguegarao City, Cagayan, Philippines',
+};
+const LOCAL_LOCATION_COORDINATE_ALIASES: Record<string, { lat: number; lng: number }> = {
+  bunton: BUNTUN_BRIDGE_COORD,
+  buntun: BUNTUN_BRIDGE_COORD,
+  'buntun bridge': BUNTUN_BRIDGE_COORD,
+  'buntun brg': BUNTUN_BRIDGE_COORD,
+  solana: SOLANA_TOWN_CENTER_COORD,
+  'solana bridge': STEEL_BRIDGE_COORD,
+  'steel bridge': STEEL_BRIDGE_COORD,
+};
 
 type WaypointCandidate = string | { lat: number; lng: number };
 type ForcedBridgeWaypoint = {
@@ -64,9 +106,136 @@ function includesAnyKeyword(text: string, keywords: string[]) {
   return keywords.some((keyword) => text.includes(keyword));
 }
 
+function haversineDistanceMeters(
+  from: { lat: number; lng: number },
+  to: { lat: number; lng: number }
+) {
+  const earthRadiusMeters = 6371000;
+  const toRadians = (degrees: number) => (degrees * Math.PI) / 180;
+  const deltaLat = toRadians(to.lat - from.lat);
+  const deltaLng = toRadians(to.lng - from.lng);
+  const lat1 = toRadians(from.lat);
+  const lat2 = toRadians(to.lat);
+
+  const a =
+    Math.sin(deltaLat / 2) ** 2 +
+    Math.cos(lat1) * Math.cos(lat2) * Math.sin(deltaLng / 2) ** 2;
+
+  return 2 * earthRadiusMeters * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function isWithinCagayanRouteBounds(point: { lat: number; lng: number }) {
+  return (
+    point.lat >= CAGAYAN_ROUTE_BOUNDS.minLat &&
+    point.lat <= CAGAYAN_ROUTE_BOUNDS.maxLat &&
+    point.lng >= CAGAYAN_ROUTE_BOUNDS.minLng &&
+    point.lng <= CAGAYAN_ROUTE_BOUNDS.maxLng
+  );
+}
+
+function compactAddressText(value: string) {
+  return normalizeText(value)
+    .replace(/[.,]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function resolveRouteEndpoint(value: string) {
+  return parseCoordinateInput(value) || value;
+}
+
+function applyLocalAddressHint(routeInput: WaypointCandidate, useCagayanHint: boolean): WaypointCandidate {
+  if (typeof routeInput !== 'string') {
+    return routeInput;
+  }
+
+  const trimmedInput = routeInput.trim();
+  if (!trimmedInput) {
+    return routeInput;
+  }
+
+  const compactInput = compactAddressText(trimmedInput);
+  const aliasedValue = LOCAL_LOCATION_ALIASES[compactInput];
+  if (aliasedValue) {
+    return aliasedValue;
+  }
+
+  if (!useCagayanHint) {
+    return trimmedInput;
+  }
+
+  if (
+    trimmedInput.includes(',') ||
+    compactInput.includes('philippines') ||
+    compactInput.includes('cagayan')
+  ) {
+    return trimmedInput;
+  }
+
+  return `${trimmedInput}, Cagayan, Philippines`;
+}
+
+function buildRouteLocationCandidates(
+  routeInput: WaypointCandidate,
+  useCagayanHint: boolean
+): WaypointCandidate[] {
+  if (typeof routeInput !== 'string') {
+    return [routeInput];
+  }
+
+  const trimmedInput = routeInput.trim();
+  if (!trimmedInput) {
+    return [routeInput];
+  }
+
+  const compactInput = compactAddressText(trimmedInput);
+  const candidates: WaypointCandidate[] = [];
+
+  const coordinateAlias = LOCAL_LOCATION_COORDINATE_ALIASES[compactInput];
+  if (coordinateAlias) {
+    candidates.push(coordinateAlias);
+  }
+
+  const textAlias = LOCAL_LOCATION_ALIASES[compactInput];
+  if (textAlias) {
+    candidates.push(textAlias);
+  }
+
+  candidates.push(applyLocalAddressHint(trimmedInput, useCagayanHint));
+  candidates.push(trimmedInput);
+
+  const seenFingerprints = new Set<string>();
+  const deduplicatedCandidates: WaypointCandidate[] = [];
+  for (const candidate of candidates) {
+    const fingerprint =
+      typeof candidate === 'string'
+        ? `s:${candidate.trim().toLowerCase()}`
+        : `c:${candidate.lat.toFixed(6)},${candidate.lng.toFixed(6)}`;
+
+    if (seenFingerprints.has(fingerprint)) {
+      continue;
+    }
+
+    seenFingerprints.add(fingerprint);
+    deduplicatedCandidates.push(candidate);
+  }
+
+  return deduplicatedCandidates;
+}
+
 function isLikelyCagayanTrip(origin: string, destination: string) {
   const combined = `${normalizeText(origin)} ${normalizeText(destination)}`;
-  return includesAnyKeyword(combined, CAGAYAN_AREA_HINTS);
+  const originPoint = parseCoordinateInput(origin);
+  const destinationPoint = parseCoordinateInput(destination);
+
+  const hasTextHint =
+    includesAnyKeyword(combined, CAGAYAN_AREA_HINTS) ||
+    includesAnyKeyword(combined, ALL_BRIDGE_KEYWORDS);
+  const hasCoordinateHint =
+    (originPoint ? isWithinCagayanRouteBounds(originPoint) : false) ||
+    (destinationPoint ? isWithinCagayanRouteBounds(destinationPoint) : false);
+
+  return hasTextHint || hasCoordinateHint;
 }
 
 function getManilaHour() {
@@ -134,24 +303,43 @@ function routeUsesSecondBridge(route: any) {
   return routeContainsKeyword(route, SECOND_BRIDGE_KEYWORDS) || routePassesNearCoordinate(route, BUNTUN_BRIDGE_COORD);
 }
 
-function distanceBetweenPointsMeters(
-  start: { lat: number; lng: number },
-  end: { lat: number; lng: number }
-) {
-  const earthRadiusMeters = 6371000;
-  const toRadians = (value: number) => (value * Math.PI) / 180;
+// Returns true when a route initially travels significantly in the OPPOSITE
+// direction from the destination — the hallmark of a "joyride" route.
+// e.g. origin=Solana (lat 17.65), destination=Claveria (north, lat 18.3):
+//   a route that starts south toward Buntun Bridge (lat 17.618) backtracks
+//   0.032° (~3.6 km) before heading north — clearly wrong, drop it.
+function routeHasDirectionalBacktrack(
+  route: any,
+  backtrackThresholdDeg = 0.008
+): boolean {
+  const leg = route?.legs?.[0];
+  if (!leg) return false;
 
-  const deltaLat = toRadians(end.lat - start.lat);
-  const deltaLng = toRadians(end.lng - start.lng);
-  const startLatRadians = toRadians(start.lat);
-  const endLatRadians = toRadians(end.lat);
+  const startPoint = getPointLatLng(leg.start_location);
+  const endPoint = getPointLatLng(leg.end_location);
+  if (!startPoint || !endPoint) return false;
 
-  const a =
-    Math.sin(deltaLat / 2) ** 2 +
-    Math.cos(startLatRadians) * Math.cos(endLatRadians) * Math.sin(deltaLng / 2) ** 2;
+  // Only apply to trips with a clear north-south component (> ~5.5 km lat diff)
+  const latDiff = endPoint.lat - startPoint.lat;
+  if (Math.abs(latDiff) < 0.05) return false;
 
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return earthRadiusMeters * c;
+  const goingNorth = latDiff > 0;
+  const overviewPath: any[] = Array.isArray(route?.overview_path) ? route.overview_path : [];
+  const checkCount = Math.min(Math.ceil(overviewPath.length * 0.15) + 2, 20);
+  const initialPoints = overviewPath
+    .slice(0, checkCount)
+    .map((p: any) => getPointLatLng(p))
+    .filter(Boolean) as { lat: number; lng: number }[];
+
+  if (initialPoints.length < 3) return false;
+
+  if (goingNorth) {
+    const minLat = initialPoints.reduce((m, p) => Math.min(m, p.lat), startPoint.lat);
+    return startPoint.lat - minLat > backtrackThresholdDeg;
+  } else {
+    const maxLat = initialPoints.reduce((m, p) => Math.max(m, p.lat), startPoint.lat);
+    return maxLat - startPoint.lat > backtrackThresholdDeg;
+  }
 }
 
 function buildRouteFingerprint(route: any) {
@@ -185,6 +373,26 @@ type RouteOption = RouteSummary & {
   directionsResult: any;
   resultRouteIndex: number;
 };
+
+function compareRouteOptionsByShortest(a: RouteOption, b: RouteOption) {
+  const legA = a?.directionsResult?.routes?.[a.resultRouteIndex]?.legs?.[0];
+  const legB = b?.directionsResult?.routes?.[b.resultRouteIndex]?.legs?.[0];
+
+  const distanceA = Number(legA?.distance?.value ?? Number.POSITIVE_INFINITY);
+  const distanceB = Number(legB?.distance?.value ?? Number.POSITIVE_INFINITY);
+  const durationA = Number(legA?.duration?.value ?? Number.POSITIVE_INFINITY);
+  const durationB = Number(legB?.duration?.value ?? Number.POSITIVE_INFINITY);
+
+  if (distanceA !== distanceB) {
+    return distanceA - distanceB;
+  }
+
+  if (durationA !== durationB) {
+    return durationA - durationB;
+  }
+
+  return a.summaryText.localeCompare(b.summaryText);
+}
 
 type TrafficLevel = 'low' | 'moderate' | 'heavy';
 
@@ -229,13 +437,21 @@ type DashboardMapProps = {
   liveTrackingEnabled?: boolean;
 };
 
-export function DashboardMap({ origin, destination, liveTrackingEnabled = false }: DashboardMapProps) {
+export function DashboardMap({
+  origin,
+  destination,
+  liveTrackingEnabled = false,
+}: DashboardMapProps) {
+  const { currentLocation, setCurrentLocation } = useLocationConsent();
+  
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<any>(null);
   const directionsServiceRef = useRef<any>(null);
   const directionsRendererRef = useRef<any>(null);
   const liveMarkersRef = useRef<Map<string, any>>(new Map());
   const livePolylinesRef = useRef<Map<string, any[]>>(new Map());
+  const currentLocationMarkerRef = useRef<any>(null);
+  const lastAcceptedLocationRef = useRef<{ lat: number; lng: number; accuracy: number } | null>(null);
 
   const [isMapActivated, setIsMapActivated] = useState(false);
   const [mapReady, setMapReady] = useState(false);
@@ -252,8 +468,6 @@ export function DashboardMap({ origin, destination, liveTrackingEnabled = false 
   const [trackingStatusMessage, setTrackingStatusMessage] = useState<string | null>(null);
   const [activeTrafficAlerts, setActiveTrafficAlerts] = useState<LiveTrackingAlert[]>([]);
   const [trafficLevelCounts, setTrafficLevelCounts] = useState({ low: 0, moderate: 0, heavy: 0 });
-  const [localTrackingPosition, setLocalTrackingPosition] = useState<{ lat: number; lng: number } | null>(null);
-  const [trafficStreamAnchor, setTrafficStreamAnchor] = useState<{ lat: number; lng: number } | null>(null);
 
   const mapsApiKey = useMemo(() => {
     return (
@@ -293,58 +507,52 @@ export function DashboardMap({ origin, destination, liveTrackingEnabled = false 
 
   const normalizedOrigin = origin.trim();
   const normalizedDestination = destination.trim();
-  const resolvedOrigin = useMemo(
-    () => parseCoordinateInput(normalizedOrigin) || normalizedOrigin,
-    [normalizedOrigin]
-  );
-  const resolvedDestination = useMemo(
-    () => parseCoordinateInput(normalizedDestination) || normalizedDestination,
-    [normalizedDestination]
-  );
-  const originCoordinate = useMemo(() => parseCoordinateInput(normalizedOrigin), [normalizedOrigin]);
-  const activeRouteOption = useMemo(
-    () => routeOptions.find((option) => option.routeId === selectedRouteId) || routeOptions[0] || null,
-    [routeOptions, selectedRouteId]
-  );
-  const routeStartCoordinate = useMemo(() => {
-    const startLocation = activeRouteOption?.directionsResult?.routes?.[activeRouteOption.resultRouteIndex]?.legs?.[0]?.start_location;
-    return getPointLatLng(startLocation);
-  }, [activeRouteOption]);
-  const trafficFocusCoordinate = localTrackingPosition || originCoordinate || routeStartCoordinate;
 
-  useEffect(() => {
-    if (!trafficFocusCoordinate) {
-      setTrafficStreamAnchor(null);
+  const clearCurrentLocationOverlay = () => {
+    if (currentLocationMarkerRef.current) {
+      currentLocationMarkerRef.current.setMap(null);
+      currentLocationMarkerRef.current = null;
+    }
+  };
+
+  const updateCurrentLocationOverlay = (
+    latitude: number,
+    longitude: number,
+    recenter = false
+  ) => {
+    const gmaps = (window as any).google?.maps;
+    if (!gmaps || !mapRef.current || !Number.isFinite(latitude) || !Number.isFinite(longitude)) {
       return;
     }
 
-    setTrafficStreamAnchor((currentAnchor) => {
-      if (!currentAnchor) {
-        return trafficFocusCoordinate;
-      }
+    const map = mapRef.current;
+    const position = { lat: latitude, lng: longitude };
 
-      const movedMeters = distanceBetweenPointsMeters(currentAnchor, trafficFocusCoordinate);
-      if (movedMeters < TRAFFIC_STREAM_RECENTER_METERS) {
-        return currentAnchor;
-      }
-
-      return trafficFocusCoordinate;
-    });
-  }, [trafficFocusCoordinate]);
-
-  const trafficStreamUrl = useMemo(() => {
-    if (!apiBaseUrl || !trafficStreamAnchor) {
-      return null;
+    if (currentLocationMarkerRef.current) {
+      currentLocationMarkerRef.current.setPosition(position);
+    } else {
+      currentLocationMarkerRef.current = new gmaps.Marker({
+        map,
+        position,
+        title: 'Your current location',
+        zIndex: 1305,
+        icon: {
+          path: gmaps.SymbolPath.CIRCLE,
+          scale: 7,
+          fillColor: '#2563eb',
+          fillOpacity: 0.95,
+          strokeColor: '#ffffff',
+          strokeWeight: 2,
+        },
+      });
     }
 
-    const query = new URLSearchParams({
-      lat: trafficStreamAnchor.lat.toFixed(6),
-      lng: trafficStreamAnchor.lng.toFixed(6),
-      radiusKm: String(LOCAL_TRAFFIC_STREAM_RADIUS_KM),
-    });
-
-    return `${apiBaseUrl}/api/tracking/stream?${query.toString()}`;
-  }, [apiBaseUrl, trafficStreamAnchor]);
+    if (recenter) {
+      map.panTo(position);
+      const currentZoom = Number(map.getZoom() || DEFAULT_ZOOM);
+      map.setZoom(Math.max(currentZoom, 16));
+    }
+  };
 
   useEffect(() => {
     if (!isMapActivated) {
@@ -418,6 +626,7 @@ export function DashboardMap({ origin, destination, liveTrackingEnabled = false 
       if (directionsRendererRef.current) {
         directionsRendererRef.current.setMap(null);
       }
+      clearCurrentLocationOverlay();
       mapRef.current = null;
       directionsServiceRef.current = null;
       directionsRendererRef.current = null;
@@ -463,7 +672,26 @@ export function DashboardMap({ origin, destination, liveTrackingEnabled = false 
             throw new Error('Google Maps runtime not available.');
           }
 
+          const resolvedOrigin = resolveRouteEndpoint(normalizedOrigin);
+          const resolvedDestination = resolveRouteEndpoint(normalizedDestination);
           const isCagayanTrip = isLikelyCagayanTrip(normalizedOrigin, normalizedDestination);
+          const bridgeRequested = includesAnyKeyword(
+            normalizeText(`${normalizedOrigin} ${normalizedDestination}`),
+            ALL_BRIDGE_KEYWORDS
+          );
+          const steelBridgeExplicitRequest = includesAnyKeyword(
+            normalizeText(`${normalizedOrigin} ${normalizedDestination}`),
+            TIMED_BRIDGE_KEYWORDS
+          );
+          const shouldPrioritizeBridgeRoutes = isCagayanTrip || bridgeRequested;
+          const routingOriginCandidates = buildRouteLocationCandidates(
+            resolvedOrigin,
+            shouldPrioritizeBridgeRoutes
+          );
+          const routingDestinationCandidates = buildRouteLocationCandidates(
+            resolvedDestination,
+            shouldPrioritizeBridgeRoutes
+          );
           const drivingOptions = gmaps.TrafficModel
             ? {
                 departureTime: new Date(),
@@ -471,20 +699,30 @@ export function DashboardMap({ origin, destination, liveTrackingEnabled = false 
               }
             : { departureTime: new Date() };
 
-          const baseRequest = {
-            origin: resolvedOrigin,
-            destination: resolvedDestination,
+          const requestDefaults = {
             travelMode: gmaps.TravelMode.DRIVING,
             unitSystem: gmaps.UnitSystem.METRIC,
             drivingOptions,
+            region: 'ph',
           };
 
-          const planningRequest = {
-            origin: resolvedOrigin,
+          const planningRequestDefaults = {
             destination: resolvedDestination,
             travelMode: gmaps.TravelMode.DRIVING,
             unitSystem: gmaps.UnitSystem.METRIC,
+            region: 'ph',
           };
+
+          const requestPairs: Array<{ origin: WaypointCandidate; destination: WaypointCandidate }> = [];
+          for (const originCandidate of routingOriginCandidates.slice(0, 3)) {
+            for (const destinationCandidate of routingDestinationCandidates.slice(0, 3)) {
+              requestPairs.push({ origin: originCandidate, destination: destinationCandidate });
+            }
+          }
+
+          if (requestPairs.length === 0) {
+            throw new Error('No valid route candidates available for this trip.');
+          }
 
           const bridgeIsOpen = isBridgeOpenNow();
           setBridgeOpenNow(bridgeIsOpen);
@@ -503,10 +741,6 @@ export function DashboardMap({ origin, destination, liveTrackingEnabled = false 
             fallbackLabel: string,
             expectedBridge?: 'steel' | 'buntun'
           ) => {
-            if (nextRouteOptions.length >= MAX_ROUTE_OPTIONS) {
-              return false;
-            }
-
             const route = result?.routes?.[routeIndex];
             if (!route) {
               return false;
@@ -514,14 +748,6 @@ export function DashboardMap({ origin, destination, liveTrackingEnabled = false 
 
             const usesSteelBridge = routeUsesTimedBridge(route);
             const usesSecondBridge = routeUsesSecondBridge(route);
-
-            if (expectedBridge === 'steel' && !usesSteelBridge) {
-              return false;
-            }
-
-            if (expectedBridge === 'buntun' && !usesSecondBridge) {
-              return false;
-            }
 
             const fingerprint = buildRouteFingerprint(route);
             if (seenRouteFingerprints.has(fingerprint)) {
@@ -569,7 +795,8 @@ export function DashboardMap({ origin, destination, liveTrackingEnabled = false 
           const isReasonableAlternative = (
             route: any,
             baselineDistanceValue: number | null,
-            baselineDurationValue: number | null
+            baselineDurationValue: number | null,
+            ratio = MAX_ALLOWED_FORCED_DETOUR_RATIO
           ) => {
             if (baselineDistanceValue == null || baselineDurationValue == null) {
               return true;
@@ -583,19 +810,67 @@ export function DashboardMap({ origin, destination, liveTrackingEnabled = false 
             }
 
             return (
-              distanceValue <= baselineDistanceValue * MAX_ALLOWED_FORCED_DETOUR_RATIO &&
-              durationValue <= baselineDurationValue * MAX_ALLOWED_FORCED_DETOUR_RATIO
+              distanceValue <= baselineDistanceValue * ratio &&
+              durationValue <= baselineDurationValue * ratio
             );
           };
 
-          const primaryResult = await directionsServiceRef.current.route({
-            ...baseRequest,
-            provideRouteAlternatives: true,
-          });
+          let primaryResult: any = null;
+          let lastRouteLookupError: any = null;
+          let activeRoutePair = requestPairs[0];
+          let bestPrimaryDistance = Number.POSITIVE_INFINITY;
+          let bestPrimaryDuration = Number.POSITIVE_INFINITY;
+          for (const pair of requestPairs) {
+            try {
+              const candidateResult = await directionsServiceRef.current.route({
+                ...requestDefaults,
+                origin: pair.origin,
+                destination: pair.destination,
+                provideRouteAlternatives: true,
+              });
 
-          if (cancelled) {
-            return;
+              if (cancelled) {
+                return;
+              }
+
+              const candidateLeg = candidateResult?.routes?.[0]?.legs?.[0];
+              const candidateDistance = Number(
+                candidateLeg?.distance?.value ?? Number.POSITIVE_INFINITY
+              );
+              const candidateDuration = Number(
+                candidateLeg?.duration?.value ?? Number.POSITIVE_INFINITY
+              );
+
+              if (
+                !primaryResult ||
+                candidateDistance < bestPrimaryDistance ||
+                (candidateDistance === bestPrimaryDistance && candidateDuration < bestPrimaryDuration)
+              ) {
+                primaryResult = candidateResult;
+                activeRoutePair = pair;
+                bestPrimaryDistance = candidateDistance;
+                bestPrimaryDuration = candidateDuration;
+              }
+            } catch (error) {
+              lastRouteLookupError = error;
+            }
           }
+
+          if (!primaryResult) {
+            throw lastRouteLookupError || new Error('Unable to resolve a route from local candidates.');
+          }
+
+          const baseRequest = {
+            ...requestDefaults,
+            origin: activeRoutePair.origin,
+            destination: activeRoutePair.destination,
+          };
+
+          const planningRequest = {
+            ...planningRequestDefaults,
+            origin: activeRoutePair.origin,
+            destination: activeRoutePair.destination,
+          };
 
           const baselineLeg = primaryResult?.routes?.[0]?.legs?.[0];
           const baselineDistanceValue = Number(
@@ -611,7 +886,8 @@ export function DashboardMap({ origin, destination, liveTrackingEnabled = false 
             ? baselineDurationValue
             : null;
 
-          for (let routeIndex = 0; routeIndex < MAX_ROUTE_OPTIONS; routeIndex += 1) {
+          const primaryRouteCount = Number(primaryResult?.routes?.length || 0);
+          for (let routeIndex = 0; routeIndex < primaryRouteCount; routeIndex += 1) {
             if (!primaryResult?.routes?.[routeIndex]) {
               break;
             }
@@ -619,17 +895,9 @@ export function DashboardMap({ origin, destination, liveTrackingEnabled = false 
             addRouteOption(primaryResult, routeIndex, `Alternative ${routeIndex + 1}`);
           }
 
-          if (isCagayanTrip) {
+          if (bridgeRequested) {
             for (const bridgeRoute of FORCED_BRIDGE_WAYPOINTS) {
-              if (nextRouteOptions.length >= MAX_ROUTE_OPTIONS) {
-                break;
-              }
-
               for (const waypointCandidate of bridgeRoute.waypointCandidates) {
-                if (nextRouteOptions.length >= MAX_ROUTE_OPTIONS) {
-                  break;
-                }
-
                 try {
                   const forcedBridgeResult = await directionsServiceRef.current.route({
                     ...planningRequest,
@@ -646,18 +914,14 @@ export function DashboardMap({ origin, destination, liveTrackingEnabled = false 
                     !isReasonableAlternative(
                       forcedRoute,
                       safeBaselineDistance,
-                      safeBaselineDuration
+                      safeBaselineDuration,
+                      MAX_ALLOWED_BRIDGE_DETOUR_RATIO
                     )
                   ) {
                     continue;
                   }
 
-                  const wasAdded = addRouteOption(
-                    forcedBridgeResult,
-                    0,
-                    bridgeRoute.label,
-                    bridgeRoute.expectedBridge
-                  );
+                  const wasAdded = addRouteOption(forcedBridgeResult, 0, bridgeRoute.label);
 
                   if (wasAdded) {
                     break;
@@ -677,10 +941,6 @@ export function DashboardMap({ origin, destination, liveTrackingEnabled = false 
           ];
 
           for (const strategy of fallbackStrategies) {
-            if (nextRouteOptions.length >= MAX_ROUTE_OPTIONS) {
-              break;
-            }
-
             try {
               const fallbackResult = await directionsServiceRef.current.route({
                 ...baseRequest,
@@ -721,7 +981,7 @@ export function DashboardMap({ origin, destination, liveTrackingEnabled = false 
 
           const routeNotes: string[] = [];
 
-          if (isCagayanTrip && steelRouteIncludedCount === 0) {
+          if (steelBridgeExplicitRequest && steelRouteIncludedCount === 0) {
             routeNotes.push(
               'Steel Bridge route could not be generated from current Google road data for this request. Try a nearby origin/destination pin for that bridge.'
             );
@@ -729,16 +989,58 @@ export function DashboardMap({ origin, destination, liveTrackingEnabled = false 
 
           setRouteNotice(routeNotes.length > 0 ? routeNotes.join(' ') : null);
 
-          let normalizedRouteOptions = nextRouteOptions.slice(0, MAX_ROUTE_OPTIONS);
-          if (!bridgeIsOpen) {
-            normalizedRouteOptions = [...normalizedRouteOptions].sort((a, b) => {
-              if (a.usesSteelBridge === b.usesSteelBridge) {
-                return 0;
-              }
+          let normalizedRouteOptions = [...nextRouteOptions].sort(compareRouteOptionsByShortest);
 
-              return a.usesSteelBridge ? 1 : -1;
-            });
+          // If the user didn't explicitly request a bridge route, drop routes that detour
+          // via a specific bridge (Steel or Buntun) when shorter alternatives that avoid
+          // that bridge already exist. This prevents "joyride" routes — e.g. going south
+          // to Buntun Bridge then north to Claveria, or west via Solana then north to Laoag —
+          // from appearing when a more direct road is available.
+          if (!bridgeRequested) {
+            const routeDistMeters = (r: RouteOption) =>
+              Number(
+                r.directionsResult?.routes?.[r.resultRouteIndex]?.legs?.[0]?.distance?.value ??
+                  Number.POSITIVE_INFINITY
+              );
+
+            const dropIfShorterAlternativeExists = (
+              usesBridge: (r: RouteOption) => boolean
+            ) => {
+              const shortestWithout = normalizedRouteOptions
+                .filter((r) => !usesBridge(r))
+                .reduce((best, r) => Math.min(best, routeDistMeters(r)), Number.POSITIVE_INFINITY);
+
+              if (Number.isFinite(shortestWithout)) {
+                normalizedRouteOptions = normalizedRouteOptions.filter((r) => {
+                  if (!usesBridge(r)) return true;
+                  return routeDistMeters(r) <= shortestWithout;
+                });
+              }
+            };
+
+            dropIfShorterAlternativeExists((r) => r.usesSteelBridge);
+            dropIfShorterAlternativeExists((r) => r.usesSecondBridge);
           }
+
+          // Drop routes that start travelling significantly in the WRONG direction.
+          // e.g. Solana→Claveria: a route going south to Buntun Bridge first backtracks
+          // ~3 km before heading north — that's a joyride, not an efficient route.
+          // This replaces the old distance/duration ratio filter which was too aggressive
+          // and incorrectly dropped good direct alternatives (leaving only joyrides).
+          if (!bridgeRequested) {
+            const hasForwardRoute = normalizedRouteOptions.some((r) => {
+              const route = r.directionsResult?.routes?.[r.resultRouteIndex];
+              return !routeHasDirectionalBacktrack(route);
+            });
+            if (hasForwardRoute) {
+              normalizedRouteOptions = normalizedRouteOptions.filter((r) => {
+                const route = r.directionsResult?.routes?.[r.resultRouteIndex];
+                return !routeHasDirectionalBacktrack(route);
+              });
+            }
+          }
+
+          normalizedRouteOptions = normalizedRouteOptions.slice(0, MAX_ROUTE_OPTIONS);
 
           const relabeledRouteOptions = normalizedRouteOptions.map((option, index) => ({
             ...option,
@@ -872,6 +1174,10 @@ export function DashboardMap({ origin, destination, liveTrackingEnabled = false 
       const nextCounts = { low: 0, moderate: 0, heavy: 0 };
 
       for (const vehicle of vehicles) {
+        if (vehicle.vehicleId === localVehicleId) {
+          continue;
+        }
+
         if (!Number.isFinite(vehicle.lat) || !Number.isFinite(vehicle.lng)) {
           continue;
         }
@@ -989,27 +1295,8 @@ export function DashboardMap({ origin, destination, liveTrackingEnabled = false 
       setTrafficLevelCounts(nextCounts);
     };
 
-    if (!trafficStreamUrl) {
-      for (const marker of liveMarkersRef.current.values()) {
-        marker.setMap(null);
-      }
-      liveMarkersRef.current.clear();
-
-      for (const polylineList of livePolylinesRef.current.values()) {
-        for (const polyline of polylineList) {
-          polyline.setMap(null);
-        }
-      }
-      livePolylinesRef.current.clear();
-
-      setTrafficLevelCounts({ low: 0, moderate: 0, heavy: 0 });
-      setActiveTrafficAlerts([]);
-      setStreamConnected(false);
-      return;
-    }
-
     let disposed = false;
-    const stream = new EventSource(trafficStreamUrl);
+    const stream = new EventSource(`${apiBaseUrl}/api/tracking/stream`);
 
     const onSnapshot = (event: MessageEvent) => {
       if (disposed) {
@@ -1018,8 +1305,13 @@ export function DashboardMap({ origin, destination, liveTrackingEnabled = false 
 
       try {
         const payload = JSON.parse(event.data) as LiveTrackingSnapshot;
-        syncVehicleMarkers(payload.vehicles || []);
-        setActiveTrafficAlerts((payload.alerts || []).slice(0, 3));
+        
+        // PRIVACY: Only show vehicles on map if user has explicitly enabled Live Tracking
+        if (liveTrackingEnabled) {
+          syncVehicleMarkers(payload.vehicles || []);
+          setActiveTrafficAlerts((payload.alerts || []).slice(0, 3));
+        }
+        
         setStreamConnected(true);
       } catch (error) {
         console.error('Live tracking snapshot parse error:', error);
@@ -1028,6 +1320,11 @@ export function DashboardMap({ origin, destination, liveTrackingEnabled = false 
 
     const onCongestionAlert = (event: MessageEvent) => {
       if (disposed) {
+        return;
+      }
+
+      // PRIVACY: Only show alerts if user has explicitly enabled Live Tracking
+      if (!liveTrackingEnabled) {
         return;
       }
 
@@ -1077,52 +1374,90 @@ export function DashboardMap({ origin, destination, liveTrackingEnabled = false 
       setActiveTrafficAlerts([]);
       clearMarkers();
     };
-  }, [apiBaseUrl, isMapActivated, localVehicleId, mapReady, trafficStreamUrl]);
+  }, [apiBaseUrl, isMapActivated, localVehicleId, mapReady, liveTrackingEnabled]);
 
   useEffect(() => {
-    if (!liveTrackingEnabled) {
-      setTrackingStatusMessage(null);
-      return;
-    }
-
-    if (!apiBaseUrl) {
-      setTrackingStatusMessage('Live tracking unavailable: VITE_API_URL is not configured.');
+    if (!isMapActivated) {
       return;
     }
 
     if (typeof navigator === 'undefined' || !navigator.geolocation) {
-      setTrackingStatusMessage('Live tracking unavailable: browser geolocation is not supported.');
+      setTrackingStatusMessage('Browser geolocation is not supported on this device.');
       return;
     }
 
-    setTrackingStatusMessage('Live tracking enabled. Sharing location updates.');
+    setTrackingStatusMessage(
+      liveTrackingEnabled
+        ? 'Live tracking enabled. Sharing location updates.'
+        : 'Live location active (private mode).'
+    );
 
     const watchId = navigator.geolocation.watchPosition(
       (position) => {
         const coords = position.coords;
-        const accuracyMeters = Number(coords.accuracy);
-        if (
-          Number.isFinite(accuracyMeters) &&
-          accuracyMeters > MAX_LIVE_TRACKING_ACCURACY_METERS
-        ) {
-          const accuracyText = formatLocationAccuracy(accuracyMeters);
-          setTrackingStatusMessage(
-            accuracyText
-              ? `Waiting for a more accurate GPS fix before sharing live updates. Current accuracy is about ${accuracyText}.`
-              : 'Waiting for a more accurate GPS fix before sharing live updates.'
-          );
-          return;
-        }
-
+        const latitude = Number(coords.latitude);
+        const longitude = Number(coords.longitude);
+        const accuracy = Number(coords.accuracy);
         const speedMps = Number(coords.speed);
         const speedKph = Number.isFinite(speedMps) && speedMps > 0 ? speedMps * 3.6 : 0;
 
-        setLocalTrackingPosition({
-          lat: coords.latitude,
-          lng: coords.longitude,
+        if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+          return;
+        }
+
+        const normalizedAccuracy = Number.isFinite(accuracy) ? accuracy : 0;
+        const previousLocation = lastAcceptedLocationRef.current;
+
+        if (!previousLocation && normalizedAccuracy > MAX_INITIAL_TRACKING_ACCURACY_METERS) {
+          setTrackingStatusMessage('Waiting for a more stable GPS signal...');
+          return;
+        }
+
+        let nextLatitude = latitude;
+        let nextLongitude = longitude;
+
+        if (previousLocation) {
+          const driftMeters = haversineDistanceMeters(
+            { lat: previousLocation.lat, lng: previousLocation.lng },
+            { lat: latitude, lng: longitude }
+          );
+          const weakSignal = normalizedAccuracy > MAX_STEADY_TRACKING_ACCURACY_METERS;
+          const movingFast = Number.isFinite(speedMps) && speedMps >= 2;
+
+          if (weakSignal && !movingFast && driftMeters < MIN_MOVEMENT_FOR_WEAK_SIGNAL_METERS) {
+            setTrackingStatusMessage(
+              liveTrackingEnabled
+                ? 'GPS weak. Holding last stable location while sharing stays active.'
+                : 'GPS weak. Holding last stable location.'
+            );
+            return;
+          }
+
+          if (weakSignal && !movingFast) {
+            // Smooth weak-signal drift so the marker does not jump around while stationary.
+            nextLatitude = previousLocation.lat + (latitude - previousLocation.lat) * 0.3;
+            nextLongitude = previousLocation.lng + (longitude - previousLocation.lng) * 0.3;
+          }
+        }
+
+        lastAcceptedLocationRef.current = {
+          lat: nextLatitude,
+          lng: nextLongitude,
+          accuracy: normalizedAccuracy,
+        };
+
+        setCurrentLocation({
+          lat: nextLatitude,
+          lng: nextLongitude,
+          accuracy: normalizedAccuracy,
+          timestamp: Date.now(),
         });
 
-        setTrackingStatusMessage('Live tracking enabled. Sharing location updates.');
+        updateCurrentLocationOverlay(nextLatitude, nextLongitude, false);
+
+        if (!liveTrackingEnabled || !apiBaseUrl) {
+          return;
+        }
 
         fetch(`${apiBaseUrl}/api/tracking/update`, {
           method: 'POST',
@@ -1131,10 +1466,11 @@ export function DashboardMap({ origin, destination, liveTrackingEnabled = false 
           },
           body: JSON.stringify({
             vehicleId: localVehicleId,
-            lat: coords.latitude,
-            lng: coords.longitude,
+            lat: nextLatitude,
+            lng: nextLongitude,
             speedKph,
             heading: Number.isFinite(Number(coords.heading)) ? Number(coords.heading) : null,
+            shareLocation: true,
           }),
         }).catch(() => {
           setTrackingStatusMessage('Live tracking is on, but location sync failed. Retrying...');
@@ -1142,31 +1478,23 @@ export function DashboardMap({ origin, destination, liveTrackingEnabled = false 
       },
       (error) => {
         if (error.code === error.PERMISSION_DENIED) {
-          setTrackingStatusMessage('PERMISSION_DENIED');
+          setTrackingStatusMessage('Location permission was denied.');
           return;
         }
 
-        setTrackingStatusMessage('Unable to read your location right now. Live tracking will retry automatically.');
+        setTrackingStatusMessage('Unable to read live location right now. Retrying automatically...');
       },
       {
         enableHighAccuracy: true,
-        maximumAge: 0,
-        timeout: 12000,
+        maximumAge: 2000,
+        timeout: 10000,
       }
     );
 
     return () => {
       navigator.geolocation.clearWatch(watchId);
     };
-  }, [apiBaseUrl, liveTrackingEnabled, localVehicleId]);
-
-  useEffect(() => {
-    if (liveTrackingEnabled) {
-      return;
-    }
-
-    setLocalTrackingPosition(null);
-  }, [liveTrackingEnabled]);
+  }, [apiBaseUrl, isMapActivated, liveTrackingEnabled, localVehicleId, setCurrentLocation]);
 
   const changeZoom = (delta: number) => {
     const map = mapRef.current;
@@ -1308,32 +1636,19 @@ export function DashboardMap({ origin, destination, liveTrackingEnabled = false 
         </div>
       )}
 
+      {isMapActivated && routeNotice && !configurationError && (
+        <div className="absolute top-14 left-1/2 -translate-x-1/2 z-20 bg-amber-50 border border-amber-200 text-amber-800 rounded-full px-4 py-2 text-xs font-medium">
+          {routeNotice}
+        </div>
+      )}
+
       {isMapActivated && liveTrackingEnabled && !configurationError && (
         <div className="absolute top-20 right-4 z-20 max-w-[260px] rounded-lg border border-slate-200 bg-white/95 px-3 py-2 text-[11px] text-slate-700 shadow">
           <div className="font-semibold text-slate-800">Live Tracking</div>
           <div className={streamConnected ? 'text-emerald-700' : 'text-amber-700'}>
             {streamConnected ? 'Traffic feed connected' : 'Connecting traffic feed...'}
           </div>
-          {trackingStatusMessage === 'PERMISSION_DENIED' ? (
-            <div className="mt-2 rounded border border-red-200 bg-red-50 p-2 text-[10px] text-red-800">
-              <div className="mb-1 font-semibold">Location permission is blocked.</div>
-              <div className="mb-1 font-medium">To re-enable:</div>
-              <div className="font-semibold">Android (Chrome):</div>
-              <div>Tap the lock icon in the address bar → Permissions → Location → Allow</div>
-              <div className="mt-1 font-semibold">iPhone/iPad (Safari):</div>
-              <div>Settings → Safari → Location → Ask or Allow</div>
-              <div className="mt-1 font-semibold">iPhone/iPad (Chrome):</div>
-              <div>Settings → Chrome → Location → While Using</div>
-              <button
-                onClick={() => window.location.reload()}
-                className="mt-2 w-full rounded bg-red-600 px-2 py-1 text-[10px] font-semibold text-white"
-              >
-                Reload after granting permission
-              </button>
-            </div>
-          ) : trackingStatusMessage ? (
-            <div className="mt-1 text-slate-600">{trackingStatusMessage}</div>
-          ) : null}
+          {trackingStatusMessage && <div className="mt-1 text-slate-600">{trackingStatusMessage}</div>}
         </div>
       )}
 

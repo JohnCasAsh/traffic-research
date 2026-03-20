@@ -1,20 +1,17 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import { motion } from 'motion/react';
-import { MapPin, Navigation, Fuel, DollarSign, Car, Zap, TrendingUp, Settings, Info } from 'lucide-react';
+import { MapPin, Navigation, Fuel, DollarSign, Car, Zap, TrendingUp, Settings, Info, X, AlertCircle, ArrowUpDown } from 'lucide-react';
 import { DashboardMap } from './DashboardMap';
-import {
-  formatLocationAccuracy,
-  GeolocationLookupError,
-  getReliableCurrentPosition,
-} from '../location';
+import { useLocationConsent } from '../LocationConsentContext';
+import { formatLocationAccuracy } from '../location';
 
 export function Dashboard() {
   const navigate = useNavigate();
+  const { consent, setConsent, currentLocation } = useLocationConsent();
   const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [liveTrackingEnabled, setLiveTrackingEnabled] = useState(false);
-  const [isLocatingOrigin, setIsLocatingOrigin] = useState(false);
   const [originLocationStatus, setOriginLocationStatus] = useState<string | null>(null);
+  const [showPrivacyModal, setShowPrivacyModal] = useState(false);
   const [formData, setFormData] = useState({
     origin: '',
     destination: '',
@@ -38,54 +35,36 @@ export function Dashboard() {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
-  const handleUseCurrentLocation = async () => {
-    setIsLocatingOrigin(true);
-    setOriginLocationStatus(null);
+  const applyTrackedLocationToOrigin = (location: { lat: number; lng: number; accuracy: number }) => {
+    const coordinateText = `${location.lat.toFixed(6)}, ${location.lng.toFixed(6)}`;
+    const accuracyText = formatLocationAccuracy(location.accuracy);
 
-    try {
-      const { position, accuracyMeters, precise } = await getReliableCurrentPosition();
-      const latitude = position.coords.latitude;
-      const longitude = position.coords.longitude;
-      const coordinateText = `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`;
-      const accuracyText = formatLocationAccuracy(accuracyMeters);
+    setFormData((previous) => ({
+      ...previous,
+      origin: coordinateText,
+    }));
 
-      setFormData((previous) => ({
-        ...previous,
-        origin: coordinateText,
-      }));
-      setOriginLocationStatus(
-        precise
-          ? accuracyText
-            ? `Current location applied. Accuracy about ${accuracyText}. You can still edit Origin manually.`
-            : 'Current location applied. You can still edit Origin manually.'
-          : accuracyText
-            ? `Current location applied with approximate accuracy about ${accuracyText}. Verify the pin before routing.`
-            : 'Current location applied with approximate accuracy. Verify the pin before routing.'
-      );
-    } catch (error) {
-      if (error instanceof GeolocationLookupError) {
-        if (error.code === 'unsupported') {
-          setOriginLocationStatus('Location is not supported in this browser.');
-        } else if (error.code === 'permission-denied') {
-          setOriginLocationStatus('Location permission was denied. Enable it to use current origin.');
-        } else if (error.code === 'coarse-location') {
-          const accuracyText = formatLocationAccuracy(error.accuracyMeters);
-          setOriginLocationStatus(
-            accuracyText
-              ? `Location looks too broad right now, about ${accuracyText}. Move to a clearer signal or enable device location services, then try again.`
-              : 'Location looks too broad right now. Move to a clearer signal or enable device location services, then try again.'
-          );
-        } else if (error.code === 'timeout') {
-          setOriginLocationStatus('Location is taking too long to become accurate. Please try again.');
-        } else {
-          setOriginLocationStatus('Unable to read current location. You can enter Origin manually.');
-        }
-      } else {
-        setOriginLocationStatus('Unable to read current location. You can enter Origin manually.');
-      }
-    } finally {
-      setIsLocatingOrigin(false);
+    setOriginLocationStatus(
+      `Current location: ${coordinateText}${accuracyText ? ` (${accuracyText})` : ''}`
+    );
+  };
+
+  const handleUseCurrentLocation = () => {
+    if (!currentLocation) {
+      setOriginLocationStatus('Waiting for live GPS fix. Please try again in a few seconds.');
+      return;
     }
+
+    applyTrackedLocationToOrigin(currentLocation);
+  };
+
+  const handleSwapLocations = () => {
+    setOriginLocationStatus(null);
+    setFormData((previous) => ({
+      ...previous,
+      origin: previous.destination,
+      destination: previous.origin,
+    }));
   };
 
   return (
@@ -128,10 +107,9 @@ export function Dashboard() {
                   <button
                     type="button"
                     onClick={handleUseCurrentLocation}
-                    disabled={isLocatingOrigin}
-                    className="text-xs text-teal-600 hover:text-teal-700 font-medium flex items-center disabled:text-slate-400 disabled:cursor-not-allowed"
+                    className="text-xs text-teal-600 hover:text-teal-700 font-medium flex items-center"
                   >
-                    <Navigation className="w-3 h-3 mr-1" /> {isLocatingOrigin ? 'Locating...' : 'Use current'}
+                    <Navigation className="w-3 h-3 mr-1" /> Use from tracking
                   </button>
                 </div>
                 <input
@@ -149,6 +127,18 @@ export function Dashboard() {
                   <p className="text-xs mt-2 text-slate-600">{originLocationStatus}</p>
                 )}
               </motion.div>
+
+              <div className="flex justify-center -my-1">
+                <button
+                  type="button"
+                  onClick={handleSwapLocations}
+                  className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50"
+                  title="Swap origin and destination"
+                >
+                  <ArrowUpDown className="h-3.5 w-3.5" />
+                  Swap A/B
+                </button>
+              </div>
 
               {/* Destination */}
               <motion.div
@@ -279,16 +269,22 @@ export function Dashboard() {
               <div className="flex gap-3 pt-2">
                 <button 
                   type="button" 
-                  title={liveTrackingEnabled ? 'Stop sharing your live location' : 'Share your live location while driving'}
-                  onClick={() => setLiveTrackingEnabled((previous) => !previous)}
+                  title={consent.isConsented ? 'Stop sharing your live location' : 'Share your live location with the app'}
+                  onClick={() => {
+                    if (!consent.isConsented) {
+                      setShowPrivacyModal(true);
+                    } else {
+                      setConsent(false);
+                    }
+                  }}
                   className={`flex-1 py-3 px-4 border rounded-xl text-sm font-medium flex items-center justify-center space-x-2 transition-colors ${
-                    liveTrackingEnabled
+                    consent.isConsented
                       ? 'border-emerald-300 bg-emerald-50 text-emerald-700'
                       : 'border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100'
                   }`}
                 >
                   <Navigation className="w-4 h-4" />
-                  <span>{liveTrackingEnabled ? 'Tracking Live' : 'Live Tracking'}</span>
+                  <span>{consent.isConsented ? 'Tracking Live' : 'Enable Live Tracking'}</span>
                 </button>
                 <button 
                   type="button" 
@@ -360,12 +356,74 @@ export function Dashboard() {
               <DashboardMap
                 origin={formData.origin}
                 destination={formData.destination}
-                liveTrackingEnabled={liveTrackingEnabled}
+                liveTrackingEnabled={consent.isConsented}
               />
             </div>
           </motion.div>
         </div>
       </div>
+
+      {/* Privacy Consent Modal */}
+      {showPrivacyModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6"
+          >
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
+                <AlertCircle className="w-6 h-6 text-amber-600" />
+                Location Privacy
+              </h2>
+              <button
+                onClick={() => setShowPrivacyModal(false)}
+                className="text-slate-400 hover:text-slate-600 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-3 mb-6 text-sm text-slate-600">
+              <p>
+                <strong>Live Tracking</strong> shares your real-time location with the app to:
+              </p>
+              <ul className="ml-4 space-y-2 list-disc">
+                <li>Display your location on the map</li>
+                <li>Show traffic conditions and your position to other users</li>
+                <li>Calculate accurate route information</li>
+                <li>Provide navigation assistance</li>
+              </ul>
+              <p className="mt-4 border-t border-slate-200 pt-4">
+                <strong>Privacy Assurance:</strong> Your location is only visible while you're actively using the app. 
+                You can disable this at any time. No permanent records are stored unless you explicitly save them.
+              </p>
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowPrivacyModal(false)}
+                className="flex-1 px-4 py-2 border border-slate-300 rounded-lg text-slate-700 font-medium hover:bg-slate-50 transition-colors"
+              >
+                Decline
+              </button>
+              <button
+                onClick={() => {
+                  setConsent(true);
+                  setShowPrivacyModal(false);
+                }}
+                className="flex-1 px-4 py-2 bg-teal-600 text-white rounded-lg font-medium hover:bg-teal-700 transition-colors"
+              >
+                Enable & Share
+              </button>
+            </div>
+
+            <p className="text-xs text-slate-500 mt-4 text-center">
+              You can change this setting anytime in the app settings
+            </p>
+          </motion.div>
+        </div>
+      )}
     </div>
   );
 }
