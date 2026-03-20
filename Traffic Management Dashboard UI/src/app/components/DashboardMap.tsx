@@ -5,8 +5,6 @@ import { LocateFixed, MapPin } from 'lucide-react';
 import { useLocationConsent } from '../LocationConsentContext';
 import {
   formatLocationAccuracy,
-  GeolocationLookupError,
-  getReliableCurrentPosition,
   parseCoordinateInput,
 } from '../location';
 
@@ -400,7 +398,6 @@ export function DashboardMap({ origin, destination, liveTrackingEnabled = false 
   const [streamConnected, setStreamConnected] = useState(false);
   const [trackingStatusMessage, setTrackingStatusMessage] = useState<string | null>(null);
   const [currentLocationMessage, setCurrentLocationMessage] = useState<string | null>(null);
-  const [isLocatingCurrentLocation, setIsLocatingCurrentLocation] = useState(false);
   const [activeTrafficAlerts, setActiveTrafficAlerts] = useState<LiveTrackingAlert[]>([]);
   const [trafficLevelCounts, setTrafficLevelCounts] = useState({ low: 0, moderate: 0, heavy: 0 });
 
@@ -525,93 +522,22 @@ export function DashboardMap({ origin, destination, liveTrackingEnabled = false 
     }
   };
 
-  const handleLocateCurrentLocation = async () => {
-    if (!isMapActivated || !mapReady || !mapRef.current) {
-      setCurrentLocationMessage('Map is still loading. Try again in a moment.');
+  const handleLocateCurrentLocation = () => {
+    // Simply point to the user's own location from tracking live
+    // Only works if Live Tracking is enabled and user has consented
+    if (!currentLocation) {
+      setCurrentLocationMessage('Enable Live Tracking to see your location.');
       return;
     }
 
-    setIsLocatingCurrentLocation(true);
-    setCurrentLocationMessage('Finding your current location...');
+    updateCurrentLocationOverlay(currentLocation.lat, currentLocation.lng, currentLocation.accuracy, true);
 
-    try {
-      let locationResult;
-      try {
-        locationResult = await getReliableCurrentPosition({
-          desiredAccuracyMeters: 35,
-          maxAcceptableAccuracyMeters: 85,
-          timeoutMs: 28000,
-          settleTimeMs: 4500,
-        });
-      } catch (error) {
-        if (
-          error instanceof GeolocationLookupError &&
-          (error.code === 'coarse-location' || error.code === 'timeout')
-        ) {
-          locationResult = await getReliableCurrentPosition({
-            desiredAccuracyMeters: 55,
-            maxAcceptableAccuracyMeters: 140,
-            timeoutMs: 20000,
-            settleTimeMs: 3500,
-          });
-        } else {
-          throw error;
-        }
-      }
-
-      const { position, accuracyMeters, precise } = locationResult;
-
-      updateCurrentLocationOverlay(
-        position.coords.latitude,
-        position.coords.longitude,
-        accuracyMeters,
-        true
-      );
-
-      // Update location consent context if user has shared location
-      if (consent.isConsented) {
-        setCurrentLocation({
-          lat: position.coords.latitude,
-          lng: position.coords.longitude,
-          accuracy: accuracyMeters,
-          timestamp: Date.now(),
-        });
-      }
-
-      const accuracyText = formatLocationAccuracy(accuracyMeters);
-      setCurrentLocationMessage(
-        precise
-          ? accuracyText
-            ? `Current location pinned (about ${accuracyText}).`
-            : 'Current location pinned.'
-          : accuracyText
-            ? `Approximate location pinned (about ${accuracyText}).`
-            : 'Approximate location pinned.'
-      );
-    } catch (error) {
-      if (error instanceof GeolocationLookupError) {
-        if (error.code === 'permission-denied') {
-          setCurrentLocationMessage('Location permission was denied. Enable location access and try again.');
-        } else if (error.code === 'unsupported') {
-          setCurrentLocationMessage('Device location is not supported in this browser.');
-        } else if (error.code === 'coarse-location') {
-          const accuracyText = formatLocationAccuracy(error.accuracyMeters);
-          setCurrentLocationMessage(
-            accuracyText
-              ? `Location is too broad right now (about ${accuracyText}). Move to a clearer signal and retry.`
-              : 'Location is too broad right now. Move to a clearer signal and retry.'
-          );
-        } else if (error.code === 'timeout') {
-          setCurrentLocationMessage('Location lookup timed out. Try again in a few seconds.');
-        } else {
-          setCurrentLocationMessage('Unable to read your current location right now.');
-        }
-      } else {
-        setCurrentLocationMessage('Unable to read your current location right now.');
-      }
-    } finally {
-      setIsLocatingCurrentLocation(false);
-    }
+    const accuracyText = formatLocationAccuracy(currentLocation.accuracy);
+    setCurrentLocationMessage(
+      accuracyText
+        ? `Your location from Live Tracking (about ${accuracyText}).`
+        : 'Your location from Live Tracking.'
+    );
   };
 
   useEffect(() => {
@@ -1382,8 +1308,13 @@ export function DashboardMap({ origin, destination, liveTrackingEnabled = false 
 
       try {
         const payload = JSON.parse(event.data) as LiveTrackingSnapshot;
-        syncVehicleMarkers(payload.vehicles || []);
-        setActiveTrafficAlerts((payload.alerts || []).slice(0, 3));
+        
+        // PRIVACY: Only show vehicles on map if user has explicitly enabled Live Tracking
+        if (liveTrackingEnabled) {
+          syncVehicleMarkers(payload.vehicles || []);
+          setActiveTrafficAlerts((payload.alerts || []).slice(0, 3));
+        }
+        
         setStreamConnected(true);
       } catch (error) {
         console.error('Live tracking snapshot parse error:', error);
@@ -1392,6 +1323,11 @@ export function DashboardMap({ origin, destination, liveTrackingEnabled = false 
 
     const onCongestionAlert = (event: MessageEvent) => {
       if (disposed) {
+        return;
+      }
+
+      // PRIVACY: Only show alerts if user has explicitly enabled Live Tracking
+      if (!liveTrackingEnabled) {
         return;
       }
 
@@ -1441,7 +1377,7 @@ export function DashboardMap({ origin, destination, liveTrackingEnabled = false 
       setActiveTrafficAlerts([]);
       clearMarkers();
     };
-  }, [apiBaseUrl, isMapActivated, localVehicleId, mapReady]);
+  }, [apiBaseUrl, isMapActivated, localVehicleId, mapReady, liveTrackingEnabled]);
 
   useEffect(() => {
     if (!liveTrackingEnabled) {
@@ -1701,12 +1637,11 @@ export function DashboardMap({ origin, destination, liveTrackingEnabled = false 
               whileHover={{ scale: 1.1 }}
               whileTap={{ scale: 0.9 }}
               onClick={() => {
-                void handleLocateCurrentLocation();
+                handleLocateCurrentLocation();
               }}
-              disabled={isLocatingCurrentLocation}
-              className="w-10 h-10 bg-white rounded-lg shadow-md flex items-center justify-center hover:bg-slate-50 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
-              aria-label="Locate current location"
-              title={isLocatingCurrentLocation ? 'Locating current location...' : 'Locate current location'}
+              className="w-10 h-10 bg-white rounded-lg shadow-md flex items-center justify-center hover:bg-slate-50 transition-colors"
+              aria-label="Locate current location from tracking"
+              title="Show your location from Live Tracking"
               type="button"
             >
               <LocateFixed className="w-4 h-4 text-blue-600" />

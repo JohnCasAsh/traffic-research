@@ -4,18 +4,12 @@ import { motion } from 'motion/react';
 import { MapPin, Navigation, Fuel, DollarSign, Car, Zap, TrendingUp, Settings, Info, X, AlertCircle } from 'lucide-react';
 import { DashboardMap } from './DashboardMap';
 import { useLocationConsent } from '../LocationConsentContext';
-import {
-  formatLocationAccuracy,
-  GeolocationLookupError,
-  getReliableCurrentPosition,
-} from '../location';
+import { formatLocationAccuracy } from '../location';
 
 export function Dashboard() {
   const navigate = useNavigate();
-  const { consent, setConsent, isSharingLocation } = useLocationConsent();
+  const { consent, setConsent, currentLocation } = useLocationConsent();
   const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [liveTrackingEnabled, setLiveTrackingEnabled] = useState(false);
-  const [isLocatingOrigin, setIsLocatingOrigin] = useState(false);
   const [originLocationStatus, setOriginLocationStatus] = useState<string | null>(null);
   const [showPrivacyModal, setShowPrivacyModal] = useState(false);
   const [formData, setFormData] = useState({
@@ -41,79 +35,25 @@ export function Dashboard() {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
-  const handleUseCurrentLocation = async () => {
-    setIsLocatingOrigin(true);
-    setOriginLocationStatus(null);
-
-    try {
-      let locationResult;
-      try {
-        locationResult = await getReliableCurrentPosition({
-          desiredAccuracyMeters: 55,
-          maxAcceptableAccuracyMeters: 130,
-          timeoutMs: 22000,
-          settleTimeMs: 3500,
-        });
-      } catch (error) {
-        if (
-          error instanceof GeolocationLookupError &&
-          (error.code === 'coarse-location' || error.code === 'timeout')
-        ) {
-          locationResult = await getReliableCurrentPosition();
-        } else {
-          throw error;
-        }
-      }
-
-      const { position, accuracyMeters, precise } = locationResult;
-      const latitude = position.coords.latitude;
-      const longitude = position.coords.longitude;
-      const coordinateText = `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`;
-      const accuracyText = formatLocationAccuracy(accuracyMeters);
-
-      setFormData((previous) => ({
-        ...previous,
-        origin: coordinateText,
-      }));
-      
-      // Update location consent context if user has consented
-      if (consent.isConsented) {
-        // This will be handled by the map component
-      }
-
-      setOriginLocationStatus(
-        precise
-          ? accuracyText
-            ? `Current location applied. Accuracy about ${accuracyText}. You can still edit Origin manually.`
-            : 'Current location applied. You can still edit Origin manually.'
-          : accuracyText
-            ? `Current location applied with approximate accuracy about ${accuracyText}. Verify the pin before routing.`
-            : 'Current location applied with approximate accuracy. Verify the pin before routing.'
-      );
-    } catch (error) {
-      if (error instanceof GeolocationLookupError) {
-        if (error.code === 'unsupported') {
-          setOriginLocationStatus('Location is not supported in this browser.');
-        } else if (error.code === 'permission-denied') {
-          setOriginLocationStatus('Location permission was denied. Enable it to use current origin.');
-        } else if (error.code === 'coarse-location') {
-          const accuracyText = formatLocationAccuracy(error.accuracyMeters);
-          setOriginLocationStatus(
-            accuracyText
-              ? `Location looks too broad right now, about ${accuracyText}. Move to a clearer signal or enable device location services, then try again.`
-              : 'Location looks too broad right now. Move to a clearer signal or enable device location services, then try again.'
-          );
-        } else if (error.code === 'timeout') {
-          setOriginLocationStatus('Location is taking too long to become accurate. Please try again.');
-        } else {
-          setOriginLocationStatus('Unable to read current location. You can enter Origin manually.');
-        }
-      } else {
-        setOriginLocationStatus('Unable to read current location. You can enter Origin manually.');
-      }
-    } finally {
-      setIsLocatingOrigin(false);
+  const handleUseCurrentLocation = () => {
+    // Simply use location from tracking live if available
+    if (!currentLocation) {
+      setOriginLocationStatus('Enable Live Tracking to autofill your current location.');
+      return;
     }
+
+    const coordinateText = `${currentLocation.lat.toFixed(6)}, ${currentLocation.lng.toFixed(6)}`;
+    setFormData((previous) => ({
+      ...previous,
+      origin: coordinateText,
+    }));
+
+    const accuracyText = formatLocationAccuracy(currentLocation.accuracy);
+    setOriginLocationStatus(
+      accuracyText
+        ? `Location from Live Tracking applied (about ${accuracyText}).`
+        : 'Location from Live Tracking applied.'
+    );
   };
 
   return (
@@ -156,10 +96,9 @@ export function Dashboard() {
                   <button
                     type="button"
                     onClick={handleUseCurrentLocation}
-                    disabled={isLocatingOrigin}
-                    className="text-xs text-teal-600 hover:text-teal-700 font-medium flex items-center disabled:text-slate-400 disabled:cursor-not-allowed"
+                    className="text-xs text-teal-600 hover:text-teal-700 font-medium flex items-center"
                   >
-                    <Navigation className="w-3 h-3 mr-1" /> {isLocatingOrigin ? 'Locating...' : 'Use current'}
+                    <Navigation className="w-3 h-3 mr-1" /> Use from tracking
                   </button>
                 </div>
                 <input
@@ -313,7 +252,6 @@ export function Dashboard() {
                       setShowPrivacyModal(true);
                     } else {
                       setConsent(false);
-                      setLiveTrackingEnabled(false);
                     }
                   }}
                   className={`flex-1 py-3 px-4 border rounded-xl text-sm font-medium flex items-center justify-center space-x-2 transition-colors ${
@@ -449,7 +387,6 @@ export function Dashboard() {
               <button
                 onClick={() => {
                   setConsent(true);
-                  setLiveTrackingEnabled(true);
                   setShowPrivacyModal(false);
                 }}
                 className="flex-1 px-4 py-2 bg-teal-600 text-white rounded-lg font-medium hover:bg-teal-700 transition-colors"
