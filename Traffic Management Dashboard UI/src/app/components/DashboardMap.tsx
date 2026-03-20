@@ -10,6 +10,9 @@ import {
 
 const DEFAULT_CENTER = { lat: 17.6132, lng: 121.7270 }; // Tuguegarao City
 const DEFAULT_ZOOM = 12;
+const MAX_INITIAL_TRACKING_ACCURACY_METERS = 140;
+const MAX_STEADY_TRACKING_ACCURACY_METERS = 95;
+const MIN_MOVEMENT_FOR_WEAK_SIGNAL_METERS = 35;
 const MAX_ROUTE_OPTIONS = 3;
 const MAX_ALLOWED_FORCED_DETOUR_RATIO = 1.4;
 const BRIDGE_OPEN_HOUR = 6; // 6:00 AM
@@ -95,6 +98,24 @@ function normalizeText(value: string) {
 
 function includesAnyKeyword(text: string, keywords: string[]) {
   return keywords.some((keyword) => text.includes(keyword));
+}
+
+function haversineDistanceMeters(
+  from: { lat: number; lng: number },
+  to: { lat: number; lng: number }
+) {
+  const earthRadiusMeters = 6371000;
+  const toRadians = (degrees: number) => (degrees * Math.PI) / 180;
+  const deltaLat = toRadians(to.lat - from.lat);
+  const deltaLng = toRadians(to.lng - from.lng);
+  const lat1 = toRadians(from.lat);
+  const lat2 = toRadians(to.lat);
+
+  const a =
+    Math.sin(deltaLat / 2) ** 2 +
+    Math.cos(lat1) * Math.cos(lat2) * Math.sin(deltaLng / 2) ** 2;
+
+  return 2 * earthRadiusMeters * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
 function isWithinCagayanRouteBounds(point: { lat: number; lng: number }) {
@@ -369,9 +390,15 @@ type DashboardMapProps = {
   origin: string;
   destination: string;
   liveTrackingEnabled?: boolean;
+  onUseTrackedLocation?: (location: { lat: number; lng: number; accuracy: number }) => void;
 };
 
-export function DashboardMap({ origin, destination, liveTrackingEnabled = false }: DashboardMapProps) {
+export function DashboardMap({
+  origin,
+  destination,
+  liveTrackingEnabled = false,
+  onUseTrackedLocation,
+}: DashboardMapProps) {
   const { currentLocation, setCurrentLocation } = useLocationConsent();
   
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
@@ -383,6 +410,7 @@ export function DashboardMap({ origin, destination, liveTrackingEnabled = false 
   const originPreviewMarkerRef = useRef<any>(null);
   const currentLocationMarkerRef = useRef<any>(null);
   const currentLocationAccuracyCircleRef = useRef<any>(null);
+  const lastAcceptedLocationRef = useRef<{ lat: number; lng: number; accuracy: number } | null>(null);
 
   const [isMapActivated, setIsMapActivated] = useState(false);
   const [mapReady, setMapReady] = useState(false);
@@ -527,6 +555,12 @@ export function DashboardMap({ origin, destination, liveTrackingEnabled = false 
       setCurrentLocationMessage('Live location is not ready yet. Wait a few seconds and try again.');
       return;
     }
+
+    onUseTrackedLocation?.({
+      lat: currentLocation.lat,
+      lng: currentLocation.lng,
+      accuracy: currentLocation.accuracy,
+    });
 
     updateCurrentLocationOverlay(currentLocation.lat, currentLocation.lng, currentLocation.accuracy, true);
 
@@ -1402,18 +1436,63 @@ export function DashboardMap({ origin, destination, liveTrackingEnabled = false 
         const speedMps = Number(coords.speed);
         const speedKph = Number.isFinite(speedMps) && speedMps > 0 ? speedMps * 3.6 : 0;
 
+        if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+          return;
+        }
+
+        const normalizedAccuracy = Number.isFinite(accuracy) ? accuracy : 0;
+        const previousLocation = lastAcceptedLocationRef.current;
+
+        if (!previousLocation && normalizedAccuracy > MAX_INITIAL_TRACKING_ACCURACY_METERS) {
+          setTrackingStatusMessage('Waiting for a more stable GPS signal...');
+          return;
+        }
+
+        let nextLatitude = latitude;
+        let nextLongitude = longitude;
+
+        if (previousLocation) {
+          const driftMeters = haversineDistanceMeters(
+            { lat: previousLocation.lat, lng: previousLocation.lng },
+            { lat: latitude, lng: longitude }
+          );
+          const weakSignal = normalizedAccuracy > MAX_STEADY_TRACKING_ACCURACY_METERS;
+          const movingFast = Number.isFinite(speedMps) && speedMps >= 2;
+
+          if (weakSignal && !movingFast && driftMeters < MIN_MOVEMENT_FOR_WEAK_SIGNAL_METERS) {
+            setTrackingStatusMessage(
+              liveTrackingEnabled
+                ? 'GPS weak. Holding last stable location while sharing stays active.'
+                : 'GPS weak. Holding last stable location.'
+            );
+            return;
+          }
+
+          if (weakSignal && !movingFast) {
+            // Smooth weak-signal drift so the marker does not jump around while stationary.
+            nextLatitude = previousLocation.lat + (latitude - previousLocation.lat) * 0.3;
+            nextLongitude = previousLocation.lng + (longitude - previousLocation.lng) * 0.3;
+          }
+        }
+
+        lastAcceptedLocationRef.current = {
+          lat: nextLatitude,
+          lng: nextLongitude,
+          accuracy: normalizedAccuracy,
+        };
+
         setCurrentLocation({
-          lat: latitude,
-          lng: longitude,
-          accuracy: Number.isFinite(accuracy) ? accuracy : 0,
+          lat: nextLatitude,
+          lng: nextLongitude,
+          accuracy: normalizedAccuracy,
           timestamp: Date.now(),
         });
 
-        updateCurrentLocationOverlay(latitude, longitude, accuracy, false);
+        updateCurrentLocationOverlay(nextLatitude, nextLongitude, normalizedAccuracy, false);
 
-        const accuracyText = formatLocationAccuracy(accuracy);
+        const accuracyText = formatLocationAccuracy(normalizedAccuracy);
         setCurrentLocationMessage(
-          `Current location: ${latitude.toFixed(6)}, ${longitude.toFixed(6)}${
+          `Current location: ${nextLatitude.toFixed(6)}, ${nextLongitude.toFixed(6)}${
             accuracyText ? ` (${accuracyText})` : ''
           }`
         );
@@ -1429,8 +1508,8 @@ export function DashboardMap({ origin, destination, liveTrackingEnabled = false 
           },
           body: JSON.stringify({
             vehicleId: localVehicleId,
-            lat: latitude,
-            lng: longitude,
+            lat: nextLatitude,
+            lng: nextLongitude,
             speedKph,
             heading: Number.isFinite(Number(coords.heading)) ? Number(coords.heading) : null,
             shareLocation: true,

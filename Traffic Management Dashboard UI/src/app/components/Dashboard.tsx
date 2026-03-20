@@ -35,25 +35,31 @@ export function Dashboard() {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
-  const handleUseCurrentLocation = () => {
-    // Simply use location from tracking live if available
-    if (!currentLocation) {
-      setOriginLocationStatus('Waiting for live GPS fix. Please try again in a few seconds.');
-      return;
-    }
+  const applyTrackedLocationToOrigin = (location: { lat: number; lng: number; accuracy: number }) => {
+    const coordinateText = `${location.lat.toFixed(6)}, ${location.lng.toFixed(6)}`;
+    const accuracyText = formatLocationAccuracy(location.accuracy);
 
-    const coordinateText = `${currentLocation.lat.toFixed(6)}, ${currentLocation.lng.toFixed(6)}`;
     setFormData((previous) => ({
       ...previous,
       origin: coordinateText,
     }));
 
-    const accuracyText = formatLocationAccuracy(currentLocation.accuracy);
     setOriginLocationStatus(
-      accuracyText
-        ? `Location from Live Tracking applied (about ${accuracyText}).`
-        : 'Location from Live Tracking applied.'
+      `Current location: ${coordinateText}${accuracyText ? ` (${accuracyText})` : ''}`
     );
+  };
+
+  const handleUseCurrentLocation = () => {
+    if (!currentLocation) {
+      setOriginLocationStatus('Waiting for live GPS fix. Please try again in a few seconds.');
+      return;
+    }
+
+    applyTrackedLocationToOrigin(currentLocation);
+  };
+
+  const handleMapUseTrackedLocation = (location: { lat: number; lng: number; accuracy: number }) => {
+    applyTrackedLocationToOrigin(location);
   };
 
   return (
@@ -334,6 +340,7 @@ export function Dashboard() {
                 origin={formData.origin}
                 destination={formData.destination}
                 liveTrackingEnabled={consent.isConsented}
+                onUseTrackedLocation={handleMapUseTrackedLocation}
               />
             </div>
           </motion.div>
