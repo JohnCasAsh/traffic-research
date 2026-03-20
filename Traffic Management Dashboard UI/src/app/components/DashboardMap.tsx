@@ -6,7 +6,6 @@ import {
   formatLocationAccuracy,
   GeolocationLookupError,
   getReliableCurrentPosition,
-  MAX_LIVE_TRACKING_ACCURACY_METERS,
   parseCoordinateInput,
 } from '../location';
 
@@ -30,7 +29,21 @@ const TIMED_BRIDGE_KEYWORDS = [
   'steal bridge',
 ];
 const SECOND_BRIDGE_KEYWORDS = ['buntun bridge', 'buntun brg'];
-const CAGAYAN_AREA_HINTS = ['caggay', 'tuguegarao', 'solana', 'cagayan'];
+const ALL_BRIDGE_KEYWORDS = [...TIMED_BRIDGE_KEYWORDS, ...SECOND_BRIDGE_KEYWORDS];
+const CAGAYAN_AREA_HINTS = [
+  'caggay',
+  'tuguegarao',
+  'solana',
+  'cagayan',
+  'buntun',
+  'steel bridge',
+];
+const CAGAYAN_ROUTE_BOUNDS = {
+  minLat: 17.45,
+  maxLat: 17.78,
+  minLng: 121.58,
+  maxLng: 121.84,
+};
 
 type WaypointCandidate = string | { lat: number; lng: number };
 type ForcedBridgeWaypoint = {
@@ -64,9 +77,32 @@ function includesAnyKeyword(text: string, keywords: string[]) {
   return keywords.some((keyword) => text.includes(keyword));
 }
 
+function isWithinCagayanRouteBounds(point: { lat: number; lng: number }) {
+  return (
+    point.lat >= CAGAYAN_ROUTE_BOUNDS.minLat &&
+    point.lat <= CAGAYAN_ROUTE_BOUNDS.maxLat &&
+    point.lng >= CAGAYAN_ROUTE_BOUNDS.minLng &&
+    point.lng <= CAGAYAN_ROUTE_BOUNDS.maxLng
+  );
+}
+
+function resolveRouteEndpoint(value: string) {
+  return parseCoordinateInput(value) || value;
+}
+
 function isLikelyCagayanTrip(origin: string, destination: string) {
   const combined = `${normalizeText(origin)} ${normalizeText(destination)}`;
-  return includesAnyKeyword(combined, CAGAYAN_AREA_HINTS);
+  const originPoint = parseCoordinateInput(origin);
+  const destinationPoint = parseCoordinateInput(destination);
+
+  const hasTextHint =
+    includesAnyKeyword(combined, CAGAYAN_AREA_HINTS) ||
+    includesAnyKeyword(combined, ALL_BRIDGE_KEYWORDS);
+  const hasCoordinateHint =
+    (originPoint ? isWithinCagayanRouteBounds(originPoint) : false) ||
+    (destinationPoint ? isWithinCagayanRouteBounds(destinationPoint) : false);
+
+  return hasTextHint || hasCoordinateHint;
 }
 
 function getManilaHour() {
@@ -370,10 +406,10 @@ export function DashboardMap({ origin, destination, liveTrackingEnabled = false 
 
     try {
       const { position, accuracyMeters, precise } = await getReliableCurrentPosition({
-        desiredAccuracyMeters: 120,
-        maxAcceptableAccuracyMeters: Math.max(MAX_LIVE_TRACKING_ACCURACY_METERS * 2, 600),
-        timeoutMs: 15000,
-        settleTimeMs: 3000,
+        desiredAccuracyMeters: 60,
+        maxAcceptableAccuracyMeters: 150,
+        timeoutMs: 20000,
+        settleTimeMs: 3500,
       });
 
       updateCurrentLocationOverlay(
@@ -538,7 +574,14 @@ export function DashboardMap({ origin, destination, liveTrackingEnabled = false 
             throw new Error('Google Maps runtime not available.');
           }
 
+          const resolvedOrigin = resolveRouteEndpoint(normalizedOrigin);
+          const resolvedDestination = resolveRouteEndpoint(normalizedDestination);
           const isCagayanTrip = isLikelyCagayanTrip(normalizedOrigin, normalizedDestination);
+          const bridgeRequested = includesAnyKeyword(
+            normalizeText(`${normalizedOrigin} ${normalizedDestination}`),
+            ALL_BRIDGE_KEYWORDS
+          );
+          const shouldPrioritizeBridgeRoutes = isCagayanTrip || bridgeRequested;
           const drivingOptions = gmaps.TrafficModel
             ? {
                 departureTime: new Date(),
@@ -547,16 +590,16 @@ export function DashboardMap({ origin, destination, liveTrackingEnabled = false 
             : { departureTime: new Date() };
 
           const baseRequest = {
-            origin: normalizedOrigin,
-            destination: normalizedDestination,
+            origin: resolvedOrigin,
+            destination: resolvedDestination,
             travelMode: gmaps.TravelMode.DRIVING,
             unitSystem: gmaps.UnitSystem.METRIC,
             drivingOptions,
           };
 
           const planningRequest = {
-            origin: normalizedOrigin,
-            destination: normalizedDestination,
+            origin: resolvedOrigin,
+            destination: resolvedDestination,
             travelMode: gmaps.TravelMode.DRIVING,
             unitSystem: gmaps.UnitSystem.METRIC,
           };
@@ -694,7 +737,7 @@ export function DashboardMap({ origin, destination, liveTrackingEnabled = false 
             addRouteOption(primaryResult, routeIndex, `Alternative ${routeIndex + 1}`);
           }
 
-          if (isCagayanTrip) {
+          if (shouldPrioritizeBridgeRoutes) {
             for (const bridgeRoute of FORCED_BRIDGE_WAYPOINTS) {
               if (nextRouteOptions.length >= MAX_ROUTE_OPTIONS) {
                 break;
@@ -796,7 +839,7 @@ export function DashboardMap({ origin, destination, liveTrackingEnabled = false 
 
           const routeNotes: string[] = [];
 
-          if (isCagayanTrip && steelRouteIncludedCount === 0) {
+          if (shouldPrioritizeBridgeRoutes && steelRouteIncludedCount === 0) {
             routeNotes.push(
               'Steel Bridge route could not be generated from current Google road data for this request. Try a nearby origin/destination pin for that bridge.'
             );
