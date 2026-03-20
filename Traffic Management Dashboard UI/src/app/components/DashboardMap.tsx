@@ -18,6 +18,7 @@ const BRIDGE_CLOSE_HOUR = 18; // 6:00 PM
 const BRIDGE_MATCH_RADIUS_DEGREES = 0.004;
 const STEEL_BRIDGE_COORD = { lat: 17.6409, lng: 121.7015 };
 const BUNTUN_BRIDGE_COORD = { lat: 17.6185, lng: 121.6889 };
+const SOLANA_TOWN_CENTER_COORD = { lat: 17.6528, lng: 121.6907 };
 const TIMED_BRIDGE_KEYWORDS = [
   'tuguegarao solana steel brg',
   'tuguegarao-solana steel bridge',
@@ -43,6 +44,26 @@ const CAGAYAN_ROUTE_BOUNDS = {
   maxLat: 17.78,
   minLng: 121.58,
   maxLng: 121.84,
+};
+const LOCAL_LOCATION_ALIASES: Record<string, string> = {
+  bunton: 'Buntun Bridge, Tuguegarao City, Cagayan, Philippines',
+  buntun: 'Buntun Bridge, Tuguegarao City, Cagayan, Philippines',
+  'buntun bridge': 'Buntun Bridge, Tuguegarao City, Cagayan, Philippines',
+  'buntun brg': 'Buntun Bridge, Tuguegarao City, Cagayan, Philippines',
+  solana: 'Solana, Cagayan, Philippines',
+  'solana bridge': 'Tuguegarao-Solana Steel Bridge, Tuguegarao, Cagayan, Philippines',
+  'steel bridge': 'Tuguegarao-Solana Steel Bridge, Tuguegarao, Cagayan, Philippines',
+  tuguegarao: 'Tuguegarao City, Cagayan, Philippines',
+  'tuguegarao city': 'Tuguegarao City, Cagayan, Philippines',
+};
+const LOCAL_LOCATION_COORDINATE_ALIASES: Record<string, { lat: number; lng: number }> = {
+  bunton: BUNTUN_BRIDGE_COORD,
+  buntun: BUNTUN_BRIDGE_COORD,
+  'buntun bridge': BUNTUN_BRIDGE_COORD,
+  'buntun brg': BUNTUN_BRIDGE_COORD,
+  solana: SOLANA_TOWN_CENTER_COORD,
+  'solana bridge': STEEL_BRIDGE_COORD,
+  'steel bridge': STEEL_BRIDGE_COORD,
 };
 
 type WaypointCandidate = string | { lat: number; lng: number };
@@ -86,8 +107,94 @@ function isWithinCagayanRouteBounds(point: { lat: number; lng: number }) {
   );
 }
 
+function compactAddressText(value: string) {
+  return normalizeText(value)
+    .replace(/[.,]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 function resolveRouteEndpoint(value: string) {
   return parseCoordinateInput(value) || value;
+}
+
+function applyLocalAddressHint(routeInput: WaypointCandidate, useCagayanHint: boolean): WaypointCandidate {
+  if (typeof routeInput !== 'string') {
+    return routeInput;
+  }
+
+  const trimmedInput = routeInput.trim();
+  if (!trimmedInput) {
+    return routeInput;
+  }
+
+  const compactInput = compactAddressText(trimmedInput);
+  const aliasedValue = LOCAL_LOCATION_ALIASES[compactInput];
+  if (aliasedValue) {
+    return aliasedValue;
+  }
+
+  if (!useCagayanHint) {
+    return trimmedInput;
+  }
+
+  if (
+    trimmedInput.includes(',') ||
+    compactInput.includes('philippines') ||
+    compactInput.includes('cagayan')
+  ) {
+    return trimmedInput;
+  }
+
+  return `${trimmedInput}, Cagayan, Philippines`;
+}
+
+function buildRouteLocationCandidates(
+  routeInput: WaypointCandidate,
+  useCagayanHint: boolean
+): WaypointCandidate[] {
+  if (typeof routeInput !== 'string') {
+    return [routeInput];
+  }
+
+  const trimmedInput = routeInput.trim();
+  if (!trimmedInput) {
+    return [routeInput];
+  }
+
+  const compactInput = compactAddressText(trimmedInput);
+  const candidates: WaypointCandidate[] = [];
+
+  const coordinateAlias = LOCAL_LOCATION_COORDINATE_ALIASES[compactInput];
+  if (coordinateAlias) {
+    candidates.push(coordinateAlias);
+  }
+
+  const textAlias = LOCAL_LOCATION_ALIASES[compactInput];
+  if (textAlias) {
+    candidates.push(textAlias);
+  }
+
+  candidates.push(applyLocalAddressHint(trimmedInput, useCagayanHint));
+  candidates.push(trimmedInput);
+
+  const seenFingerprints = new Set<string>();
+  const deduplicatedCandidates: WaypointCandidate[] = [];
+  for (const candidate of candidates) {
+    const fingerprint =
+      typeof candidate === 'string'
+        ? `s:${candidate.trim().toLowerCase()}`
+        : `c:${candidate.lat.toFixed(6)},${candidate.lng.toFixed(6)}`;
+
+    if (seenFingerprints.has(fingerprint)) {
+      continue;
+    }
+
+    seenFingerprints.add(fingerprint);
+    deduplicatedCandidates.push(candidate);
+  }
+
+  return deduplicatedCandidates;
 }
 
 function isLikelyCagayanTrip(origin: string, destination: string) {
@@ -406,10 +513,10 @@ export function DashboardMap({ origin, destination, liveTrackingEnabled = false 
 
     try {
       const { position, accuracyMeters, precise } = await getReliableCurrentPosition({
-        desiredAccuracyMeters: 60,
-        maxAcceptableAccuracyMeters: 150,
-        timeoutMs: 20000,
-        settleTimeMs: 3500,
+        desiredAccuracyMeters: 40,
+        maxAcceptableAccuracyMeters: 90,
+        timeoutMs: 25000,
+        settleTimeMs: 4000,
       });
 
       updateCurrentLocationOverlay(
@@ -581,7 +688,19 @@ export function DashboardMap({ origin, destination, liveTrackingEnabled = false 
             normalizeText(`${normalizedOrigin} ${normalizedDestination}`),
             ALL_BRIDGE_KEYWORDS
           );
+          const steelBridgePreferenceRequested = includesAnyKeyword(
+            normalizeText(`${normalizedOrigin} ${normalizedDestination}`),
+            [...ALL_BRIDGE_KEYWORDS, 'solana']
+          );
           const shouldPrioritizeBridgeRoutes = isCagayanTrip || bridgeRequested;
+          const routingOriginCandidates = buildRouteLocationCandidates(
+            resolvedOrigin,
+            shouldPrioritizeBridgeRoutes
+          );
+          const routingDestinationCandidates = buildRouteLocationCandidates(
+            resolvedDestination,
+            shouldPrioritizeBridgeRoutes
+          );
           const drivingOptions = gmaps.TrafficModel
             ? {
                 departureTime: new Date(),
@@ -589,20 +708,30 @@ export function DashboardMap({ origin, destination, liveTrackingEnabled = false 
               }
             : { departureTime: new Date() };
 
-          const baseRequest = {
-            origin: resolvedOrigin,
-            destination: resolvedDestination,
+          const requestDefaults = {
             travelMode: gmaps.TravelMode.DRIVING,
             unitSystem: gmaps.UnitSystem.METRIC,
             drivingOptions,
+            region: 'ph',
           };
 
-          const planningRequest = {
-            origin: resolvedOrigin,
+          const planningRequestDefaults = {
             destination: resolvedDestination,
             travelMode: gmaps.TravelMode.DRIVING,
             unitSystem: gmaps.UnitSystem.METRIC,
+            region: 'ph',
           };
+
+          const requestPairs: Array<{ origin: WaypointCandidate; destination: WaypointCandidate }> = [];
+          for (const originCandidate of routingOriginCandidates.slice(0, 3)) {
+            for (const destinationCandidate of routingDestinationCandidates.slice(0, 3)) {
+              requestPairs.push({ origin: originCandidate, destination: destinationCandidate });
+            }
+          }
+
+          if (requestPairs.length === 0) {
+            throw new Error('No valid route candidates available for this trip.');
+          }
 
           const bridgeIsOpen = isBridgeOpenNow();
           setBridgeOpenNow(bridgeIsOpen);
@@ -706,14 +835,45 @@ export function DashboardMap({ origin, destination, liveTrackingEnabled = false 
             );
           };
 
-          const primaryResult = await directionsServiceRef.current.route({
-            ...baseRequest,
-            provideRouteAlternatives: true,
-          });
+          let primaryResult: any = null;
+          let lastRouteLookupError: any = null;
+          let activeRoutePair = requestPairs[0];
+          for (const pair of requestPairs) {
+            try {
+              const candidateResult = await directionsServiceRef.current.route({
+                ...requestDefaults,
+                origin: pair.origin,
+                destination: pair.destination,
+                provideRouteAlternatives: true,
+              });
 
-          if (cancelled) {
-            return;
+              if (cancelled) {
+                return;
+              }
+
+              primaryResult = candidateResult;
+              activeRoutePair = pair;
+              break;
+            } catch (error) {
+              lastRouteLookupError = error;
+            }
           }
+
+          if (!primaryResult) {
+            throw lastRouteLookupError || new Error('Unable to resolve a route from local candidates.');
+          }
+
+          const baseRequest = {
+            ...requestDefaults,
+            origin: activeRoutePair.origin,
+            destination: activeRoutePair.destination,
+          };
+
+          const planningRequest = {
+            ...planningRequestDefaults,
+            origin: activeRoutePair.origin,
+            destination: activeRoutePair.destination,
+          };
 
           const baselineLeg = primaryResult?.routes?.[0]?.legs?.[0];
           const baselineDistanceValue = Number(
@@ -848,7 +1008,15 @@ export function DashboardMap({ origin, destination, liveTrackingEnabled = false 
           setRouteNotice(routeNotes.length > 0 ? routeNotes.join(' ') : null);
 
           let normalizedRouteOptions = nextRouteOptions.slice(0, MAX_ROUTE_OPTIONS);
-          if (!bridgeIsOpen) {
+          if (steelBridgePreferenceRequested) {
+            normalizedRouteOptions = [...normalizedRouteOptions].sort((a, b) => {
+              if (a.usesSteelBridge === b.usesSteelBridge) {
+                return 0;
+              }
+
+              return a.usesSteelBridge ? -1 : 1;
+            });
+          } else if (!bridgeIsOpen) {
             normalizedRouteOptions = [...normalizedRouteOptions].sort((a, b) => {
               if (a.usesSteelBridge === b.usesSteelBridge) {
                 return 0;
