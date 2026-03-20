@@ -168,6 +168,49 @@ function buildRouteLocationCandidates(
   return deduplicatedCandidates;
 }
 
+function resolveCandidateCoordinate(candidate: WaypointCandidate) {
+  if (typeof candidate !== 'string') {
+    return candidate;
+  }
+
+  const parsedCoordinate = parseCoordinateInput(candidate);
+  if (parsedCoordinate) {
+    return parsedCoordinate;
+  }
+
+  const compactInput = compactAddressText(candidate);
+  return LOCAL_LOCATION_COORDINATE_ALIASES[compactInput] || null;
+}
+
+function formatDistanceKilometersText(distanceMeters: number) {
+  if (!Number.isFinite(distanceMeters) || distanceMeters <= 0) {
+    return 'N/A';
+  }
+
+  const distanceKm = distanceMeters / 1000;
+  if (distanceKm >= 10) {
+    return `${distanceKm.toFixed(0)} km`;
+  }
+
+  return `${distanceKm.toFixed(1)} km`;
+}
+
+function formatApproximateDurationText(distanceMeters: number) {
+  if (!Number.isFinite(distanceMeters) || distanceMeters <= 0) {
+    return 'N/A';
+  }
+
+  const estimateKph = 28;
+  const totalMinutes = Math.max(1, Math.round((distanceMeters / 1000 / estimateKph) * 60));
+  if (totalMinutes < 60) {
+    return `~${totalMinutes} min`;
+  }
+
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  return minutes === 0 ? `~${hours} hr` : `~${hours} hr ${minutes} min`;
+}
+
 function getManilaHour() {
   const hourText = new Intl.DateTimeFormat('en-GB', {
     hour: '2-digit',
@@ -333,6 +376,7 @@ export function DashboardMap({ origin, destination, liveTrackingEnabled = false 
   const mapRef = useRef<any>(null);
   const directionsServiceRef = useRef<any>(null);
   const directionsRendererRef = useRef<any>(null);
+  const fallbackPolylineRef = useRef<any | null>(null);
   const liveMarkersRef = useRef<Map<string, any>>(new Map());
   const livePolylinesRef = useRef<Map<string, any[]>>(new Map());
 
@@ -353,6 +397,13 @@ export function DashboardMap({ origin, destination, liveTrackingEnabled = false 
   const [trafficLevelCounts, setTrafficLevelCounts] = useState({ low: 0, moderate: 0, heavy: 0 });
   const [localTrackingPosition, setLocalTrackingPosition] = useState<{ lat: number; lng: number } | null>(null);
   const [trafficStreamAnchor, setTrafficStreamAnchor] = useState<{ lat: number; lng: number } | null>(null);
+
+  const clearFallbackPolyline = () => {
+    if (fallbackPolylineRef.current) {
+      fallbackPolylineRef.current.setMap(null);
+      fallbackPolylineRef.current = null;
+    }
+  };
 
   const mapsApiKey = useMemo(() => {
     return (
@@ -514,6 +565,7 @@ export function DashboardMap({ origin, destination, liveTrackingEnabled = false 
 
     return () => {
       disposed = true;
+      clearFallbackPolyline();
       if (directionsRendererRef.current) {
         directionsRendererRef.current.setMap(null);
       }
@@ -535,6 +587,7 @@ export function DashboardMap({ origin, destination, liveTrackingEnabled = false 
     }
 
     if (!normalizedOrigin || !normalizedDestination) {
+      clearFallbackPolyline();
       directionsRendererRef.current.set('directions', null);
       setRouteSummary(null);
       setRouteOptions([]);
@@ -547,6 +600,7 @@ export function DashboardMap({ origin, destination, liveTrackingEnabled = false 
     }
 
     let cancelled = false;
+    clearFallbackPolyline();
     setRouteError(null);
     const debounceHandle = window.setTimeout(() => {
       if (cancelled) {
@@ -555,6 +609,11 @@ export function DashboardMap({ origin, destination, liveTrackingEnabled = false 
 
       const fetchRouteOptions = async () => {
         const isCagayanTrip = isLikelyCagayanTrip(normalizedOrigin, normalizedDestination);
+        const routingOriginCandidates = buildRouteLocationCandidates(resolvedOrigin, isCagayanTrip);
+        const routingDestinationCandidates = buildRouteLocationCandidates(
+          resolvedDestination,
+          isCagayanTrip
+        );
 
         try {
           setIsRouting(true);
@@ -563,12 +622,6 @@ export function DashboardMap({ origin, destination, liveTrackingEnabled = false 
           if (!gmaps) {
             throw new Error('Google Maps runtime not available.');
           }
-
-          const routingOriginCandidates = buildRouteLocationCandidates(resolvedOrigin, isCagayanTrip);
-          const routingDestinationCandidates = buildRouteLocationCandidates(
-            resolvedDestination,
-            isCagayanTrip
-          );
 
           const drivingOptions = gmaps.TrafficModel
             ? {
@@ -892,6 +945,7 @@ export function DashboardMap({ origin, destination, liveTrackingEnabled = false 
             routeLabel: `Route ${index + 1}`,
           }));
 
+          clearFallbackPolyline();
           setRouteError(null);
           setRouteOptions(relabeledRouteOptions);
           setSelectedRouteId(relabeledRouteOptions[0].routeId);
@@ -913,6 +967,58 @@ export function DashboardMap({ origin, destination, liveTrackingEnabled = false 
             errorText.includes('not authorized') ||
             errorText.includes('api project')
           ) {
+            const fallbackOriginCoordinate =
+              routingOriginCandidates
+                .map((candidate) => resolveCandidateCoordinate(candidate))
+                .find((candidate) => Boolean(candidate)) || null;
+            const fallbackDestinationCoordinate =
+              routingDestinationCandidates
+                .map((candidate) => resolveCandidateCoordinate(candidate))
+                .find((candidate) => Boolean(candidate)) || null;
+            const gmaps = (window as any).google?.maps;
+
+            if (
+              fallbackOriginCoordinate &&
+              fallbackDestinationCoordinate &&
+              gmaps?.Polyline &&
+              gmaps?.LatLngBounds &&
+              mapRef.current
+            ) {
+              clearFallbackPolyline();
+              fallbackPolylineRef.current = new gmaps.Polyline({
+                map: mapRef.current,
+                path: [fallbackOriginCoordinate, fallbackDestinationCoordinate],
+                geodesic: true,
+                strokeColor: '#0ea5e9',
+                strokeOpacity: 0.95,
+                strokeWeight: 4,
+              });
+
+              const bounds = new gmaps.LatLngBounds();
+              bounds.extend(fallbackOriginCoordinate);
+              bounds.extend(fallbackDestinationCoordinate);
+              mapRef.current.fitBounds(bounds);
+
+              const directDistanceMeters = distanceBetweenPointsMeters(
+                fallbackOriginCoordinate,
+                fallbackDestinationCoordinate
+              );
+
+              setRouteSummary({
+                routeLabel: 'Route 1',
+                summaryText: 'Approximate direct route (Google Directions denied)',
+                distanceText: formatDistanceKilometersText(directDistanceMeters),
+                durationText: formatApproximateDurationText(directDistanceMeters),
+                usesSteelBridge: false,
+                usesSecondBridge: false,
+              });
+              setRouteOptions([]);
+              setSelectedRouteId(null);
+              setRouteNotice('Google denied live road routing for this key. Showing an approximate straight-line estimate.');
+              setRouteError(null);
+              return;
+            }
+
             setRouteError('Route request was denied by Google. Verify Directions API is enabled and key domain restrictions include this site.');
             return;
           }
@@ -1464,6 +1570,12 @@ export function DashboardMap({ origin, destination, liveTrackingEnabled = false 
       {isMapActivated && routeError && !configurationError && (
         <div className="absolute top-4 left-1/2 -translate-x-1/2 z-20 bg-red-50 border border-red-200 text-red-700 rounded-full px-4 py-2 text-xs font-medium">
           {routeError}
+        </div>
+      )}
+
+      {isMapActivated && routeNotice && !configurationError && (
+        <div className="absolute top-14 left-1/2 -translate-x-1/2 z-20 bg-amber-50 border border-amber-200 text-amber-800 rounded-full px-4 py-2 text-xs font-medium">
+          {routeNotice}
         </div>
       )}
 
