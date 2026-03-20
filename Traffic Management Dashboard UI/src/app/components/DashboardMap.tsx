@@ -19,6 +19,7 @@ const BRIDGE_CLOSE_HOUR = 18; // 6:00 PM
 const BRIDGE_MATCH_RADIUS_DEGREES = 0.004;
 const STEEL_BRIDGE_COORD = { lat: 17.6409, lng: 121.7015 };
 const BUNTUN_BRIDGE_COORD = { lat: 17.6185, lng: 121.6889 };
+const SOLANA_TOWN_CENTER_COORD = { lat: 17.6528, lng: 121.6907 };
 const TIMED_BRIDGE_KEYWORDS = [
   'tuguegarao solana steel brg',
   'tuguegarao-solana steel bridge',
@@ -39,6 +40,13 @@ const LOCAL_LOCATION_ALIASES: Record<string, string> = {
   solana: 'Solana, Cagayan, Philippines',
   tuguegarao: 'Tuguegarao City, Cagayan, Philippines',
   'tuguegarao city': 'Tuguegarao City, Cagayan, Philippines',
+};
+const LOCAL_LOCATION_COORDINATE_ALIASES: Record<string, { lat: number; lng: number }> = {
+  bunton: BUNTUN_BRIDGE_COORD,
+  buntun: BUNTUN_BRIDGE_COORD,
+  'buntun bridge': BUNTUN_BRIDGE_COORD,
+  'buntun brg': BUNTUN_BRIDGE_COORD,
+  solana: SOLANA_TOWN_CENTER_COORD,
 };
 
 type WaypointCandidate = string | { lat: number; lng: number };
@@ -110,6 +118,54 @@ function applyLocalAddressHint(routeInput: WaypointCandidate, isCagayanTrip: boo
   }
 
   return `${trimmedInput}, Cagayan, Philippines`;
+}
+
+function buildRouteLocationCandidates(
+  routeInput: WaypointCandidate,
+  isCagayanTrip: boolean
+): WaypointCandidate[] {
+  if (typeof routeInput !== 'string') {
+    return [routeInput];
+  }
+
+  const trimmedInput = routeInput.trim();
+  if (!trimmedInput) {
+    return [routeInput];
+  }
+
+  const compactInput = compactAddressText(trimmedInput);
+  const candidates: WaypointCandidate[] = [];
+
+  const coordinateAlias = LOCAL_LOCATION_COORDINATE_ALIASES[compactInput];
+  if (coordinateAlias) {
+    candidates.push(coordinateAlias);
+  }
+
+  const textAlias = LOCAL_LOCATION_ALIASES[compactInput];
+  if (textAlias) {
+    candidates.push(textAlias);
+  }
+
+  candidates.push(applyLocalAddressHint(trimmedInput, isCagayanTrip));
+  candidates.push(trimmedInput);
+
+  const seenFingerprints = new Set<string>();
+  const deduplicatedCandidates: WaypointCandidate[] = [];
+  for (const candidate of candidates) {
+    const fingerprint =
+      typeof candidate === 'string'
+        ? `s:${candidate.trim().toLowerCase()}`
+        : `c:${candidate.lat.toFixed(6)},${candidate.lng.toFixed(6)}`;
+
+    if (seenFingerprints.has(fingerprint)) {
+      continue;
+    }
+
+    seenFingerprints.add(fingerprint);
+    deduplicatedCandidates.push(candidate);
+  }
+
+  return deduplicatedCandidates;
 }
 
 function getManilaHour() {
@@ -508,8 +564,11 @@ export function DashboardMap({ origin, destination, liveTrackingEnabled = false 
             throw new Error('Google Maps runtime not available.');
           }
 
-          const routingOrigin = applyLocalAddressHint(resolvedOrigin, isCagayanTrip);
-          const routingDestination = applyLocalAddressHint(resolvedDestination, isCagayanTrip);
+          const routingOriginCandidates = buildRouteLocationCandidates(resolvedOrigin, isCagayanTrip);
+          const routingDestinationCandidates = buildRouteLocationCandidates(
+            resolvedDestination,
+            isCagayanTrip
+          );
 
           const drivingOptions = gmaps.TrafficModel
             ? {
@@ -518,22 +577,29 @@ export function DashboardMap({ origin, destination, liveTrackingEnabled = false 
               }
             : { departureTime: new Date() };
 
-          const baseRequest = {
-            origin: routingOrigin,
-            destination: routingDestination,
+          const requestDefaults = {
             travelMode: gmaps.TravelMode.DRIVING,
             unitSystem: gmaps.UnitSystem.METRIC,
             drivingOptions,
             region: 'ph',
           };
 
-          const planningRequest = {
-            origin: routingOrigin,
-            destination: routingDestination,
+          const planningRequestDefaults = {
             travelMode: gmaps.TravelMode.DRIVING,
             unitSystem: gmaps.UnitSystem.METRIC,
             region: 'ph',
           };
+
+          const requestPairs: Array<{ origin: WaypointCandidate; destination: WaypointCandidate }> = [];
+          for (const originCandidate of routingOriginCandidates.slice(0, 3)) {
+            for (const destinationCandidate of routingDestinationCandidates.slice(0, 3)) {
+              requestPairs.push({ origin: originCandidate, destination: destinationCandidate });
+            }
+          }
+
+          if (requestPairs.length === 0) {
+            throw new Error('No valid origin/destination candidates available for routing.');
+          }
 
           const bridgeIsOpen = isBridgeOpenNow();
           setBridgeOpenNow(bridgeIsOpen);
@@ -542,6 +608,46 @@ export function DashboardMap({ origin, destination, liveTrackingEnabled = false 
               ? 'Bridge schedule: Steel bridge open 6:00 AM to 6:00 PM (PH time).'
               : 'Bridge schedule: Steel bridge closed now (opens at 6:00 AM, PH time).'
           );
+
+          let primaryResult: any = null;
+          let lastRouteLookupError: any = null;
+          let activeRoutePair = requestPairs[0];
+          for (const pair of requestPairs) {
+            try {
+              const candidateResult = await directionsServiceRef.current.route({
+                ...requestDefaults,
+                origin: pair.origin,
+                destination: pair.destination,
+                provideRouteAlternatives: true,
+              });
+
+              if (cancelled) {
+                return;
+              }
+
+              primaryResult = candidateResult;
+              activeRoutePair = pair;
+              break;
+            } catch (error) {
+              lastRouteLookupError = error;
+            }
+          }
+
+          if (!primaryResult) {
+            throw lastRouteLookupError || new Error('Unable to resolve route with available address candidates.');
+          }
+
+          const baseRequest = {
+            ...requestDefaults,
+            origin: activeRoutePair.origin,
+            destination: activeRoutePair.destination,
+          };
+
+          const planningRequest = {
+            ...planningRequestDefaults,
+            origin: activeRoutePair.origin,
+            destination: activeRoutePair.destination,
+          };
 
           const nextRouteOptions: RouteOption[] = [];
           const seenRouteFingerprints = new Set<string>();
@@ -636,15 +742,6 @@ export function DashboardMap({ origin, destination, liveTrackingEnabled = false 
               durationValue <= baselineDurationValue * MAX_ALLOWED_FORCED_DETOUR_RATIO
             );
           };
-
-          const primaryResult = await directionsServiceRef.current.route({
-            ...baseRequest,
-            provideRouteAlternatives: true,
-          });
-
-          if (cancelled) {
-            return;
-          }
 
           const baselineLeg = primaryResult?.routes?.[0]?.legs?.[0];
           const baselineDistanceValue = Number(
@@ -810,6 +907,16 @@ export function DashboardMap({ origin, destination, liveTrackingEnabled = false 
           setRouteOptions([]);
           setSelectedRouteId(null);
           setRouteNotice(null);
+          const errorText = String(error?.message || '').toLowerCase();
+          if (
+            errorText.includes('request_denied') ||
+            errorText.includes('not authorized') ||
+            errorText.includes('api project')
+          ) {
+            setRouteError('Route request was denied by Google. Verify Directions API is enabled and key domain restrictions include this site.');
+            return;
+          }
+
           const troubleshootingHint = isCagayanTrip
             ? 'Try specific local names like "Buntun Bridge, Tuguegarao" and "Solana, Cagayan".'
             : 'Try a more specific address or coordinates like "17.6185, 121.6889".';
