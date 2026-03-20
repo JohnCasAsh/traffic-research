@@ -2,16 +2,9 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { importLibrary, setOptions } from '@googlemaps/js-api-loader';
 import { motion } from 'motion/react';
 import { MapPin } from 'lucide-react';
-import {
-  formatLocationAccuracy,
-  MAX_LIVE_TRACKING_ACCURACY_METERS,
-  parseCoordinateInput,
-} from '../location';
 
 const DEFAULT_CENTER = { lat: 17.6132, lng: 121.7270 }; // Tuguegarao City
 const DEFAULT_ZOOM = 12;
-const LOCAL_TRAFFIC_STREAM_RADIUS_KM = 5;
-const TRAFFIC_STREAM_RECENTER_METERS = 800;
 const MAX_ROUTE_OPTIONS = 3;
 const MAX_ALLOWED_FORCED_DETOUR_RATIO = 1.4;
 const BRIDGE_OPEN_HOUR = 6; // 6:00 AM
@@ -19,7 +12,6 @@ const BRIDGE_CLOSE_HOUR = 18; // 6:00 PM
 const BRIDGE_MATCH_RADIUS_DEGREES = 0.004;
 const STEEL_BRIDGE_COORD = { lat: 17.6409, lng: 121.7015 };
 const BUNTUN_BRIDGE_COORD = { lat: 17.6185, lng: 121.6889 };
-const SOLANA_TOWN_CENTER_COORD = { lat: 17.6528, lng: 121.6907 };
 const TIMED_BRIDGE_KEYWORDS = [
   'tuguegarao solana steel brg',
   'tuguegarao-solana steel bridge',
@@ -32,22 +24,6 @@ const TIMED_BRIDGE_KEYWORDS = [
 ];
 const SECOND_BRIDGE_KEYWORDS = ['buntun bridge', 'buntun brg'];
 const CAGAYAN_AREA_HINTS = ['caggay', 'tuguegarao', 'solana', 'cagayan'];
-const LOCAL_LOCATION_ALIASES: Record<string, string> = {
-  bunton: 'Buntun Bridge, Tuguegarao City, Cagayan, Philippines',
-  buntun: 'Buntun Bridge, Tuguegarao City, Cagayan, Philippines',
-  'buntun bridge': 'Buntun Bridge, Tuguegarao City, Cagayan, Philippines',
-  'buntun brg': 'Buntun Bridge, Tuguegarao City, Cagayan, Philippines',
-  solana: 'Solana, Cagayan, Philippines',
-  tuguegarao: 'Tuguegarao City, Cagayan, Philippines',
-  'tuguegarao city': 'Tuguegarao City, Cagayan, Philippines',
-};
-const LOCAL_LOCATION_COORDINATE_ALIASES: Record<string, { lat: number; lng: number }> = {
-  bunton: BUNTUN_BRIDGE_COORD,
-  buntun: BUNTUN_BRIDGE_COORD,
-  'buntun bridge': BUNTUN_BRIDGE_COORD,
-  'buntun brg': BUNTUN_BRIDGE_COORD,
-  solana: SOLANA_TOWN_CENTER_COORD,
-};
 
 type WaypointCandidate = string | { lat: number; lng: number };
 type ForcedBridgeWaypoint = {
@@ -84,131 +60,6 @@ function includesAnyKeyword(text: string, keywords: string[]) {
 function isLikelyCagayanTrip(origin: string, destination: string) {
   const combined = `${normalizeText(origin)} ${normalizeText(destination)}`;
   return includesAnyKeyword(combined, CAGAYAN_AREA_HINTS);
-}
-
-function compactAddressText(value: string) {
-  return normalizeText(value)
-    .replace(/[.,]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
-function applyLocalAddressHint(routeInput: WaypointCandidate, isCagayanTrip: boolean): WaypointCandidate {
-  if (typeof routeInput !== 'string') {
-    return routeInput;
-  }
-
-  const trimmedInput = routeInput.trim();
-  if (!trimmedInput) {
-    return routeInput;
-  }
-
-  const compactInput = compactAddressText(trimmedInput);
-  const aliasedValue = LOCAL_LOCATION_ALIASES[compactInput];
-  if (aliasedValue) {
-    return aliasedValue;
-  }
-
-  if (!isCagayanTrip) {
-    return trimmedInput;
-  }
-
-  if (trimmedInput.includes(',') || compactInput.includes('philippines') || compactInput.includes('cagayan')) {
-    return trimmedInput;
-  }
-
-  return `${trimmedInput}, Cagayan, Philippines`;
-}
-
-function buildRouteLocationCandidates(
-  routeInput: WaypointCandidate,
-  isCagayanTrip: boolean
-): WaypointCandidate[] {
-  if (typeof routeInput !== 'string') {
-    return [routeInput];
-  }
-
-  const trimmedInput = routeInput.trim();
-  if (!trimmedInput) {
-    return [routeInput];
-  }
-
-  const compactInput = compactAddressText(trimmedInput);
-  const candidates: WaypointCandidate[] = [];
-
-  const coordinateAlias = LOCAL_LOCATION_COORDINATE_ALIASES[compactInput];
-  if (coordinateAlias) {
-    candidates.push(coordinateAlias);
-  }
-
-  const textAlias = LOCAL_LOCATION_ALIASES[compactInput];
-  if (textAlias) {
-    candidates.push(textAlias);
-  }
-
-  candidates.push(applyLocalAddressHint(trimmedInput, isCagayanTrip));
-  candidates.push(trimmedInput);
-
-  const seenFingerprints = new Set<string>();
-  const deduplicatedCandidates: WaypointCandidate[] = [];
-  for (const candidate of candidates) {
-    const fingerprint =
-      typeof candidate === 'string'
-        ? `s:${candidate.trim().toLowerCase()}`
-        : `c:${candidate.lat.toFixed(6)},${candidate.lng.toFixed(6)}`;
-
-    if (seenFingerprints.has(fingerprint)) {
-      continue;
-    }
-
-    seenFingerprints.add(fingerprint);
-    deduplicatedCandidates.push(candidate);
-  }
-
-  return deduplicatedCandidates;
-}
-
-function resolveCandidateCoordinate(candidate: WaypointCandidate) {
-  if (typeof candidate !== 'string') {
-    return candidate;
-  }
-
-  const parsedCoordinate = parseCoordinateInput(candidate);
-  if (parsedCoordinate) {
-    return parsedCoordinate;
-  }
-
-  const compactInput = compactAddressText(candidate);
-  return LOCAL_LOCATION_COORDINATE_ALIASES[compactInput] || null;
-}
-
-function formatDistanceKilometersText(distanceMeters: number) {
-  if (!Number.isFinite(distanceMeters) || distanceMeters <= 0) {
-    return 'N/A';
-  }
-
-  const distanceKm = distanceMeters / 1000;
-  if (distanceKm >= 10) {
-    return `${distanceKm.toFixed(0)} km`;
-  }
-
-  return `${distanceKm.toFixed(1)} km`;
-}
-
-function formatApproximateDurationText(distanceMeters: number) {
-  if (!Number.isFinite(distanceMeters) || distanceMeters <= 0) {
-    return 'N/A';
-  }
-
-  const estimateKph = 28;
-  const totalMinutes = Math.max(1, Math.round((distanceMeters / 1000 / estimateKph) * 60));
-  if (totalMinutes < 60) {
-    return `~${totalMinutes} min`;
-  }
-
-  const hours = Math.floor(totalMinutes / 60);
-  const minutes = totalMinutes % 60;
-  return minutes === 0 ? `~${hours} hr` : `~${hours} hr ${minutes} min`;
 }
 
 function getManilaHour() {
@@ -274,26 +125,6 @@ function routeUsesTimedBridge(route: any) {
 
 function routeUsesSecondBridge(route: any) {
   return routeContainsKeyword(route, SECOND_BRIDGE_KEYWORDS) || routePassesNearCoordinate(route, BUNTUN_BRIDGE_COORD);
-}
-
-function distanceBetweenPointsMeters(
-  start: { lat: number; lng: number },
-  end: { lat: number; lng: number }
-) {
-  const earthRadiusMeters = 6371000;
-  const toRadians = (value: number) => (value * Math.PI) / 180;
-
-  const deltaLat = toRadians(end.lat - start.lat);
-  const deltaLng = toRadians(end.lng - start.lng);
-  const startLatRadians = toRadians(start.lat);
-  const endLatRadians = toRadians(end.lat);
-
-  const a =
-    Math.sin(deltaLat / 2) ** 2 +
-    Math.cos(startLatRadians) * Math.cos(endLatRadians) * Math.sin(deltaLng / 2) ** 2;
-
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return earthRadiusMeters * c;
 }
 
 function buildRouteFingerprint(route: any) {
@@ -376,7 +207,6 @@ export function DashboardMap({ origin, destination, liveTrackingEnabled = false 
   const mapRef = useRef<any>(null);
   const directionsServiceRef = useRef<any>(null);
   const directionsRendererRef = useRef<any>(null);
-  const fallbackPolylineRef = useRef<any | null>(null);
   const liveMarkersRef = useRef<Map<string, any>>(new Map());
   const livePolylinesRef = useRef<Map<string, any[]>>(new Map());
 
@@ -395,15 +225,6 @@ export function DashboardMap({ origin, destination, liveTrackingEnabled = false 
   const [trackingStatusMessage, setTrackingStatusMessage] = useState<string | null>(null);
   const [activeTrafficAlerts, setActiveTrafficAlerts] = useState<LiveTrackingAlert[]>([]);
   const [trafficLevelCounts, setTrafficLevelCounts] = useState({ low: 0, moderate: 0, heavy: 0 });
-  const [localTrackingPosition, setLocalTrackingPosition] = useState<{ lat: number; lng: number } | null>(null);
-  const [trafficStreamAnchor, setTrafficStreamAnchor] = useState<{ lat: number; lng: number } | null>(null);
-
-  const clearFallbackPolyline = () => {
-    if (fallbackPolylineRef.current) {
-      fallbackPolylineRef.current.setMap(null);
-      fallbackPolylineRef.current = null;
-    }
-  };
 
   const mapsApiKey = useMemo(() => {
     return (
@@ -443,58 +264,6 @@ export function DashboardMap({ origin, destination, liveTrackingEnabled = false 
 
   const normalizedOrigin = origin.trim();
   const normalizedDestination = destination.trim();
-  const resolvedOrigin = useMemo(
-    () => parseCoordinateInput(normalizedOrigin) || normalizedOrigin,
-    [normalizedOrigin]
-  );
-  const resolvedDestination = useMemo(
-    () => parseCoordinateInput(normalizedDestination) || normalizedDestination,
-    [normalizedDestination]
-  );
-  const originCoordinate = useMemo(() => parseCoordinateInput(normalizedOrigin), [normalizedOrigin]);
-  const activeRouteOption = useMemo(
-    () => routeOptions.find((option) => option.routeId === selectedRouteId) || routeOptions[0] || null,
-    [routeOptions, selectedRouteId]
-  );
-  const routeStartCoordinate = useMemo(() => {
-    const startLocation = activeRouteOption?.directionsResult?.routes?.[activeRouteOption.resultRouteIndex]?.legs?.[0]?.start_location;
-    return getPointLatLng(startLocation);
-  }, [activeRouteOption]);
-  const trafficFocusCoordinate = localTrackingPosition || originCoordinate || routeStartCoordinate;
-
-  useEffect(() => {
-    if (!trafficFocusCoordinate) {
-      setTrafficStreamAnchor(null);
-      return;
-    }
-
-    setTrafficStreamAnchor((currentAnchor) => {
-      if (!currentAnchor) {
-        return trafficFocusCoordinate;
-      }
-
-      const movedMeters = distanceBetweenPointsMeters(currentAnchor, trafficFocusCoordinate);
-      if (movedMeters < TRAFFIC_STREAM_RECENTER_METERS) {
-        return currentAnchor;
-      }
-
-      return trafficFocusCoordinate;
-    });
-  }, [trafficFocusCoordinate]);
-
-  const trafficStreamUrl = useMemo(() => {
-    if (!apiBaseUrl || !trafficStreamAnchor) {
-      return null;
-    }
-
-    const query = new URLSearchParams({
-      lat: trafficStreamAnchor.lat.toFixed(6),
-      lng: trafficStreamAnchor.lng.toFixed(6),
-      radiusKm: String(LOCAL_TRAFFIC_STREAM_RADIUS_KM),
-    });
-
-    return `${apiBaseUrl}/api/tracking/stream?${query.toString()}`;
-  }, [apiBaseUrl, trafficStreamAnchor]);
 
   useEffect(() => {
     if (!isMapActivated) {
@@ -565,7 +334,6 @@ export function DashboardMap({ origin, destination, liveTrackingEnabled = false 
 
     return () => {
       disposed = true;
-      clearFallbackPolyline();
       if (directionsRendererRef.current) {
         directionsRendererRef.current.setMap(null);
       }
@@ -587,7 +355,6 @@ export function DashboardMap({ origin, destination, liveTrackingEnabled = false 
     }
 
     if (!normalizedOrigin || !normalizedDestination) {
-      clearFallbackPolyline();
       directionsRendererRef.current.set('directions', null);
       setRouteSummary(null);
       setRouteOptions([]);
@@ -600,7 +367,6 @@ export function DashboardMap({ origin, destination, liveTrackingEnabled = false 
     }
 
     let cancelled = false;
-    clearFallbackPolyline();
     setRouteError(null);
     const debounceHandle = window.setTimeout(() => {
       if (cancelled) {
@@ -608,13 +374,6 @@ export function DashboardMap({ origin, destination, liveTrackingEnabled = false 
       }
 
       const fetchRouteOptions = async () => {
-        const isCagayanTrip = isLikelyCagayanTrip(normalizedOrigin, normalizedDestination);
-        const routingOriginCandidates = buildRouteLocationCandidates(resolvedOrigin, isCagayanTrip);
-        const routingDestinationCandidates = buildRouteLocationCandidates(
-          resolvedDestination,
-          isCagayanTrip
-        );
-
         try {
           setIsRouting(true);
 
@@ -623,6 +382,7 @@ export function DashboardMap({ origin, destination, liveTrackingEnabled = false 
             throw new Error('Google Maps runtime not available.');
           }
 
+          const isCagayanTrip = isLikelyCagayanTrip(normalizedOrigin, normalizedDestination);
           const drivingOptions = gmaps.TrafficModel
             ? {
                 departureTime: new Date(),
@@ -630,29 +390,20 @@ export function DashboardMap({ origin, destination, liveTrackingEnabled = false 
               }
             : { departureTime: new Date() };
 
-          const requestDefaults = {
+          const baseRequest = {
+            origin: normalizedOrigin,
+            destination: normalizedDestination,
             travelMode: gmaps.TravelMode.DRIVING,
             unitSystem: gmaps.UnitSystem.METRIC,
             drivingOptions,
-            region: 'ph',
           };
 
-          const planningRequestDefaults = {
+          const planningRequest = {
+            origin: normalizedOrigin,
+            destination: normalizedDestination,
             travelMode: gmaps.TravelMode.DRIVING,
             unitSystem: gmaps.UnitSystem.METRIC,
-            region: 'ph',
           };
-
-          const requestPairs: Array<{ origin: WaypointCandidate; destination: WaypointCandidate }> = [];
-          for (const originCandidate of routingOriginCandidates.slice(0, 3)) {
-            for (const destinationCandidate of routingDestinationCandidates.slice(0, 3)) {
-              requestPairs.push({ origin: originCandidate, destination: destinationCandidate });
-            }
-          }
-
-          if (requestPairs.length === 0) {
-            throw new Error('No valid origin/destination candidates available for routing.');
-          }
 
           const bridgeIsOpen = isBridgeOpenNow();
           setBridgeOpenNow(bridgeIsOpen);
@@ -661,46 +412,6 @@ export function DashboardMap({ origin, destination, liveTrackingEnabled = false 
               ? 'Bridge schedule: Steel bridge open 6:00 AM to 6:00 PM (PH time).'
               : 'Bridge schedule: Steel bridge closed now (opens at 6:00 AM, PH time).'
           );
-
-          let primaryResult: any = null;
-          let lastRouteLookupError: any = null;
-          let activeRoutePair = requestPairs[0];
-          for (const pair of requestPairs) {
-            try {
-              const candidateResult = await directionsServiceRef.current.route({
-                ...requestDefaults,
-                origin: pair.origin,
-                destination: pair.destination,
-                provideRouteAlternatives: true,
-              });
-
-              if (cancelled) {
-                return;
-              }
-
-              primaryResult = candidateResult;
-              activeRoutePair = pair;
-              break;
-            } catch (error) {
-              lastRouteLookupError = error;
-            }
-          }
-
-          if (!primaryResult) {
-            throw lastRouteLookupError || new Error('Unable to resolve route with available address candidates.');
-          }
-
-          const baseRequest = {
-            ...requestDefaults,
-            origin: activeRoutePair.origin,
-            destination: activeRoutePair.destination,
-          };
-
-          const planningRequest = {
-            ...planningRequestDefaults,
-            origin: activeRoutePair.origin,
-            destination: activeRoutePair.destination,
-          };
 
           const nextRouteOptions: RouteOption[] = [];
           const seenRouteFingerprints = new Set<string>();
@@ -795,6 +506,15 @@ export function DashboardMap({ origin, destination, liveTrackingEnabled = false 
               durationValue <= baselineDurationValue * MAX_ALLOWED_FORCED_DETOUR_RATIO
             );
           };
+
+          const primaryResult = await directionsServiceRef.current.route({
+            ...baseRequest,
+            provideRouteAlternatives: true,
+          });
+
+          if (cancelled) {
+            return;
+          }
 
           const baselineLeg = primaryResult?.routes?.[0]?.legs?.[0];
           const baselineDistanceValue = Number(
@@ -945,7 +665,6 @@ export function DashboardMap({ origin, destination, liveTrackingEnabled = false 
             routeLabel: `Route ${index + 1}`,
           }));
 
-          clearFallbackPolyline();
           setRouteError(null);
           setRouteOptions(relabeledRouteOptions);
           setSelectedRouteId(relabeledRouteOptions[0].routeId);
@@ -961,72 +680,7 @@ export function DashboardMap({ origin, destination, liveTrackingEnabled = false 
           setRouteOptions([]);
           setSelectedRouteId(null);
           setRouteNotice(null);
-          const errorText = String(error?.message || '').toLowerCase();
-          if (
-            errorText.includes('request_denied') ||
-            errorText.includes('not authorized') ||
-            errorText.includes('api project')
-          ) {
-            const fallbackOriginCoordinate =
-              routingOriginCandidates
-                .map((candidate) => resolveCandidateCoordinate(candidate))
-                .find((candidate) => Boolean(candidate)) || null;
-            const fallbackDestinationCoordinate =
-              routingDestinationCandidates
-                .map((candidate) => resolveCandidateCoordinate(candidate))
-                .find((candidate) => Boolean(candidate)) || null;
-            const gmaps = (window as any).google?.maps;
-
-            if (
-              fallbackOriginCoordinate &&
-              fallbackDestinationCoordinate &&
-              gmaps?.Polyline &&
-              gmaps?.LatLngBounds &&
-              mapRef.current
-            ) {
-              clearFallbackPolyline();
-              fallbackPolylineRef.current = new gmaps.Polyline({
-                map: mapRef.current,
-                path: [fallbackOriginCoordinate, fallbackDestinationCoordinate],
-                geodesic: true,
-                strokeColor: '#0ea5e9',
-                strokeOpacity: 0.95,
-                strokeWeight: 4,
-              });
-
-              const bounds = new gmaps.LatLngBounds();
-              bounds.extend(fallbackOriginCoordinate);
-              bounds.extend(fallbackDestinationCoordinate);
-              mapRef.current.fitBounds(bounds);
-
-              const directDistanceMeters = distanceBetweenPointsMeters(
-                fallbackOriginCoordinate,
-                fallbackDestinationCoordinate
-              );
-
-              setRouteSummary({
-                routeLabel: 'Route 1',
-                summaryText: 'Approximate direct route (Google Directions denied)',
-                distanceText: formatDistanceKilometersText(directDistanceMeters),
-                durationText: formatApproximateDurationText(directDistanceMeters),
-                usesSteelBridge: false,
-                usesSecondBridge: false,
-              });
-              setRouteOptions([]);
-              setSelectedRouteId(null);
-              setRouteNotice('Google denied live road routing for this key. Showing an approximate straight-line estimate.');
-              setRouteError(null);
-              return;
-            }
-
-            setRouteError('Route request was denied by Google. Verify Directions API is enabled and key domain restrictions include this site.');
-            return;
-          }
-
-          const troubleshootingHint = isCagayanTrip
-            ? 'Try specific local names like "Buntun Bridge, Tuguegarao" and "Solana, Cagayan".'
-            : 'Try a more specific address or coordinates like "17.6185, 121.6889".';
-          setRouteError(`Unable to plot this route. ${troubleshootingHint}`);
+          setRouteError('Unable to plot this route. Check the addresses and try again.');
         } finally {
           if (!cancelled) {
             setIsRouting(false);
@@ -1254,27 +908,8 @@ export function DashboardMap({ origin, destination, liveTrackingEnabled = false 
       setTrafficLevelCounts(nextCounts);
     };
 
-    if (!trafficStreamUrl) {
-      for (const marker of liveMarkersRef.current.values()) {
-        marker.setMap(null);
-      }
-      liveMarkersRef.current.clear();
-
-      for (const polylineList of livePolylinesRef.current.values()) {
-        for (const polyline of polylineList) {
-          polyline.setMap(null);
-        }
-      }
-      livePolylinesRef.current.clear();
-
-      setTrafficLevelCounts({ low: 0, moderate: 0, heavy: 0 });
-      setActiveTrafficAlerts([]);
-      setStreamConnected(false);
-      return;
-    }
-
     let disposed = false;
-    const stream = new EventSource(trafficStreamUrl);
+    const stream = new EventSource(`${apiBaseUrl}/api/tracking/stream`);
 
     const onSnapshot = (event: MessageEvent) => {
       if (disposed) {
@@ -1342,7 +977,7 @@ export function DashboardMap({ origin, destination, liveTrackingEnabled = false 
       setActiveTrafficAlerts([]);
       clearMarkers();
     };
-  }, [apiBaseUrl, isMapActivated, localVehicleId, mapReady, trafficStreamUrl]);
+  }, [apiBaseUrl, isMapActivated, localVehicleId, mapReady]);
 
   useEffect(() => {
     if (!liveTrackingEnabled) {
@@ -1365,29 +1000,8 @@ export function DashboardMap({ origin, destination, liveTrackingEnabled = false 
     const watchId = navigator.geolocation.watchPosition(
       (position) => {
         const coords = position.coords;
-        const accuracyMeters = Number(coords.accuracy);
-        if (
-          Number.isFinite(accuracyMeters) &&
-          accuracyMeters > MAX_LIVE_TRACKING_ACCURACY_METERS
-        ) {
-          const accuracyText = formatLocationAccuracy(accuracyMeters);
-          setTrackingStatusMessage(
-            accuracyText
-              ? `Waiting for a more accurate GPS fix before sharing live updates. Current accuracy is about ${accuracyText}.`
-              : 'Waiting for a more accurate GPS fix before sharing live updates.'
-          );
-          return;
-        }
-
         const speedMps = Number(coords.speed);
         const speedKph = Number.isFinite(speedMps) && speedMps > 0 ? speedMps * 3.6 : 0;
-
-        setLocalTrackingPosition({
-          lat: coords.latitude,
-          lng: coords.longitude,
-        });
-
-        setTrackingStatusMessage('Live tracking enabled. Sharing location updates.');
 
         fetch(`${apiBaseUrl}/api/tracking/update`, {
           method: 'POST',
@@ -1407,7 +1021,7 @@ export function DashboardMap({ origin, destination, liveTrackingEnabled = false 
       },
       (error) => {
         if (error.code === error.PERMISSION_DENIED) {
-          setTrackingStatusMessage('PERMISSION_DENIED');
+          setTrackingStatusMessage('Location permission was denied. Enable location access to track live traffic.');
           return;
         }
 
@@ -1415,7 +1029,7 @@ export function DashboardMap({ origin, destination, liveTrackingEnabled = false 
       },
       {
         enableHighAccuracy: true,
-        maximumAge: 0,
+        maximumAge: 5000,
         timeout: 12000,
       }
     );
@@ -1424,14 +1038,6 @@ export function DashboardMap({ origin, destination, liveTrackingEnabled = false 
       navigator.geolocation.clearWatch(watchId);
     };
   }, [apiBaseUrl, liveTrackingEnabled, localVehicleId]);
-
-  useEffect(() => {
-    if (liveTrackingEnabled) {
-      return;
-    }
-
-    setLocalTrackingPosition(null);
-  }, [liveTrackingEnabled]);
 
   const changeZoom = (delta: number) => {
     const map = mapRef.current;
@@ -1573,38 +1179,13 @@ export function DashboardMap({ origin, destination, liveTrackingEnabled = false 
         </div>
       )}
 
-      {isMapActivated && routeNotice && !configurationError && (
-        <div className="absolute top-14 left-1/2 -translate-x-1/2 z-20 bg-amber-50 border border-amber-200 text-amber-800 rounded-full px-4 py-2 text-xs font-medium">
-          {routeNotice}
-        </div>
-      )}
-
       {isMapActivated && liveTrackingEnabled && !configurationError && (
         <div className="absolute top-20 right-4 z-20 max-w-[260px] rounded-lg border border-slate-200 bg-white/95 px-3 py-2 text-[11px] text-slate-700 shadow">
           <div className="font-semibold text-slate-800">Live Tracking</div>
           <div className={streamConnected ? 'text-emerald-700' : 'text-amber-700'}>
             {streamConnected ? 'Traffic feed connected' : 'Connecting traffic feed...'}
           </div>
-          {trackingStatusMessage === 'PERMISSION_DENIED' ? (
-            <div className="mt-2 rounded border border-red-200 bg-red-50 p-2 text-[10px] text-red-800">
-              <div className="mb-1 font-semibold">Location permission is blocked.</div>
-              <div className="mb-1 font-medium">To re-enable:</div>
-              <div className="font-semibold">Android (Chrome):</div>
-              <div>Tap the lock icon in the address bar → Permissions → Location → Allow</div>
-              <div className="mt-1 font-semibold">iPhone/iPad (Safari):</div>
-              <div>Settings → Safari → Location → Ask or Allow</div>
-              <div className="mt-1 font-semibold">iPhone/iPad (Chrome):</div>
-              <div>Settings → Chrome → Location → While Using</div>
-              <button
-                onClick={() => window.location.reload()}
-                className="mt-2 w-full rounded bg-red-600 px-2 py-1 text-[10px] font-semibold text-white"
-              >
-                Reload after granting permission
-              </button>
-            </div>
-          ) : trackingStatusMessage ? (
-            <div className="mt-1 text-slate-600">{trackingStatusMessage}</div>
-          ) : null}
+          {trackingStatusMessage && <div className="mt-1 text-slate-600">{trackingStatusMessage}</div>}
         </div>
       )}
 
