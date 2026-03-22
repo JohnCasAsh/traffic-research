@@ -13,6 +13,7 @@ import {
   Play,
   Star,
   CheckCircle,
+  ChevronDown,
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 
@@ -38,7 +39,7 @@ export function LandingPage() {
       setCounters({
         routes: Math.floor(targets.routes * progress),
         savings: Math.floor(targets.savings * progress),
-        co2: (targets.co2 * progress).toFixed(1),
+        co2: Math.round(targets.co2 * progress * 10) / 10,
         users: Math.floor(targets.users * progress),
       });
 
@@ -55,6 +56,14 @@ export function LandingPage() {
     <div className="bg-white">
       {/* Hero Section */}
       <div className="relative overflow-hidden bg-gradient-to-br from-teal-50 via-blue-50 to-slate-50">
+        {/* Dot grid background */}
+        <div
+          className="absolute inset-0 pointer-events-none"
+          style={{
+            backgroundImage: 'radial-gradient(circle, rgba(15, 118, 110, 0.15) 1.5px, transparent 1.5px)',
+            backgroundSize: '28px 28px',
+          }}
+        />
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20 lg:py-28">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
             {/* Left Content */}
@@ -69,6 +78,10 @@ export function LandingPage() {
                 transition={{ delay: 0.2 }}
                 className="inline-flex items-center space-x-2 px-4 py-2 bg-white rounded-full shadow-sm border border-teal-100 mb-6"
               >
+                <span className="relative flex h-2 w-2 flex-shrink-0">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+                </span>
                 <Leaf className="w-4 h-4 text-green-600" />
                 <span className="text-sm text-slate-700">Sustainable Transportation Research</span>
               </motion.div>
@@ -105,8 +118,13 @@ export function LandingPage() {
               >
                 <Link
                   to="/signup"
-                  className="px-8 py-4 bg-gradient-to-r from-teal-500 to-blue-600 text-white rounded-xl font-medium hover:shadow-lg hover:scale-105 transition-all flex items-center space-x-2 group"
+                  className="relative overflow-hidden px-8 py-4 bg-gradient-to-r from-teal-500 to-blue-600 text-white rounded-xl font-medium hover:shadow-lg hover:scale-105 transition-all flex items-center space-x-2 group"
                 >
+                  <motion.span
+                    className="absolute inset-0 -skew-x-12 bg-gradient-to-r from-transparent via-white/25 to-transparent"
+                    animate={{ x: ['-100%', '200%'] }}
+                    transition={{ duration: 2.5, repeat: Infinity, ease: 'linear', repeatDelay: 1 }}
+                  />
                   <span>Start Optimizing Routes</span>
                   <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
                 </Link>
@@ -161,43 +179,96 @@ export function LandingPage() {
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: 1, duration: 0.5 }}
-                  className="absolute top-6 left-6 bg-white rounded-lg p-4 shadow-xl"
+                  className="absolute top-6 left-6"
                 >
-                  <div className="flex items-center space-x-2">
-                    <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
-                      <Leaf className="w-5 h-5 text-green-600" />
+                  <motion.div
+                    animate={{ y: [0, -8, 0] }}
+                    transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut', delay: 1.5 }}
+                    className="bg-white rounded-lg p-4 shadow-xl"
+                  >
+                    <div className="flex items-center space-x-2">
+                      <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
+                        <Leaf className="w-5 h-5 text-green-600" />
+                      </div>
+                      <div>
+                        <div className="text-xs text-slate-600">CO₂ Reduced</div>
+                        <div className="text-lg font-bold text-slate-900">{counters.co2}T</div>
+                      </div>
                     </div>
-                    <div>
-                      <div className="text-xs text-slate-600">CO₂ Reduced</div>
-                      <div className="text-lg font-bold text-slate-900">{counters.co2}T</div>
-                    </div>
-                  </div>
+                  </motion.div>
                 </motion.div>
 
                 <motion.div
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: 1.2, duration: 0.5 }}
-                  className="absolute bottom-6 right-6 bg-white rounded-lg p-4 shadow-xl"
+                  className="absolute bottom-6 right-6"
                 >
-                  <div className="flex items-center space-x-2">
-                    <div className="w-10 h-10 bg-teal-100 rounded-lg flex items-center justify-center">
-                      <DollarSign className="w-5 h-5 text-teal-600" />
+                  <motion.div
+                    animate={{ y: [0, 8, 0] }}
+                    transition={{ duration: 3.5, repeat: Infinity, ease: 'easeInOut', delay: 2 }}
+                    className="bg-white rounded-lg p-4 shadow-xl"
+                  >
+                    <div className="flex items-center space-x-2">
+                      <div className="w-10 h-10 bg-teal-100 rounded-lg flex items-center justify-center">
+                        <DollarSign className="w-5 h-5 text-teal-600" />
+                      </div>
+                      <div>
+                        <div className="text-xs text-slate-600">Cost Saved</div>
+                        <div className="text-lg font-bold text-slate-900">₱8,942</div>
+                      </div>
                     </div>
-                    <div>
-                      <div className="text-xs text-slate-600">Cost Saved</div>
-                      <div className="text-lg font-bold text-slate-900">₱8,942</div>
-                    </div>
-                  </div>
+                  </motion.div>
                 </motion.div>
               </div>
             </motion.div>
           </div>
+
+          {/* Scroll Down Indicator */}
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 2.5, duration: 0.8 }}
+            className="flex flex-col items-center gap-1 text-slate-400 mt-12 pb-4"
+          >
+            <span className="text-xs font-medium tracking-wide">Scroll to explore</span>
+            <motion.div
+              animate={{ y: [0, 6, 0] }}
+              transition={{ duration: 1.5, repeat: Infinity, ease: 'easeInOut' }}
+            >
+              <ChevronDown className="w-5 h-5" />
+            </motion.div>
+          </motion.div>
         </div>
 
-        {/* Decorative Elements */}
-        <div className="absolute top-0 right-0 w-96 h-96 bg-teal-200 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-pulse"></div>
-        <div className="absolute bottom-0 left-0 w-96 h-96 bg-blue-200 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-pulse" style={{ animationDelay: '1s' }}></div>
+        {/* Decorative Animated Orbs */}
+        <motion.div
+          animate={{
+            x: [0, 40, -20, 0],
+            y: [0, -30, 20, 0],
+            scale: [1, 1.15, 0.9, 1],
+          }}
+          transition={{ duration: 20, repeat: Infinity, ease: 'easeInOut' }}
+          className="absolute top-0 right-0 w-96 h-96 bg-teal-200 rounded-full mix-blend-multiply filter blur-3xl opacity-20"
+        />
+        <motion.div
+          animate={{
+            x: [0, -40, 20, 0],
+            y: [0, 30, -20, 0],
+            scale: [1, 0.9, 1.15, 1],
+          }}
+          transition={{ duration: 25, repeat: Infinity, ease: 'easeInOut', delay: 3 }}
+          className="absolute bottom-0 left-0 w-96 h-96 bg-blue-200 rounded-full mix-blend-multiply filter blur-3xl opacity-20"
+        />
+        <motion.div
+          animate={{
+            x: [0, -20, 30, 0],
+            y: [0, 20, -30, 0],
+            scale: [1, 1.1, 0.95, 1],
+          }}
+          transition={{ duration: 18, repeat: Infinity, ease: 'easeInOut', delay: 8 }}
+          className="absolute top-1/2 left-1/3 w-64 h-64 bg-purple-200 rounded-full mix-blend-multiply filter blur-3xl opacity-10"
+        />
       </div>
 
       {/* Features Section */}

@@ -1,11 +1,21 @@
 import { Outlet, Link, useLocation } from 'react-router';
 import { Navigation, MapPin, BarChart3, Route, LogOut, UserRound, Gauge } from 'lucide-react';
+import { motion, useScroll } from 'motion/react';
+import { useState, useEffect } from 'react';
 import { useAuth, type AuthUser } from '../auth';
 
 export function Layout() {
   const location = useLocation();
   const isLanding = location.pathname === '/';
   const { isAuthenticated, logout, user } = useAuth();
+  const { scrollYProgress } = useScroll();
+  const [scrolled, setScrolled] = useState(false);
+
+  useEffect(() => {
+    const handler = () => setScrolled(window.scrollY > 20);
+    window.addEventListener('scroll', handler, { passive: true });
+    return () => window.removeEventListener('scroll', handler);
+  }, []);
   const accountDisplayName = [user?.firstName?.trim(), user?.lastName?.trim()]
     .filter(Boolean)
     .join(' ') || user?.email || 'Profile';
@@ -13,13 +23,26 @@ export function Layout() {
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col">
       {/* Navigation Bar */}
-      <nav className="bg-white border-b border-slate-200 sticky top-0 z-50 shadow-sm">
+      <nav className={`relative sticky top-0 z-50 transition-all duration-300 ${
+        scrolled
+          ? 'bg-white/90 backdrop-blur-md border-b border-slate-200/80 shadow-lg'
+          : 'bg-white border-b border-slate-200 shadow-sm'
+      }`}>
+        {/* Scroll Progress Bar */}
+        <motion.div
+          className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-teal-500 via-blue-500 to-teal-400 origin-left"
+          style={{ scaleX: scrollYProgress }}
+        />
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             <Link to="/" className="flex items-center space-x-2">
-              <div className="w-10 h-10 bg-gradient-to-br from-teal-500 to-blue-600 rounded-lg flex items-center justify-center">
+              <motion.div
+                whileHover={{ rotate: 15, scale: 1.1 }}
+                transition={{ type: 'spring', stiffness: 400, damping: 20 }}
+                className="w-10 h-10 bg-gradient-to-br from-teal-500 to-blue-600 rounded-lg flex items-center justify-center"
+              >
                 <Navigation className="w-6 h-6 text-white" />
-              </div>
+              </motion.div>
               <div>
                 <div className="font-bold text-slate-900">SmartRoute</div>
                 <div className="text-xs text-slate-500">Energy & Cost Optimizer</div>
@@ -168,7 +191,7 @@ function NavLink({ to, icon, children }: { to: string; icon: React.ReactNode; ch
   return (
     <Link
       to={to}
-      className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition-colors ${
+      className={`relative flex items-center space-x-2 px-4 py-2 rounded-lg transition-colors ${
         isActive
           ? 'bg-teal-50 text-teal-600'
           : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
@@ -176,6 +199,13 @@ function NavLink({ to, icon, children }: { to: string; icon: React.ReactNode; ch
     >
       {icon}
       <span className="text-sm font-medium">{children}</span>
+      {isActive && (
+        <motion.div
+          layoutId="nav-active-indicator"
+          className="absolute bottom-0.5 left-3 right-3 h-0.5 rounded-full bg-gradient-to-r from-teal-500 to-blue-500"
+          transition={{ type: 'spring', stiffness: 500, damping: 30 }}
+        />
+      )}
     </Link>
   );
 }
