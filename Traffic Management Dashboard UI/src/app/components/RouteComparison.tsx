@@ -116,6 +116,11 @@ function formatTrafficLabel(level: TrafficLevel) {
   return `${level.charAt(0).toUpperCase()}${level.slice(1)} Traffic`;
 }
 
+function toDisplayScore(value: unknown) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? Math.round(parsed) : null;
+}
+
 function buildFallbackAnalysis(formData: RouteFormData): AnalysisResponse {
   const fuelType = String(formData.fuelType || 'gasoline').toLowerCase();
   const fuelPrice = Number.parseFloat(formData.fuelPrice || '0') || (fuelType === 'electric' ? 10 : 62);
@@ -455,7 +460,11 @@ export function RouteComparison() {
                 <SummaryStat
                   icon={<TrendingDown className="w-4 h-4 text-green-600" />}
                   label="Efficiency Score"
-                  value={String(recommendedRoute.efficiencyScore)}
+                  value={
+                    toDisplayScore(recommendedRoute.efficiencyScore) !== null
+                      ? String(toDisplayScore(recommendedRoute.efficiencyScore))
+                      : 'N/A'
+                  }
                 />
                 <SummaryStat
                   icon={<DollarSign className="w-4 h-4 text-green-600" />}
@@ -589,6 +598,9 @@ function ReasonRow({ children }: { children: ReactNode }) {
 }
 
 function RouteCard({ route, fuelType }: { route: RouteMetrics; fuelType: string }) {
+  const score = toDisplayScore(route.efficiencyScore);
+  const scoreForBar = score !== null ? Math.max(0, Math.min(100, score)) : 0;
+
   const trafficColors = {
     low: 'bg-green-100 text-green-700 border-green-300',
     moderate: 'bg-orange-100 text-orange-700 border-orange-300',
@@ -633,18 +645,18 @@ function RouteCard({ route, fuelType }: { route: RouteMetrics; fuelType: string 
           <div className="flex-1 bg-slate-100 rounded-full h-3 overflow-hidden">
             <motion.div
               initial={{ width: 0 }}
-              animate={{ width: `${route.efficiencyScore}%` }}
+              animate={{ width: `${scoreForBar}%` }}
               transition={{ delay: 0.5, duration: 1, ease: 'easeOut' }}
               className={`h-full rounded-full ${
-                route.efficiencyScore >= 90
+                scoreForBar >= 90
                   ? 'bg-green-500'
-                  : route.efficiencyScore >= 75
+                  : scoreForBar >= 75
                   ? 'bg-blue-500'
                   : 'bg-orange-500'
               }`}
             />
           </div>
-          <span className="text-sm font-bold text-slate-700">{route.efficiencyScore}</span>
+          <span className="text-sm font-bold text-slate-700">{score !== null ? score : 'N/A'}</span>
         </div>
 
         <div
