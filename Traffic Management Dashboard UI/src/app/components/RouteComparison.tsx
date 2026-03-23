@@ -1,94 +1,243 @@
+import { type ReactNode, useEffect, useMemo, useState } from 'react';
 import { useLocation } from 'react-router';
 import { motion } from 'motion/react';
 import {
-  MapPin,
-  Clock,
-  Fuel,
-  DollarSign,
-  TrendingDown,
-  Award,
   AlertTriangle,
+  Award,
   CheckCircle2,
-  Navigation,
+  Clock,
+  DollarSign,
+  Fuel,
   Leaf,
+  LoaderCircle,
+  MapPin,
+  Navigation,
   Sparkles,
+  TrendingDown,
 } from 'lucide-react';
 import { DashboardMap } from './DashboardMap';
 
-interface RouteData {
-  id: number;
-  name: string;
-  distance: number;
-  duration: number;
-  trafficLevel: 'low' | 'moderate' | 'heavy';
-  fuelConsumption: number;
-  cost: number;
+type TrafficLevel = 'low' | 'moderate' | 'heavy';
+
+type RouteMetrics = {
+  id: string;
+  rank: number;
+  label: string;
+  description: string;
+  distanceKm: number;
+  durationMinutes: number;
+  staticDurationMinutes: number;
+  trafficDelayMinutes: number;
+  trafficLevel: TrafficLevel;
+  estimatedCostPhp: number;
+  totalFuelLiters: number;
+  totalEnergyKwh: number;
   efficiencyScore: number;
+  co2Kg: number;
   isRecommended: boolean;
-  co2Emission: number;
+  warnings: string[];
+  componentScores: {
+    time: number;
+    fuel: number;
+    traffic: number;
+    speedStability: number;
+  };
+  averageSpeedKph: number;
+  stopCount: number;
+  idleMinutes: number;
+  vsp: {
+    averageKwPerTon: number;
+    maxKwPerTon: number;
+    ecoShare: number;
+    moderateShare: number;
+    wasteShare: number;
+  };
+};
+
+type AnalysisResponse = {
+  generatedAt: string;
+  request: {
+    origin: string;
+    destination: string;
+    vehicleType: string;
+    vehicleLabel: string;
+    fuelType: string;
+    fuelPrice: number;
+    currency: string;
+  };
+  recommendedRouteId: string;
+  routes: RouteMetrics[];
+};
+
+type RouteFormData = {
+  origin: string;
+  destination: string;
+  vehicleType: string;
+  fuelType: string;
+  fuelPrice: string;
+};
+
+const DEFAULT_FORM_DATA: RouteFormData = {
+  origin: 'Tuguegarao City Hall, Tuguegarao City, Cagayan',
+  destination: 'Tuguegarao Airport, Tuguegarao City, Cagayan',
+  vehicleType: 'sedan',
+  fuelType: 'gasoline',
+  fuelPrice: '62.00',
+};
+
+const LAST_ANALYSIS_STORAGE_KEY = 'smartroute:last-analysis';
+
+function buildApiBaseUrl() {
+  const raw = (
+    import.meta as ImportMeta & {
+      env?: { VITE_API_URL?: string };
+    }
+  ).env?.VITE_API_URL;
+
+  const trimmed = String(raw || '').trim().replace(/\/$/, '');
+  if (trimmed) {
+    return trimmed;
+  }
+
+  return typeof window !== 'undefined' && window.location.hostname === 'localhost'
+    ? 'http://localhost:3001'
+    : 'https://api.navocs.com';
+}
+
+function formatFuelValue(route: RouteMetrics, fuelType: string) {
+  if (fuelType === 'electric') {
+    return `${route.totalEnergyKwh.toFixed(2)} kWh`;
+  }
+
+  return `${route.totalFuelLiters.toFixed(2)} L`;
+}
+
+function formatTrafficLabel(level: TrafficLevel) {
+  return `${level.charAt(0).toUpperCase()}${level.slice(1)} Traffic`;
 }
 
 export function RouteComparison() {
   const location = useLocation();
-  const formData = location.state || {
-    origin: 'Downtown City Center',
-    destination: 'Airport Terminal',
-    vehicleType: 'sedan',
-    fuelType: 'gasoline',
-    fuelPrice: '62.00',
-  };
+  const formData = (location.state as RouteFormData | null) || DEFAULT_FORM_DATA;
+  const apiBaseUrl = useMemo(() => buildApiBaseUrl(), []);
+  const [analysis, setAnalysis] = useState<AnalysisResponse | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  // Mock route data
-  const routes: RouteData[] = [
-    {
-      id: 1,
-      name: 'Highway Route',
-      distance: 28.5,
-      duration: 32,
-      trafficLevel: 'heavy',
-      fuelConsumption: 2.4,
-      cost: 8.4,
-      efficiencyScore: 72,
-      isRecommended: false,
-      co2Emission: 15.8,
-    },
-    {
-      id: 2,
-      name: 'Scenic Bypass',
-      distance: 32.1,
-      duration: 38,
-      trafficLevel: 'low',
-      fuelConsumption: 1.8,
-      cost: 6.3,
-      efficiencyScore: 94,
-      isRecommended: true,
-      co2Emission: 11.6,
-    },
-    {
-      id: 3,
-      name: 'City Route',
-      distance: 24.8,
-      duration: 42,
-      trafficLevel: 'moderate',
-      fuelConsumption: 2.1,
-      cost: 7.35,
-      efficiencyScore: 78,
-      isRecommended: false,
-      co2Emission: 13.9,
-    },
-  ];
+  useEffect(() => {
+    let cancelled = false;
 
-  const recommendedRoute = routes.find((r) => r.isRecommended)!;
-  const baseRoute = routes[0];
-  const savingsPercent = Math.round(
-    ((baseRoute.cost - recommendedRoute.cost) / baseRoute.cost) * 100
-  );
-  const fuelSavings = (baseRoute.fuelConsumption - recommendedRoute.fuelConsumption).toFixed(1);
+    async function loadAnalysis() {
+      setIsLoading(true);
+      setErrorMessage(null);
+
+      try {
+        const response = await fetch(`${apiBaseUrl}/api/routes/analyze`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(formData),
+        });
+        const payload = await response.json();
+
+        if (!response.ok) {
+          throw new Error(payload?.details || payload?.error || 'Failed to analyze routes.');
+        }
+
+        if (!cancelled) {
+          setAnalysis(payload);
+          window.localStorage.setItem(
+            LAST_ANALYSIS_STORAGE_KEY,
+            JSON.stringify({
+              savedAt: new Date().toISOString(),
+              analysis: payload,
+            })
+          );
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setErrorMessage(error instanceof Error ? error.message : 'Failed to analyze routes.');
+        }
+      } finally {
+        if (!cancelled) {
+          setIsLoading(false);
+        }
+      }
+    }
+
+    loadAnalysis();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [apiBaseUrl, formData]);
+
+  const routes = analysis?.routes || [];
+  const recommendedRoute = routes.find((route) => route.isRecommended) || routes[0] || null;
+  const fastestRoute = [...routes].sort((left, right) => left.durationMinutes - right.durationMinutes)[0];
+  const cheapestRoute = [...routes].sort((left, right) => left.estimatedCostPhp - right.estimatedCostPhp)[0];
+  const referenceRoute = fastestRoute || recommendedRoute;
+  const savingsPhp =
+    recommendedRoute && referenceRoute
+      ? Math.max(0, referenceRoute.estimatedCostPhp - recommendedRoute.estimatedCostPhp)
+      : 0;
+  const savingsPercent =
+    recommendedRoute && referenceRoute && referenceRoute.estimatedCostPhp > 0
+      ? Math.round((savingsPhp / referenceRoute.estimatedCostPhp) * 100)
+      : 0;
+  const fuelSavings =
+    recommendedRoute && referenceRoute
+      ? Math.max(
+          0,
+          (analysis?.request.fuelType === 'electric'
+            ? referenceRoute.totalEnergyKwh - recommendedRoute.totalEnergyKwh
+            : referenceRoute.totalFuelLiters - recommendedRoute.totalFuelLiters)
+        )
+      : 0;
+  const co2Savings =
+    recommendedRoute && referenceRoute
+      ? Math.max(0, referenceRoute.co2Kg - recommendedRoute.co2Kg)
+      : 0;
+
+  if (isLoading) {
+    return (
+      <div className="min-h-[calc(100vh-4rem)] bg-slate-50">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-10 text-center">
+            <LoaderCircle className="w-10 h-10 text-teal-600 animate-spin mx-auto mb-4" />
+            <h1 className="text-2xl font-bold text-slate-900 mb-2">Analyzing Real Routes</h1>
+            <p className="text-slate-600">
+              Fetching Google routes, sampling elevation, and computing VSP-based fuel cost for your trip.
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (errorMessage || !analysis || !recommendedRoute) {
+    return (
+      <div className="min-h-[calc(100vh-4rem)] bg-slate-50">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
+          <div className="bg-white rounded-2xl border border-red-200 shadow-sm p-10 text-center">
+            <AlertTriangle className="w-10 h-10 text-red-500 mx-auto mb-4" />
+            <h1 className="text-2xl font-bold text-slate-900 mb-2">Route Analysis Failed</h1>
+            <p className="text-slate-600 mb-4">
+              {errorMessage || 'No route data was returned for this trip.'}
+            </p>
+            <p className="text-sm text-slate-500">
+              Check that the backend is running and the Google Maps API key is available to the server.
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-[calc(100vh-4rem)] bg-slate-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Header */}
         <motion.div
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -97,32 +246,33 @@ export function RouteComparison() {
           <div className="flex items-center space-x-2 text-sm text-slate-600 mb-2">
             <MapPin className="w-4 h-4" />
             <span>
-              {formData.origin} → {formData.destination}
+              {analysis.request.origin} → {analysis.request.destination}
             </span>
           </div>
           <h1 className="text-3xl font-bold text-slate-900 mb-2">Route Analysis Complete</h1>
           <p className="text-slate-600">
-            Comparing {routes.length} routes based on efficiency, cost, and traffic conditions
+            Comparing {routes.length} Google route{routes.length === 1 ? '' : 's'} for{' '}
+            {analysis.request.vehicleLabel} using a VSP-based cost model at ₱
+            {analysis.request.fuelPrice.toFixed(2)}
+            {analysis.request.fuelType === 'electric' ? '/kWh' : '/L'}.
           </p>
         </motion.div>
 
-        {/* Recommendation Panel */}
         <motion.div
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{ delay: 0.2 }}
           className="bg-gradient-to-br from-green-50 to-emerald-50 border-2 border-green-300 rounded-xl p-6 mb-8 shadow-lg relative overflow-hidden"
         >
-          {/* Animated background elements */}
           <motion.div
-            animate={{ 
+            animate={{
               scale: [1, 1.2, 1],
-              opacity: [0.3, 0.5, 0.3]
+              opacity: [0.3, 0.5, 0.3],
             }}
             transition={{ duration: 3, repeat: Infinity }}
             className="absolute top-0 right-0 w-64 h-64 bg-green-200 rounded-full blur-3xl"
           />
-          
+
           <div className="flex items-start space-x-4 relative z-10">
             <motion.div
               initial={{ scale: 0 }}
@@ -151,64 +301,38 @@ export function RouteComparison() {
                 transition={{ delay: 0.6 }}
                 className="text-green-900 mb-4 text-lg font-medium"
               >
-                {recommendedRoute.name} - Save ₱{(baseRoute.cost - recommendedRoute.cost).toFixed(2)}{' '}
-                ({savingsPercent}%) compared to the fastest route
+                {recommendedRoute.label} saves ₱{savingsPhp.toFixed(2)} ({savingsPercent}%)
+                {cheapestRoute?.id === recommendedRoute.id ? ' and is the cheapest option.' : ' while keeping traffic and speed stability balanced.'}
               </motion.p>
 
-              {/* Score Breakdown */}
               <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.7 }}
                 className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4"
               >
-                <motion.div
-                  whileHover={{ scale: 1.05 }}
-                  className="bg-white rounded-lg p-4 border border-green-200"
-                >
-                  <div className="flex items-center space-x-2 mb-1">
-                    <TrendingDown className="w-4 h-4 text-green-600" />
-                    <span className="text-xs text-slate-600">Efficiency Score</span>
-                  </div>
-                  <div className="text-2xl font-bold text-green-600">
-                    {recommendedRoute.efficiencyScore}
-                  </div>
-                </motion.div>
-                <motion.div
-                  whileHover={{ scale: 1.05 }}
-                  className="bg-white rounded-lg p-4 border border-green-200"
-                >
-                  <div className="flex items-center space-x-2 mb-1">
-                    <DollarSign className="w-4 h-4 text-green-600" />
-                    <span className="text-xs text-slate-600">Cost Savings</span>
-                  </div>
-                  <div className="text-2xl font-bold text-green-600">{savingsPercent}%</div>
-                </motion.div>
-                <motion.div
-                  whileHover={{ scale: 1.05 }}
-                  className="bg-white rounded-lg p-4 border border-green-200"
-                >
-                  <div className="flex items-center space-x-2 mb-1">
-                    <Fuel className="w-4 h-4 text-green-600" />
-                    <span className="text-xs text-slate-600">Fuel Saved</span>
-                  </div>
-                  <div className="text-2xl font-bold text-green-600">{fuelSavings} L</div>
-                </motion.div>
-                <motion.div
-                  whileHover={{ scale: 1.05 }}
-                  className="bg-white rounded-lg p-4 border border-green-200"
-                >
-                  <div className="flex items-center space-x-2 mb-1">
-                    <Leaf className="w-4 h-4 text-green-600" />
-                    <span className="text-xs text-slate-600">CO₂ Reduced</span>
-                  </div>
-                  <div className="text-2xl font-bold text-green-600">
-                    {(baseRoute.co2Emission - recommendedRoute.co2Emission).toFixed(1)} kg
-                  </div>
-                </motion.div>
+                <SummaryStat
+                  icon={<TrendingDown className="w-4 h-4 text-green-600" />}
+                  label="Efficiency Score"
+                  value={String(recommendedRoute.efficiencyScore)}
+                />
+                <SummaryStat
+                  icon={<DollarSign className="w-4 h-4 text-green-600" />}
+                  label="Estimated Cost"
+                  value={`₱${recommendedRoute.estimatedCostPhp.toFixed(2)}`}
+                />
+                <SummaryStat
+                  icon={<Fuel className="w-4 h-4 text-green-600" />}
+                  label={analysis.request.fuelType === 'electric' ? 'Energy Saved' : 'Fuel Saved'}
+                  value={`${fuelSavings.toFixed(2)} ${analysis.request.fuelType === 'electric' ? 'kWh' : 'L'}`}
+                />
+                <SummaryStat
+                  icon={<Leaf className="w-4 h-4 text-green-600" />}
+                  label="CO₂ Reduced"
+                  value={`${co2Savings.toFixed(2)} kg`}
+                />
               </motion.div>
 
-              {/* Why This Route */}
               <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -217,58 +341,24 @@ export function RouteComparison() {
               >
                 <h3 className="font-semibold text-slate-900 mb-2">Why this route was selected:</h3>
                 <ul className="space-y-2 text-sm text-slate-700">
-                  {[
-                    {
-                      text: (
-                        <>
-                          <strong>Lowest fuel consumption</strong> despite slightly longer distance,
-                          thanks to minimal traffic
-                        </>
-                      ),
-                    },
-                    {
-                      text: (
-                        <>
-                          <strong>Excellent cost efficiency</strong> with {savingsPercent}% savings on fuel
-                          costs
-                        </>
-                      ),
-                    },
-                    {
-                      text: (
-                        <>
-                          <strong>Low traffic conditions</strong> ensure consistent speeds and reduced
-                          emissions
-                        </>
-                      ),
-                    },
-                    {
-                      text: (
-                        <>
-                          <strong>Highest efficiency score</strong> of {recommendedRoute.efficiencyScore}
-                          /100 based on comprehensive analysis
-                        </>
-                      ),
-                    },
-                  ].map((item, index) => (
-                    <motion.li
-                      key={index}
-                      initial={{ opacity: 0, x: -20 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ delay: 0.9 + index * 0.1 }}
-                      className="flex items-start space-x-2"
-                    >
-                      <CheckCircle2 className="w-4 h-4 text-green-600 mt-0.5 flex-shrink-0" />
-                      <span>{item.text}</span>
-                    </motion.li>
-                  ))}
+                  <ReasonRow>
+                    <strong>Best weighted efficiency score</strong> using travel time, fuel spend, traffic pressure, and speed stability.
+                  </ReasonRow>
+                  <ReasonRow>
+                    <strong>Predicted {analysis.request.fuelType === 'electric' ? 'energy' : 'fuel'} use</strong> is {formatFuelValue(recommendedRoute, analysis.request.fuelType)} with {recommendedRoute.stopCount} estimated stop events.
+                  </ReasonRow>
+                  <ReasonRow>
+                    <strong>Traffic delay stays at</strong> {recommendedRoute.trafficDelayMinutes.toFixed(1)} extra minutes with a {formatTrafficLabel(recommendedRoute.trafficLevel).toLowerCase()} profile.
+                  </ReasonRow>
+                  <ReasonRow>
+                    <strong>Live VSP bands are favorable</strong>: {recommendedRoute.vsp.ecoShare.toFixed(1)}% eco, {recommendedRoute.vsp.wasteShare.toFixed(1)}% high-consumption segments.
+                  </ReasonRow>
                 </ul>
               </motion.div>
             </div>
           </div>
         </motion.div>
 
-        {/* Route Cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
           {routes.map((route, index) => (
             <motion.div
@@ -277,12 +367,11 @@ export function RouteComparison() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.3 + index * 0.1 }}
             >
-              <RouteCard route={route} fuelType={formData.fuelType} />
+              <RouteCard route={route} fuelType={analysis.request.fuelType} />
             </motion.div>
           ))}
         </div>
 
-        {/* Map View */}
         <motion.div
           initial={{ opacity: 0, y: 30 }}
           animate={{ opacity: 1, y: 0 }}
@@ -292,12 +381,11 @@ export function RouteComparison() {
           <h2 className="text-xl font-bold text-slate-900 mb-4">Route Visualization</h2>
           <div className="relative rounded-lg overflow-hidden" style={{ height: '480px' }}>
             <DashboardMap
-              origin={formData.origin || 'Tuguegarao City Hall, Tuguegarao City'}
-              destination={formData.destination || 'Tuguegarao Airport'}
+              origin={analysis.request.origin || DEFAULT_FORM_DATA.origin}
+              destination={analysis.request.destination || DEFAULT_FORM_DATA.destination}
               liveTrackingEnabled={false}
             />
 
-            {/* Eco-Route Badge */}
             <motion.div
               initial={{ opacity: 0, y: -10 }}
               animate={{ opacity: 1, y: 0 }}
@@ -308,26 +396,16 @@ export function RouteComparison() {
               Eco-Routing Active
             </motion.div>
 
-            {/* Legend */}
             <motion.div
               initial={{ opacity: 0, x: -10 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ delay: 0.7 }}
               className="absolute bottom-4 left-4 z-10 bg-white/90 backdrop-blur-sm rounded-lg px-3 py-2.5 shadow text-xs space-y-1.5"
             >
-              <div className="font-semibold text-slate-700 mb-1">Route Legend</div>
-              <div className="flex items-center gap-2 text-slate-600">
-                <span className="w-3 h-1.5 rounded-full bg-green-500 inline-block" />
-                Eco / Recommended
-              </div>
-              <div className="flex items-center gap-2 text-slate-600">
-                <span className="w-3 h-1.5 rounded-full bg-blue-500 inline-block" />
-                Alternative
-              </div>
-              <div className="flex items-center gap-2 text-slate-600">
-                <span className="w-3 h-1.5 rounded-full bg-red-500 inline-block" />
-                Congested
-              </div>
+              <div className="font-semibold text-slate-700 mb-1">Predicted Trip Snapshot</div>
+              <div className="text-slate-600">Before Trip: ₱{recommendedRoute.estimatedCostPhp.toFixed(2)} projected spend</div>
+              <div className="text-slate-600">Fuel / Energy: {formatFuelValue(recommendedRoute, analysis.request.fuelType)}</div>
+              <div className="text-slate-600">Time: {recommendedRoute.durationMinutes.toFixed(1)} min</div>
             </motion.div>
           </div>
         </motion.div>
@@ -336,7 +414,40 @@ export function RouteComparison() {
   );
 }
 
-function RouteCard({ route, fuelType }: { route: RouteData; fuelType: string }) {
+function SummaryStat({
+  icon,
+  label,
+  value,
+}: {
+  icon: ReactNode;
+  label: string;
+  value: string;
+}) {
+  return (
+    <motion.div whileHover={{ scale: 1.05 }} className="bg-white rounded-lg p-4 border border-green-200">
+      <div className="flex items-center space-x-2 mb-1">
+        {icon}
+        <span className="text-xs text-slate-600">{label}</span>
+      </div>
+      <div className="text-2xl font-bold text-green-600">{value}</div>
+    </motion.div>
+  );
+}
+
+function ReasonRow({ children }: { children: ReactNode }) {
+  return (
+    <motion.li
+      initial={{ opacity: 0, x: -20 }}
+      animate={{ opacity: 1, x: 0 }}
+      className="flex items-start space-x-2"
+    >
+      <CheckCircle2 className="w-4 h-4 text-green-600 mt-0.5 flex-shrink-0" />
+      <span>{children}</span>
+    </motion.li>
+  );
+}
+
+function RouteCard({ route, fuelType }: { route: RouteMetrics; fuelType: string }) {
   const trafficColors = {
     low: 'bg-green-100 text-green-700 border-green-300',
     moderate: 'bg-orange-100 text-orange-700 border-orange-300',
@@ -358,10 +469,12 @@ function RouteCard({ route, fuelType }: { route: RouteData; fuelType: string }) 
           : 'border-slate-200 hover:border-teal-300'
       }`}
     >
-      {/* Header */}
       <div className="p-6 border-b border-slate-100">
-        <div className="flex items-start justify-between mb-2">
-          <h3 className="font-bold text-slate-900 text-lg">{route.name}</h3>
+        <div className="flex items-start justify-between mb-2 gap-3">
+          <div>
+            <h3 className="font-bold text-slate-900 text-lg">{route.label}</h3>
+            <p className="text-xs text-slate-500 mt-1">{route.description}</p>
+          </div>
           {route.isRecommended && (
             <motion.span
               initial={{ scale: 0, rotate: -180 }}
@@ -375,7 +488,6 @@ function RouteCard({ route, fuelType }: { route: RouteData; fuelType: string }) 
           )}
         </div>
 
-        {/* Efficiency Score */}
         <div className="flex items-center space-x-2 mb-3">
           <div className="flex-1 bg-slate-100 rounded-full h-3 overflow-hidden">
             <motion.div
@@ -389,49 +501,52 @@ function RouteCard({ route, fuelType }: { route: RouteData; fuelType: string }) 
                   ? 'bg-blue-500'
                   : 'bg-orange-500'
               }`}
-            ></motion.div>
+            />
           </div>
           <span className="text-sm font-bold text-slate-700">{route.efficiencyScore}</span>
         </div>
 
-        {/* Traffic Badge */}
         <div
           className={`inline-flex items-center space-x-1 px-3 py-1 rounded-full border text-xs font-medium ${
             trafficColors[route.trafficLevel]
           }`}
         >
           {trafficIcons[route.trafficLevel]}
-          <span>{route.trafficLevel.charAt(0).toUpperCase() + route.trafficLevel.slice(1)} Traffic</span>
+          <span>{formatTrafficLabel(route.trafficLevel)}</span>
         </div>
       </div>
 
-      {/* Metrics */}
       <div className="p-6 space-y-4">
         <MetricRow
           icon={<Navigation className="w-4 h-4 text-blue-600" />}
           label="Distance"
-          value={`${route.distance} km`}
+          value={`${route.distanceKm.toFixed(2)} km`}
         />
         <MetricRow
           icon={<Clock className="w-4 h-4 text-purple-600" />}
           label="Duration"
-          value={`${route.duration} min`}
+          value={`${route.durationMinutes.toFixed(1)} min`}
         />
         <MetricRow
           icon={<Fuel className="w-4 h-4 text-orange-600" />}
           label={fuelType === 'electric' ? 'Energy Used' : 'Fuel Used'}
-          value={`${route.fuelConsumption} ${fuelType === 'electric' ? 'kWh' : 'L'}`}
+          value={formatFuelValue(route, fuelType)}
         />
         <MetricRow
           icon={<DollarSign className="w-4 h-4 text-green-600" />}
           label="Estimated Cost"
-          value={`₱${route.cost.toFixed(2)}`}
+          value={`₱${route.estimatedCostPhp.toFixed(2)}`}
           highlight={route.isRecommended}
         />
         <MetricRow
           icon={<Leaf className="w-4 h-4 text-green-600" />}
           label="CO₂ Emission"
-          value={`${route.co2Emission} kg`}
+          value={`${route.co2Kg.toFixed(2)} kg`}
+        />
+        <MetricRow
+          icon={<TrendingDown className="w-4 h-4 text-teal-600" />}
+          label="Traffic Delay"
+          value={`${route.trafficDelayMinutes.toFixed(1)} min`}
         />
       </div>
     </motion.div>
@@ -444,7 +559,7 @@ function MetricRow({
   value,
   highlight,
 }: {
-  icon: React.ReactNode;
+  icon: ReactNode;
   label: string;
   value: string;
   highlight?: boolean;

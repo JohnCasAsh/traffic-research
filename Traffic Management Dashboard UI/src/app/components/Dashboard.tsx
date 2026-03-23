@@ -7,13 +7,19 @@ import { useLocationConsent } from '../LocationConsentContext';
 import { formatLocationAccuracy } from '../location';
 
 const VEHICLE_DEFAULTS: Record<string, { fuelType: string; fuelPrice: string }> = {
+  motorcycle:  { fuelType: 'gasoline', fuelPrice: '62.00' },
+  tricycle:    { fuelType: 'gasoline', fuelPrice: '62.00' },
   sedan:       { fuelType: 'gasoline', fuelPrice: '62.00' },
-  suv:         { fuelType: 'diesel',   fuelPrice: '56.00' },
-  truck:       { fuelType: 'diesel',   fuelPrice: '56.00' },
+  van:         { fuelType: 'diesel',   fuelPrice: '58.50' },
+  bus:         { fuelType: 'diesel',   fuelPrice: '58.50' },
+  hybrid_car:  { fuelType: 'gasoline', fuelPrice: '62.00' },
+  hybrid_van:  { fuelType: 'gasoline', fuelPrice: '62.00' },
+  e_trike:     { fuelType: 'electric', fuelPrice: '10.00' },
+  e_motorcycle:{ fuelType: 'electric', fuelPrice: '10.00' },
+  suv:         { fuelType: 'diesel',   fuelPrice: '58.50' },
+  truck:       { fuelType: 'diesel',   fuelPrice: '58.50' },
   electric:    { fuelType: 'electric', fuelPrice: '10.00' },
   hybrid:      { fuelType: 'gasoline', fuelPrice: '62.00' },
-  tricycle:    { fuelType: 'gasoline', fuelPrice: '57.00' },
-  motorcycle:  { fuelType: 'gasoline', fuelPrice: '57.00' },
   etrike:      { fuelType: 'electric', fuelPrice: '10.00' },
   emotorcycle: { fuelType: 'electric', fuelPrice: '10.00' },
 };
@@ -197,19 +203,19 @@ export function Dashboard() {
                   className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent bg-white transition-all"
                 >
                   <optgroup label="ICE Vehicles">
-                    <option value="tricycle">Tricycle</option>
                     <option value="motorcycle">Motorcycle</option>
+                    <option value="tricycle">Tricycle</option>
                     <option value="sedan">Sedan / Private Car</option>
-                    <option value="suv">SUV</option>
-                    <option value="truck">Truck</option>
+                    <option value="van">Van</option>
+                    <option value="bus">Bus</option>
                   </optgroup>
-                  <optgroup label="Electric Vehicles">
-                    <option value="etrike">E-Trike</option>
-                    <option value="emotorcycle">E-Motorcycle</option>
-                    <option value="electric">Electric Car</option>
+                  <optgroup label="HEV Vehicles">
+                    <option value="hybrid_car">Hybrid Car</option>
+                    <option value="hybrid_van">Hybrid Van</option>
                   </optgroup>
-                  <optgroup label="Hybrid">
-                    <option value="hybrid">Hybrid Car</option>
+                  <optgroup label="BEV Vehicles">
+                    <option value="e_trike">E-Trike</option>
+                    <option value="e_motorcycle">E-Motorcycle</option>
                   </optgroup>
                 </select>
               </motion.div>
@@ -234,7 +240,6 @@ export function Dashboard() {
                   <option value="gasoline">Gasoline</option>
                   <option value="diesel">Diesel</option>
                   <option value="electric">Electric</option>
-                  <option value="hybrid">Hybrid</option>
                 </select>
               </motion.div>
 
@@ -263,7 +268,7 @@ export function Dashboard() {
                   />
                 </div>
                 <p className="text-xs text-slate-500 mt-2">
-                  {formData.fuelType === 'electric' ? 'Price per kWh (CAGELCO rate)' : 'Price per liter (DOE Region II)'}
+                  {formData.fuelType === 'electric' ? 'Price per kWh (local utility rate)' : 'Price per liter (DOE Region II)'}
                 </p>
               </motion.div>
 

@@ -55,6 +55,7 @@ if (missing.length > 0) {
 
 const authRoutes = require('./src/auth');
 const { liveTrackingRouter } = require('./src/liveTracking');
+const { routeAnalysisRouter } = require('./src/routeAnalysis');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -121,6 +122,7 @@ app.use('/api/auth', authLimiter);
 // Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/tracking', liveTrackingRouter);
+app.use('/api/routes', routeAnalysisRouter);
 
 // Health check
 app.get('/api/health', (req, res) => {
