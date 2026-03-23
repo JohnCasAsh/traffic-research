@@ -473,9 +473,12 @@ export function DashboardMap({
       }
     ).env?.VITE_API_URL;
 
-    return String(raw || '')
-      .trim()
-      .replace(/\/$/, '');
+    const trimmed = String(raw || '').trim().replace(/\/$/, '');
+    if (trimmed) return trimmed;
+
+    return typeof window !== 'undefined' && window.location.hostname === 'localhost'
+      ? 'http://localhost:3001'
+      : 'https://api.navocs.com';
   }, []);
 
   const localVehicleId = useMemo(() => {
