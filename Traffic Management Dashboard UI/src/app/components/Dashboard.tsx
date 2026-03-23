@@ -6,6 +6,18 @@ import { DashboardMap } from './DashboardMap';
 import { useLocationConsent } from '../LocationConsentContext';
 import { formatLocationAccuracy } from '../location';
 
+const VEHICLE_DEFAULTS: Record<string, { fuelType: string; fuelPrice: string }> = {
+  sedan:       { fuelType: 'gasoline', fuelPrice: '62.00' },
+  suv:         { fuelType: 'diesel',   fuelPrice: '56.00' },
+  truck:       { fuelType: 'diesel',   fuelPrice: '56.00' },
+  electric:    { fuelType: 'electric', fuelPrice: '10.00' },
+  hybrid:      { fuelType: 'gasoline', fuelPrice: '62.00' },
+  tricycle:    { fuelType: 'gasoline', fuelPrice: '57.00' },
+  motorcycle:  { fuelType: 'gasoline', fuelPrice: '57.00' },
+  etrike:      { fuelType: 'electric', fuelPrice: '10.00' },
+  emotorcycle: { fuelType: 'electric', fuelPrice: '10.00' },
+};
+
 export function Dashboard() {
   const navigate = useNavigate();
   const { consent, setConsent, currentLocation } = useLocationConsent();
@@ -17,7 +29,7 @@ export function Dashboard() {
     destination: '',
     vehicleType: 'sedan',
     fuelType: 'gasoline',
-    fuelPrice: '3.50',
+    fuelPrice: '62.00',
   });
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -33,6 +45,11 @@ export function Dashboard() {
 
   const handleChange = (field: string, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));
+  };
+
+  const handleVehicleChange = (vehicleType: string) => {
+    const defaults = VEHICLE_DEFAULTS[vehicleType] ?? { fuelType: 'gasoline', fuelPrice: '62.00' };
+    setFormData(prev => ({ ...prev, vehicleType, fuelType: defaults.fuelType, fuelPrice: defaults.fuelPrice }));
   };
 
   const applyTrackedLocationToOrigin = (location: { lat: number; lng: number; accuracy: number }) => {
@@ -176,14 +193,24 @@ export function Dashboard() {
                 </label>
                 <select
                   value={formData.vehicleType}
-                  onChange={(e) => handleChange('vehicleType', e.target.value)}
+                  onChange={(e) => handleVehicleChange(e.target.value)}
                   className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent bg-white transition-all"
                 >
-                  <option value="sedan">Sedan</option>
-                  <option value="suv">SUV</option>
-                  <option value="truck">Truck</option>
-                  <option value="electric">Electric Vehicle</option>
-                  <option value="hybrid">Hybrid</option>
+                  <optgroup label="ICE Vehicles">
+                    <option value="tricycle">Tricycle</option>
+                    <option value="motorcycle">Motorcycle</option>
+                    <option value="sedan">Sedan / Private Car</option>
+                    <option value="suv">SUV</option>
+                    <option value="truck">Truck</option>
+                  </optgroup>
+                  <optgroup label="Electric Vehicles">
+                    <option value="etrike">E-Trike</option>
+                    <option value="emotorcycle">E-Motorcycle</option>
+                    <option value="electric">Electric Car</option>
+                  </optgroup>
+                  <optgroup label="Hybrid">
+                    <option value="hybrid">Hybrid Car</option>
+                  </optgroup>
                 </select>
               </motion.div>
 
@@ -230,13 +257,13 @@ export function Dashboard() {
                     step="0.01"
                     value={formData.fuelPrice}
                     onChange={(e) => handleChange('fuelPrice', e.target.value)}
-                    placeholder="3.50"
+                    placeholder="62.00"
                     className="w-full pl-8 pr-4 py-3 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-all"
                     required
                   />
                 </div>
                 <p className="text-xs text-slate-500 mt-2">
-                  {formData.fuelType === 'electric' ? 'Price per kWh' : 'Price per gallon'}
+                  {formData.fuelType === 'electric' ? 'Price per kWh (CAGELCO rate)' : 'Price per liter (DOE Region II)'}
                 </p>
               </motion.div>
 
