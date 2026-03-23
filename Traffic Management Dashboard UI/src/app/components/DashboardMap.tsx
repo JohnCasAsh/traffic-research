@@ -9,8 +9,8 @@ import {
 
 const DEFAULT_CENTER = { lat: 17.6132, lng: 121.7270 }; // Tuguegarao City
 const DEFAULT_ZOOM = 12;
-const MAX_INITIAL_TRACKING_ACCURACY_METERS = 140;
-const MAX_STEADY_TRACKING_ACCURACY_METERS = 95;
+const MAX_INITIAL_TRACKING_ACCURACY_METERS = 400;
+const MAX_STEADY_TRACKING_ACCURACY_METERS = 200;
 const MIN_MOVEMENT_FOR_WEAK_SIGNAL_METERS = 35;
 const MAX_ROUTE_OPTIONS = 5;
 const MAX_ALLOWED_FORCED_DETOUR_RATIO = 2.5;
@@ -1473,8 +1473,8 @@ export function DashboardMap({
       },
       {
         enableHighAccuracy: true,
-        maximumAge: 2000,
-        timeout: 10000,
+        maximumAge: 5000,
+        timeout: 6000,
       }
     );
 
