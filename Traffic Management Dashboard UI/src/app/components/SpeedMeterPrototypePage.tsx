@@ -5,6 +5,7 @@ import {
   AlertTriangle,
   CheckCircle2,
   Download,
+  Fuel,
   Gauge,
   LocateFixed,
   Pause,
@@ -15,12 +16,19 @@ import {
   WifiOff,
 } from 'lucide-react';
 import { formatLocationAccuracy } from '../location';
+import { API_URL } from '../api';
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
 type KalmanState = { estimate: number; errorCovariance: number };
 type SignalQuality = 'good' | 'ok' | 'poor' | 'none';
-type LastPoint = { lat: number; lng: number; timestampMs: number; accuracyMeters: number };
+type LastPoint = {
+  lat: number;
+  lng: number;
+  timestampMs: number;
+  accuracyMeters: number;
+  altitudeMeters: number | null;
+};
 type SpeedMeterMode = 'stable' | 'balanced' | 'responsive';
 type Environment = 'auto' | 'indoors' | 'outdoors';
 
@@ -41,6 +49,60 @@ type SpeedSample = {
   distanceDeltaMeters: number;
   cumulativeDistanceMeters: number;
   environment: Environment;
+  altitudeMeters: number | null;
+  accelerationMps2: number;
+  grade: number;
+  vspKwPerTon: number;
+  segmentFuelOrEnergyPerKm: number;
+  segmentCostPerKm: number;
+  runningFuelOrEnergy: number;
+  runningCostPhp: number;
+};
+
+type VehiclePowertrain = 'ICE' | 'HEV' | 'BEV';
+
+type VehicleLiveProfile = {
+  key: string;
+  label: string;
+  fuelType: 'gasoline' | 'diesel' | 'electric';
+  powertrain: VehiclePowertrain;
+  massKg: number;
+  idleRateLitersPerMinute: number;
+  engineEfficiency?: number;
+  drivetrainEfficiency?: number;
+  regenEfficiency?: number;
+};
+
+type PredictedTripSummary = {
+  routeLabel: string;
+  predictedDurationMinutes: number;
+  predictedDistanceKm: number;
+  predictedFuelOrEnergy: number;
+  predictedCostPhp: number;
+  predictedCo2Kg: number;
+  unitLabel: 'L' | 'kWh';
+};
+
+type CompletedTripRecord = {
+  id: string;
+  finishedAt: string;
+  vehicleType: string;
+  fuelType: string;
+  fuelPrice: number;
+  predicted: PredictedTripSummary | null;
+  actual: {
+    durationMinutes: number;
+    distanceKm: number;
+    fuelOrEnergy: number;
+    costPhp: number;
+    co2Kg: number;
+  };
+  accuracy: {
+    timePct: number | null;
+    fuelPct: number | null;
+    costPct: number | null;
+  };
+  synced: boolean;
 };
 
 type ModeConfig = {
@@ -122,6 +184,106 @@ const MODE_SETTINGS: Record<SpeedMeterMode, ModeConfig> = {
 
 const DEFAULT_MODE: SpeedMeterMode = 'balanced';
 const DEFAULT_ENVIRONMENT: Environment = 'auto';
+const LAST_ANALYSIS_STORAGE_KEY = 'smartroute:last-analysis';
+const TRIP_HISTORY_STORAGE_KEY = 'smartroute:trip-history';
+
+const DEFAULT_FUEL_PRICE: Record<'gasoline' | 'diesel' | 'electric', number> = {
+  gasoline: 62,
+  diesel: 58.5,
+  electric: 10,
+};
+
+const CO2_PER_UNIT: Record<'gasoline' | 'diesel' | 'electric', number> = {
+  gasoline: 2.31,
+  diesel: 2.68,
+  electric: 0.72,
+};
+
+const LIVE_VEHICLE_PROFILES: Record<string, VehicleLiveProfile> = {
+  motorcycle: {
+    key: 'motorcycle',
+    label: 'Motorcycle',
+    fuelType: 'gasoline',
+    powertrain: 'ICE',
+    massKg: 150,
+    idleRateLitersPerMinute: 0.003,
+    engineEfficiency: 0.28,
+  },
+  tricycle: {
+    key: 'tricycle',
+    label: 'Tricycle',
+    fuelType: 'gasoline',
+    powertrain: 'ICE',
+    massKg: 350,
+    idleRateLitersPerMinute: 0.004,
+    engineEfficiency: 0.24,
+  },
+  sedan: {
+    key: 'sedan',
+    label: 'Sedan / Private Car',
+    fuelType: 'gasoline',
+    powertrain: 'ICE',
+    massKg: 1200,
+    idleRateLitersPerMinute: 0.008,
+    engineEfficiency: 0.26,
+  },
+  van: {
+    key: 'van',
+    label: 'Van',
+    fuelType: 'diesel',
+    powertrain: 'ICE',
+    massKg: 2000,
+    idleRateLitersPerMinute: 0.012,
+    engineEfficiency: 0.28,
+  },
+  bus: {
+    key: 'bus',
+    label: 'Bus',
+    fuelType: 'diesel',
+    powertrain: 'ICE',
+    massKg: 8000,
+    idleRateLitersPerMinute: 0.025,
+    engineEfficiency: 0.36,
+  },
+  hybrid_car: {
+    key: 'hybrid_car',
+    label: 'Hybrid Car',
+    fuelType: 'gasoline',
+    powertrain: 'HEV',
+    massKg: 1350,
+    idleRateLitersPerMinute: 0.005,
+    engineEfficiency: 0.38,
+  },
+  hybrid_van: {
+    key: 'hybrid_van',
+    label: 'Hybrid Van',
+    fuelType: 'gasoline',
+    powertrain: 'HEV',
+    massKg: 2100,
+    idleRateLitersPerMinute: 0.008,
+    engineEfficiency: 0.36,
+  },
+  e_trike: {
+    key: 'e_trike',
+    label: 'E-Trike',
+    fuelType: 'electric',
+    powertrain: 'BEV',
+    massKg: 400,
+    idleRateLitersPerMinute: 0,
+    drivetrainEfficiency: 0.88,
+    regenEfficiency: 0.35,
+  },
+  e_motorcycle: {
+    key: 'e_motorcycle',
+    label: 'E-Motorcycle',
+    fuelType: 'electric',
+    powertrain: 'BEV',
+    massKg: 170,
+    idleRateLitersPerMinute: 0,
+    drivetrainEfficiency: 0.9,
+    regenEfficiency: 0.3,
+  },
+};
 
 // ─── Utilities ─────────────────────────────────────────────────────────────────
 
@@ -146,6 +308,79 @@ function toFiniteNonNegative(value: number | null | undefined) {
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
+}
+
+function energyDensityKwhPerLiter(fuelType: 'gasoline' | 'diesel' | 'electric') {
+  if (fuelType === 'diesel') {
+    return 10.7;
+  }
+
+  return 8.9;
+}
+
+function pickVehicleProfile(vehicleType: string, fuelType: string): VehicleLiveProfile {
+  const normalizedVehicleType = String(vehicleType || 'sedan')
+    .trim()
+    .toLowerCase()
+    .replace(/[\s/-]+/g, '_');
+  const fallback = LIVE_VEHICLE_PROFILES.sedan;
+  const base = LIVE_VEHICLE_PROFILES[normalizedVehicleType] || fallback;
+  const normalizedFuelType = String(fuelType || base.fuelType).toLowerCase();
+  const safeFuelType =
+    normalizedFuelType === 'diesel'
+      ? 'diesel'
+      : normalizedFuelType === 'electric'
+        ? 'electric'
+        : 'gasoline';
+
+  return {
+    ...base,
+    fuelType: safeFuelType,
+  };
+}
+
+function safeAccuracyPercent(predicted: number, actual: number) {
+  if (!Number.isFinite(predicted) || predicted <= 0 || !Number.isFinite(actual)) {
+    return null;
+  }
+
+  return Math.max(0, Math.round((1 - Math.abs(actual - predicted) / predicted) * 100));
+}
+
+function readPredictedSummary(): PredictedTripSummary | null {
+  try {
+    const raw = window.localStorage.getItem(LAST_ANALYSIS_STORAGE_KEY);
+    if (!raw) {
+      return null;
+    }
+
+    const parsed = JSON.parse(raw);
+    const analysis = parsed?.analysis;
+    const routes = Array.isArray(analysis?.routes) ? analysis.routes : [];
+    const recommended = routes.find((route: any) => route?.isRecommended) || routes[0];
+
+    if (!recommended) {
+      return null;
+    }
+
+    const fuelType = String(analysis?.request?.fuelType || 'gasoline').toLowerCase();
+    const unitLabel = fuelType === 'electric' ? 'kWh' : 'L';
+
+    return {
+      routeLabel: String(recommended?.label || 'Predicted route'),
+      predictedDurationMinutes: Number(recommended?.durationMinutes || 0),
+      predictedDistanceKm: Number(recommended?.distanceKm || 0),
+      predictedFuelOrEnergy:
+        fuelType === 'electric'
+          ? Number(recommended?.totalEnergyKwh || 0)
+          : Number(recommended?.totalFuelLiters || 0),
+      predictedCostPhp: Number(recommended?.estimatedCostPhp || 0),
+      predictedCo2Kg: Number(recommended?.co2Kg || 0),
+      unitLabel,
+    };
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -272,6 +507,9 @@ export function SpeedMeterPrototypePage() {
   const maxSpeedMpsRef = useRef(0);
   const skippedRef = useRef(0);
   const stopConfidenceRef = useRef(0);
+  const runningFuelOrEnergyRef = useRef(0);
+  const runningCostPhpRef = useRef(0);
+  const lastSmoothedSpeedRef = useRef(0);
 
   const [isTracking, setIsTracking] = useState(false);
   const [isStarting, setIsStarting] = useState(false);
@@ -286,10 +524,32 @@ export function SpeedMeterPrototypePage() {
   const [latestAccuracyMeters, setLatestAccuracyMeters] = useState<number | null>(null);
   const [skippedSamples, setSkippedSamples] = useState(0);
   const [samples, setSamples] = useState<SpeedSample[]>([]);
+  const [vehicleType, setVehicleType] = useState('sedan');
+  const [fuelType, setFuelType] = useState<'gasoline' | 'diesel' | 'electric'>('gasoline');
+  const [fuelPrice, setFuelPrice] = useState('62.00');
+  const [liveVspKwPerTon, setLiveVspKwPerTon] = useState(0);
+  const [liveFuelOrEnergyPerKm, setLiveFuelOrEnergyPerKm] = useState(0);
+  const [liveCostPerKm, setLiveCostPerKm] = useState(0);
+  const [runningFuelOrEnergy, setRunningFuelOrEnergy] = useState(0);
+  const [runningCostPhp, setRunningCostPhp] = useState(0);
+  const [predictedSummary, setPredictedSummary] = useState<PredictedTripSummary | null>(null);
+  const [completedTrip, setCompletedTrip] = useState<CompletedTripRecord | null>(null);
+  const [syncStatus, setSyncStatus] = useState('Not synced');
 
   const modeRef = useRef<SpeedMeterMode>(DEFAULT_MODE);
   const modeConfigRef = useRef<ModeConfig>(MODE_SETTINGS[DEFAULT_MODE]);
   const environmentRef = useRef<Environment>(DEFAULT_ENVIRONMENT);
+
+  useEffect(() => {
+    setPredictedSummary(readPredictedSummary());
+  }, []);
+
+  useEffect(() => {
+    const profile = pickVehicleProfile(vehicleType, fuelType);
+    setFuelType(profile.fuelType);
+    const defaultPrice = DEFAULT_FUEL_PRICE[profile.fuelType];
+    setFuelPrice(defaultPrice.toFixed(2));
+  }, [vehicleType]);
 
   const stopWatcher = () => {
     if (watchIdRef.current != null && typeof navigator !== 'undefined' && navigator.geolocation) {
@@ -336,6 +596,9 @@ export function SpeedMeterPrototypePage() {
         const lat = Number(position.coords.latitude);
         const lng = Number(position.coords.longitude);
         const accuracyMeters = toFiniteNonNegative(position.coords.accuracy);
+        const altitudeMeters = Number.isFinite(Number(position.coords.altitude))
+          ? Number(position.coords.altitude)
+          : null;
         const rawSpeedMps = Number(position.coords.speed);
 
         if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
@@ -361,7 +624,7 @@ export function SpeedMeterPrototypePage() {
           resumeGuardRemainingRef.current -= 1;
           skippedRef.current += 1;
           setSkippedSamples(skippedRef.current);
-          lastPointRef.current = { lat, lng, timestampMs: nowMs, accuracyMeters };
+          lastPointRef.current = { lat, lng, timestampMs: nowMs, accuracyMeters, altitudeMeters };
           setStatusMessage('GPS resumed. Waiting for stable samples...');
           return;
         }
@@ -380,13 +643,13 @@ export function SpeedMeterPrototypePage() {
           skippedRef.current += 1;
           setSkippedSamples(skippedRef.current);
           // Still advance the anchor so delta-time stays correct.
-          lastPointRef.current = { lat, lng, timestampMs: nowMs, accuracyMeters };
+          lastPointRef.current = { lat, lng, timestampMs: nowMs, accuracyMeters, altitudeMeters };
           return;
         }
 
         const prev = lastPointRef.current;
         if (!prev) {
-          lastPointRef.current = { lat, lng, timestampMs: nowMs, accuracyMeters };
+          lastPointRef.current = { lat, lng, timestampMs: nowMs, accuracyMeters, altitudeMeters };
           setStatusMessage('Live. GPS warming up...');
           return;
         }
@@ -398,7 +661,7 @@ export function SpeedMeterPrototypePage() {
 
         const rawDistanceMeters = haversineDistanceMeters({ lat: prev.lat, lng: prev.lng }, { lat, lng });
         if (!Number.isFinite(rawDistanceMeters)) {
-          lastPointRef.current = { lat, lng, timestampMs: nowMs, accuracyMeters };
+          lastPointRef.current = { lat, lng, timestampMs: nowMs, accuracyMeters, altitudeMeters };
           return;
         }
 
@@ -408,7 +671,7 @@ export function SpeedMeterPrototypePage() {
         if (rawDistanceMeters > maxDist) {
           skippedRef.current += 1;
           setSkippedSamples(skippedRef.current);
-          lastPointRef.current = { lat, lng, timestampMs: nowMs, accuracyMeters };
+          lastPointRef.current = { lat, lng, timestampMs: nowMs, accuracyMeters, altitudeMeters };
           return;
         }
 
@@ -426,12 +689,14 @@ export function SpeedMeterPrototypePage() {
         if (wakeSpikeLikely) {
           skippedRef.current += 1;
           setSkippedSamples(skippedRef.current);
-          lastPointRef.current = { lat, lng, timestampMs: nowMs, accuracyMeters };
+          lastPointRef.current = { lat, lng, timestampMs: nowMs, accuracyMeters, altitudeMeters };
           setStatusMessage('Filtering wake-up GPS spike...');
           return;
         }
 
         const distanceDeltaMeters = rawDistanceMeters;
+        const fuelPriceNumber = Number.parseFloat(fuelPrice) || DEFAULT_FUEL_PRICE[fuelType];
+        const profile = pickVehicleProfile(vehicleType, fuelType);
 
         // FIX 3: Accuracy-weighted Kalman process noise.
         // Near buildings / indoors, accuracy degrades but old code kept Q the same,
@@ -460,6 +725,47 @@ export function SpeedMeterPrototypePage() {
 
         kalmanRef.current = kalmanUpdate(kalmanRef.current, speedMps, processNoise);
         let smoothedSpeedMps = Math.max(0, kalmanRef.current.estimate);
+        const previousSmoothedSpeedMps = lastSmoothedSpeedRef.current;
+        const accelerationMps2 = (smoothedSpeedMps - previousSmoothedSpeedMps) / Math.max(deltaTimeSec, 0.1);
+
+        let grade = 0;
+        if (
+          Number.isFinite(altitudeMeters) &&
+          Number.isFinite(prev.altitudeMeters) &&
+          distanceDeltaMeters >= 2
+        ) {
+          grade = clamp((Number(altitudeMeters) - Number(prev.altitudeMeters)) / distanceDeltaMeters, -0.2, 0.2);
+        }
+
+        const vspKwPerTon =
+          smoothedSpeedMps * (1.1 * accelerationMps2 + 9.81 * grade + 0.132) +
+          0.000302 * smoothedSpeedMps ** 3;
+        const massTons = profile.massKg / 1000;
+        const wheelPowerKw = Math.max(0, vspKwPerTon * massTons);
+        const distanceKm = distanceDeltaMeters / 1000;
+        let segmentUnits = 0;
+
+        if (profile.powertrain === 'BEV') {
+          const drivetrainEfficiency = Math.max(0.2, profile.drivetrainEfficiency || 0.9);
+          const regenEfficiency = Math.max(0, profile.regenEfficiency || 0.3);
+          const positiveEnergyKwh = (wheelPowerKw * deltaTimeSec) / 3600 / drivetrainEfficiency;
+          const negativePowerKw = Math.min(0, vspKwPerTon * massTons);
+          const recoveredEnergyKwh = Math.abs(negativePowerKw) * (deltaTimeSec / 3600) * regenEfficiency;
+          const idleEnergyKwh = smoothedSpeedMps <= 0.5 ? (deltaTimeSec / 3600) * 0.6 : 0;
+          segmentUnits = Math.max(0, positiveEnergyKwh - recoveredEnergyKwh) + idleEnergyKwh;
+        } else {
+          const engineEfficiency = Math.max(0.12, profile.engineEfficiency || 0.26);
+          const movingFuelEnergyKwh = (wheelPowerKw * deltaTimeSec) / 3600 / engineEfficiency;
+          const movingFuelLiters = movingFuelEnergyKwh / energyDensityKwhPerLiter(profile.fuelType);
+          const idleFuelLiters = smoothedSpeedMps <= 0.5 ? profile.idleRateLitersPerMinute * (deltaTimeSec / 60) : 0;
+          segmentUnits = Math.max(0, movingFuelLiters) + Math.max(0, idleFuelLiters);
+        }
+
+        const segmentFuelOrEnergyPerKm = distanceKm > 0.001 ? segmentUnits / distanceKm : 0;
+        const segmentCostPerKm = segmentFuelOrEnergyPerKm * fuelPriceNumber;
+
+        runningFuelOrEnergyRef.current += Math.max(0, segmentUnits);
+        runningCostPhpRef.current = runningFuelOrEnergyRef.current * fuelPriceNumber;
 
         // Snap to zero after a short hold of near-zero speed + small movement.
         const nearStillBySpeed = speedMps <= modeConfig.stillSpeedThresholdMps;
@@ -503,6 +809,14 @@ export function SpeedMeterPrototypePage() {
           environment: env,
           distanceDeltaMeters,
           cumulativeDistanceMeters: totalDistanceMetersRef.current,
+          altitudeMeters,
+          accelerationMps2,
+          grade,
+          vspKwPerTon,
+          segmentFuelOrEnergyPerKm,
+          segmentCostPerKm,
+          runningFuelOrEnergy: runningFuelOrEnergyRef.current,
+          runningCostPhp: runningCostPhpRef.current,
         };
 
         setElapsedSeconds(elapsedSec);
@@ -511,10 +825,16 @@ export function SpeedMeterPrototypePage() {
         setCurrentSpeedMps(smoothedSpeedMps);
         setAverageSpeedMps(avgMps);
         setMaxSpeedMps(maxSpeedMpsRef.current);
+        setLiveVspKwPerTon(vspKwPerTon);
+        setLiveFuelOrEnergyPerKm(segmentFuelOrEnergyPerKm);
+        setLiveCostPerKm(segmentCostPerKm);
+        setRunningFuelOrEnergy(runningFuelOrEnergyRef.current);
+        setRunningCostPhp(runningCostPhpRef.current);
         setSamples((prev) => [...prev, sample]);
         setStatusMessage('Live. Tracking speed samples.');
+        lastSmoothedSpeedRef.current = smoothedSpeedMps;
 
-        lastPointRef.current = { lat, lng, timestampMs: nowMs, accuracyMeters };
+        lastPointRef.current = { lat, lng, timestampMs: nowMs, accuracyMeters, altitudeMeters };
       },
       (error) => {
         if (error.code === error.PERMISSION_DENIED) {
@@ -552,9 +872,14 @@ export function SpeedMeterPrototypePage() {
     maxSpeedMpsRef.current = 0;
     skippedRef.current = 0;
     stopConfidenceRef.current = 0;
+    lastSmoothedSpeedRef.current = 0;
+    runningFuelOrEnergyRef.current = 0;
+    runningCostPhpRef.current = 0;
     setIsStarting(false);
     setElapsedSeconds(0); setInstantSpeedMps(0); setCurrentSpeedMps(0); setAverageSpeedMps(0);
     setMaxSpeedMps(0); setTotalDistanceMeters(0);
+    setLiveVspKwPerTon(0); setLiveFuelOrEnergyPerKm(0); setLiveCostPerKm(0);
+    setRunningFuelOrEnergy(0); setRunningCostPhp(0);
     setLatestAccuracyMeters(null); setSkippedSamples(0); setSamples([]);
   };
 
@@ -573,12 +898,95 @@ export function SpeedMeterPrototypePage() {
   const currentPaceText = useMemo(() => formatPaceMinutesPerKm(currentSpeedMps), [currentSpeedMps]);
   const latestAccuracyText = useMemo(() => formatLocationAccuracy(latestAccuracyMeters), [latestAccuracyMeters]);
   const signalQuality = useMemo(() => getSignalQuality(latestAccuracyMeters), [latestAccuracyMeters]);
+  const profile = useMemo(() => pickVehicleProfile(vehicleType, fuelType), [vehicleType, fuelType]);
+  const unitLabel = profile.fuelType === 'electric' ? 'kWh' : 'L';
+  const liveBand =
+    liveVspKwPerTon < 4 ? 'eco' : liveVspKwPerTon < 10 ? 'moderate' : 'waste';
 
   const exportCsv = () => {
     if (samples.length === 0) { setStatusMessage('No samples yet. Start tracking first.'); return; }
     const ts = new Date().toISOString().replace(/[:.]/g, '-');
     triggerDownload(`speedmeter-${ts}.csv`, buildCsvContent(samples), 'text/csv;charset=utf-8');
     setStatusMessage('CSV downloaded.');
+  };
+
+  const finalizeTrip = async () => {
+    if (samples.length === 0) {
+      setStatusMessage('No samples yet. Track first before ending the trip.');
+      return;
+    }
+
+    const pricePerUnit = Number.parseFloat(fuelPrice) || DEFAULT_FUEL_PRICE[fuelType];
+    const durationMinutes = elapsedSeconds / 60;
+    const distanceKm = totalDistanceMeters / 1000;
+    const fuelOrEnergy = runningFuelOrEnergyRef.current;
+    const costPhp = fuelOrEnergy * pricePerUnit;
+    const co2Kg = fuelOrEnergy * CO2_PER_UNIT[fuelType];
+
+    const completed: CompletedTripRecord = {
+      id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+      finishedAt: new Date().toISOString(),
+      vehicleType,
+      fuelType,
+      fuelPrice: pricePerUnit,
+      predicted: predictedSummary,
+      actual: {
+        durationMinutes,
+        distanceKm,
+        fuelOrEnergy,
+        costPhp,
+        co2Kg,
+      },
+      accuracy: {
+        timePct: predictedSummary
+          ? safeAccuracyPercent(predictedSummary.predictedDurationMinutes, durationMinutes)
+          : null,
+        fuelPct: predictedSummary
+          ? safeAccuracyPercent(predictedSummary.predictedFuelOrEnergy, fuelOrEnergy)
+          : null,
+        costPct: predictedSummary
+          ? safeAccuracyPercent(predictedSummary.predictedCostPhp, costPhp)
+          : null,
+      },
+      synced: false,
+    };
+
+    setCompletedTrip(completed);
+
+    const existing = JSON.parse(window.localStorage.getItem(TRIP_HISTORY_STORAGE_KEY) || '[]');
+    const history = Array.isArray(existing) ? existing : [];
+    history.unshift(completed);
+    window.localStorage.setItem(TRIP_HISTORY_STORAGE_KEY, JSON.stringify(history.slice(0, 120)));
+
+    setSyncStatus('Saved locally. Syncing...');
+    try {
+      const response = await fetch(`${API_URL}/api/routes/trips`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(completed),
+      });
+
+      if (!response.ok) {
+        throw new Error('Sync endpoint unavailable');
+      }
+
+      const syncedRecord = {
+        ...completed,
+        synced: true,
+      };
+      setCompletedTrip(syncedRecord);
+      const refreshed = JSON.parse(window.localStorage.getItem(TRIP_HISTORY_STORAGE_KEY) || '[]');
+      const refreshedHistory = Array.isArray(refreshed) ? refreshed : [];
+      const updatedHistory = refreshedHistory.map((item: CompletedTripRecord) =>
+        item.id === syncedRecord.id ? syncedRecord : item
+      );
+      window.localStorage.setItem(TRIP_HISTORY_STORAGE_KEY, JSON.stringify(updatedHistory));
+      setSyncStatus('Synced to server');
+    } catch {
+      setSyncStatus('Offline/local only. Will sync later.');
+    }
   };
 
   const latestRows = useMemo(() => samples.slice(-10).reverse(), [samples]);
@@ -611,15 +1019,14 @@ export function SpeedMeterPrototypePage() {
             <div>
               <p className="inline-flex items-center gap-2 rounded-lg bg-teal-50 px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-teal-700">
                 <Gauge className="h-4 w-4" />
-                Throwaway Prototype
+                Live VSP Meter
               </p>
               <h1 className="mt-3 text-3xl font-bold tracking-tight text-slate-900 md:text-4xl">
-                Live Speed Meter Test
+                SmartRoute Speed Meter
               </h1>
               <p className="mt-3 max-w-3xl text-sm text-slate-600 md:text-base">
-                Capture live speed while walking or running. Uses GPS Doppler speed when available
-                (more accurate than position-delta maths) and applies a Kalman filter to remove
-                spikes. Supports both indoors and outdoors use. Export CSV for thesis data.
+                Live GPS speed and Vehicle Specific Power with running fuel burn, cost per km,
+                and trip total cost. End each trip to compare predicted vs actual accuracy.
               </p>
             </div>
 
@@ -631,6 +1038,38 @@ export function SpeedMeterPrototypePage() {
           </div>
 
           <div className="mt-6 flex flex-wrap items-center gap-2">
+            <select
+              value={vehicleType}
+              onChange={(event) => setVehicleType(event.target.value)}
+              className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700"
+            >
+              <option value="motorcycle">Motorcycle (ICE)</option>
+              <option value="tricycle">Tricycle (ICE)</option>
+              <option value="sedan">Sedan / Private Car (ICE)</option>
+              <option value="van">Van (ICE)</option>
+              <option value="bus">Bus (ICE)</option>
+              <option value="hybrid_car">Hybrid Car (HEV)</option>
+              <option value="hybrid_van">Hybrid Van (HEV)</option>
+              <option value="e_trike">E-Trike (BEV)</option>
+              <option value="e_motorcycle">E-Motorcycle (BEV)</option>
+            </select>
+            <select
+              value={fuelType}
+              onChange={(event) => setFuelType(event.target.value as 'gasoline' | 'diesel' | 'electric')}
+              className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700"
+            >
+              <option value="gasoline">Gasoline</option>
+              <option value="diesel">Diesel</option>
+              <option value="electric">Electric</option>
+            </select>
+            <input
+              type="number"
+              step="0.01"
+              value={fuelPrice}
+              onChange={(event) => setFuelPrice(event.target.value)}
+              className="w-32 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700"
+              title={`Price per ${unitLabel}`}
+            />
             <button
               type="button"
               onClick={isTracking ? pauseTracking : startTracking}
@@ -639,6 +1078,14 @@ export function SpeedMeterPrototypePage() {
             >
               {isTracking ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
               {isTracking ? 'Pause Tracking' : isStarting ? 'Starting...' : 'Start Tracking'}
+            </button>
+            <button
+              type="button"
+              onClick={finalizeTrip}
+              className="inline-flex items-center gap-2 rounded-lg border border-emerald-300 bg-emerald-50 px-4 py-2.5 text-sm font-semibold text-emerald-700 transition hover:bg-emerald-100"
+            >
+              <CheckCircle2 className="h-4 w-4" />
+              End Trip & Compare
             </button>
             <button
               type="button"
@@ -758,6 +1205,63 @@ export function SpeedMeterPrototypePage() {
               <MetricCard icon={<Download className="h-4 w-4" />} label="OK / Skipped" value={`${samples.length} / ${skippedSamples}`} />
             </div>
           </div>
+
+          <div className="mt-6 grid gap-4 lg:grid-cols-3">
+            <div className="rounded-xl border border-slate-200 bg-white p-4">
+              <div className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Live VSP</div>
+              <div className="mt-2 text-3xl font-bold text-slate-900">{liveVspKwPerTon.toFixed(2)}</div>
+              <div className="text-xs text-slate-600">kW/ton</div>
+              <div className="mt-3 h-3 w-full rounded-full bg-slate-100 overflow-hidden">
+                <div
+                  className={`h-full ${
+                    liveBand === 'eco' ? 'bg-emerald-500' : liveBand === 'moderate' ? 'bg-amber-500' : 'bg-red-500'
+                  }`}
+                  style={{ width: `${Math.min(100, Math.max(0, (liveVspKwPerTon / 18) * 100))}%` }}
+                />
+              </div>
+              <div className="mt-2 text-xs text-slate-600">
+                {liveBand === 'eco' ? 'Eco Zone (0-4)' : liveBand === 'moderate' ? 'Moderate Zone (4-10)' : 'Wasting Zone (10+)'}
+              </div>
+            </div>
+
+            <MetricCard
+              icon={<Fuel className="h-4 w-4" />}
+              label={profile.fuelType === 'electric' ? 'Energy / km' : 'Fuel Burn / km'}
+              value={`${liveFuelOrEnergyPerKm.toFixed(3)} ${unitLabel}/km`}
+            />
+            <MetricCard
+              icon={<Download className="h-4 w-4" />}
+              label="Cost / km"
+              value={`₱${liveCostPerKm.toFixed(2)}/km`}
+            />
+            <MetricCard
+              icon={<Activity className="h-4 w-4" />}
+              label={profile.fuelType === 'electric' ? 'Running Energy' : 'Running Fuel'}
+              value={`${runningFuelOrEnergy.toFixed(3)} ${unitLabel}`}
+            />
+            <MetricCard
+              icon={<Timer className="h-4 w-4" />}
+              label="Running Total Cost"
+              value={`₱${runningCostPhp.toFixed(2)}`}
+            />
+            <div className="rounded-xl border border-slate-200 bg-white px-3 py-3 shadow-sm">
+              <div className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Before Trip Snapshot</div>
+              {predictedSummary ? (
+                <div className="mt-2 space-y-1 text-sm text-slate-700">
+                  <div className="font-medium text-slate-900">{predictedSummary.routeLabel}</div>
+                  <div>Predicted: ₱{predictedSummary.predictedCostPhp.toFixed(2)}</div>
+                  <div>
+                    Predicted {predictedSummary.unitLabel}: {predictedSummary.predictedFuelOrEnergy.toFixed(2)} {predictedSummary.unitLabel}
+                  </div>
+                  <div>Predicted time: {predictedSummary.predictedDurationMinutes.toFixed(1)} min</div>
+                </div>
+              ) : (
+                <div className="mt-2 text-sm text-slate-600">
+                  No predicted route snapshot yet. Analyze routes first, then return here.
+                </div>
+              )}
+            </div>
+          </div>
         </motion.section>
 
         {/* ── Latest samples table ─────────────────────────────────────────────── */}
@@ -829,6 +1333,64 @@ export function SpeedMeterPrototypePage() {
                   ))}
                 </tbody>
               </table>
+            </div>
+          )}
+        </motion.section>
+
+        <motion.section
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.08 }}
+          className="mt-6 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm"
+        >
+          <h2 className="text-xl font-semibold text-slate-900">Before vs After Trip Comparison</h2>
+          <p className="mt-2 text-sm text-slate-600">
+            End a trip to compare predicted route metrics against actual live GPS + VSP totals.
+          </p>
+
+          {!completedTrip ? (
+            <div className="mt-4 rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-6 text-sm text-slate-500">
+              No completed trip yet. Start tracking, then click End Trip & Compare.
+            </div>
+          ) : (
+            <div className="mt-5 grid gap-4 md:grid-cols-3">
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <div className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Prediction</div>
+                {completedTrip.predicted ? (
+                  <div className="mt-2 space-y-1 text-sm text-slate-700">
+                    <div className="font-medium text-slate-900">{completedTrip.predicted.routeLabel}</div>
+                    <div>Time: {completedTrip.predicted.predictedDurationMinutes.toFixed(1)} min</div>
+                    <div>
+                      Usage: {completedTrip.predicted.predictedFuelOrEnergy.toFixed(2)} {completedTrip.predicted.unitLabel}
+                    </div>
+                    <div>Cost: ₱{completedTrip.predicted.predictedCostPhp.toFixed(2)}</div>
+                  </div>
+                ) : (
+                  <div className="mt-2 text-sm text-slate-600">No route prediction saved.</div>
+                )}
+              </div>
+
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <div className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Actual</div>
+                <div className="mt-2 space-y-1 text-sm text-slate-700">
+                  <div>Time: {completedTrip.actual.durationMinutes.toFixed(1)} min</div>
+                  <div>Distance: {completedTrip.actual.distanceKm.toFixed(2)} km</div>
+                  <div>
+                    Usage: {completedTrip.actual.fuelOrEnergy.toFixed(2)} {completedTrip.fuelType === 'electric' ? 'kWh' : 'L'}
+                  </div>
+                  <div>Cost: ₱{completedTrip.actual.costPhp.toFixed(2)}</div>
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+                <div className="text-xs font-semibold uppercase tracking-[0.12em] text-emerald-700">Accuracy</div>
+                <div className="mt-2 space-y-1 text-sm text-emerald-900">
+                  <div>Time: {completedTrip.accuracy.timePct ?? 'N/A'}%</div>
+                  <div>Fuel/Energy: {completedTrip.accuracy.fuelPct ?? 'N/A'}%</div>
+                  <div>Cost: {completedTrip.accuracy.costPct ?? 'N/A'}%</div>
+                </div>
+                <div className="mt-3 text-xs text-emerald-800">{syncStatus}</div>
+              </div>
             </div>
           )}
         </motion.section>

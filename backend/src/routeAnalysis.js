@@ -1,4 +1,6 @@
 const express = require('express');
+const fs = require('fs');
+const path = require('path');
 const { fetchWithRetry } = require('./resilientFetch');
 
 const router = express.Router();
@@ -21,6 +23,40 @@ const CO2_FACTORS = {
   diesel: 2.68,
   electric: 0.72,
 };
+const TRIP_REPORTS_FILE = process.env.TRIP_REPORTS_FILE || './data/trip-reports.json';
+
+function resolveTripReportsPath() {
+  if (path.isAbsolute(TRIP_REPORTS_FILE)) {
+    return TRIP_REPORTS_FILE;
+  }
+
+  return path.join(__dirname, '..', TRIP_REPORTS_FILE);
+}
+
+function readTripReports() {
+  try {
+    const filePath = resolveTripReportsPath();
+    if (!fs.existsSync(filePath)) {
+      return [];
+    }
+
+    const raw = fs.readFileSync(filePath, 'utf8');
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeTripReports(records) {
+  try {
+    const filePath = resolveTripReportsPath();
+    fs.mkdirSync(path.dirname(filePath), { recursive: true });
+    fs.writeFileSync(filePath, JSON.stringify(records.slice(0, 1000), null, 2), 'utf8');
+  } catch (error) {
+    console.error('Failed to persist trip reports:', error.message);
+  }
+}
 
 const VEHICLE_PROFILES = {
   motorcycle: {
@@ -847,6 +883,40 @@ function buildFallbackResponse({
     fallbackReason: reason,
   };
 }
+
+router.post('/trips', (req, res) => {
+  const payload = req.body && typeof req.body === 'object' ? req.body : null;
+  if (!payload) {
+    return res.status(400).json({ error: 'Trip payload is required.' });
+  }
+
+  const existing = readTripReports();
+  const record = {
+    id: String(payload.id || `${Date.now()}`),
+    savedAt: new Date().toISOString(),
+    ...payload,
+  };
+
+  existing.unshift(record);
+  writeTripReports(existing);
+
+  return res.status(201).json({
+    message: 'Trip report saved.',
+    id: record.id,
+  });
+});
+
+router.get('/trips', (req, res) => {
+  const requestedLimit = Number.parseInt(String(req.query.limit || '50'), 10);
+  const limit = Number.isFinite(requestedLimit)
+    ? Math.max(1, Math.min(200, requestedLimit))
+    : 50;
+  const records = readTripReports().slice(0, limit);
+  res.json({
+    count: records.length,
+    records,
+  });
+});
 
 router.post('/analyze', async (req, res) => {
   const origin = normalizeWaypoint(req.body?.origin);
