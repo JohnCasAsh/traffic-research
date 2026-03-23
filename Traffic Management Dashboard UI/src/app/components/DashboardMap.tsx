@@ -454,6 +454,7 @@ export function DashboardMap({
   const [selectedRouteId, setSelectedRouteId] = useState<string | null>(null);
   const [bridgeStatusMessage, setBridgeStatusMessage] = useState<string | null>(null);
   const [streamConnected, setStreamConnected] = useState(false);
+  const [streamFailureCount, setStreamFailureCount] = useState(0);
   const [trackingStatusMessage, setTrackingStatusMessage] = useState<string | null>(null);
   const [activeTrafficAlerts, setActiveTrafficAlerts] = useState<LiveTrackingAlert[]>([]);
   const [trafficLevelCounts, setTrafficLevelCounts] = useState({ low: 0, moderate: 0, heavy: 0 });
@@ -1292,14 +1293,15 @@ export function DashboardMap({
 
       try {
         const payload = JSON.parse(event.data) as LiveTrackingSnapshot;
-        
+
         // PRIVACY: Only show vehicles on map if user has explicitly enabled Live Tracking
         if (liveTrackingEnabled) {
           syncVehicleMarkers(payload.vehicles || []);
           setActiveTrafficAlerts((payload.alerts || []).slice(0, 3));
         }
-        
+
         setStreamConnected(true);
+        setStreamFailureCount(0);
       } catch (error) {
         console.error('Live tracking snapshot parse error:', error);
       }
@@ -1351,6 +1353,7 @@ export function DashboardMap({
     stream.onerror = () => {
       if (!disposed) {
         setStreamConnected(false);
+        setStreamFailureCount((prev) => prev + 1);
       }
     };
 
@@ -1358,6 +1361,7 @@ export function DashboardMap({
       disposed = true;
       stream.close();
       setStreamConnected(false);
+      setStreamFailureCount(0);
       setActiveTrafficAlerts([]);
       clearMarkers();
     };
@@ -1632,10 +1636,16 @@ export function DashboardMap({
       {isMapActivated && liveTrackingEnabled && !configurationError && (
         <div className="absolute top-20 right-4 z-20 max-w-[260px] rounded-lg border border-slate-200 bg-white/95 px-3 py-2 text-[11px] text-slate-700 shadow">
           <div className="font-semibold text-slate-800">Live Tracking</div>
-          <div className={streamConnected ? 'text-emerald-700' : 'text-amber-700'}>
-            {streamConnected ? 'Traffic feed connected' : 'Connecting traffic feed...'}
+          <div className={streamConnected ? 'text-emerald-700' : streamFailureCount >= 3 ? 'text-red-600' : 'text-amber-700'}>
+            {streamConnected
+              ? 'Traffic feed connected'
+              : streamFailureCount >= 3
+              ? 'Backend offline — live data unavailable'
+              : 'Connecting traffic feed...'}
           </div>
-          {trackingStatusMessage && <div className="mt-1 text-slate-600">{trackingStatusMessage}</div>}
+          {trackingStatusMessage && streamConnected && (
+            <div className="mt-1 text-slate-600">{trackingStatusMessage}</div>
+          )}
         </div>
       )}
 
