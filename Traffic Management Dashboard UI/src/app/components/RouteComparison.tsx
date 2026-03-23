@@ -116,6 +116,129 @@ function formatTrafficLabel(level: TrafficLevel) {
   return `${level.charAt(0).toUpperCase()}${level.slice(1)} Traffic`;
 }
 
+function buildFallbackAnalysis(formData: RouteFormData): AnalysisResponse {
+  const fuelType = String(formData.fuelType || 'gasoline').toLowerCase();
+  const fuelPrice = Number.parseFloat(formData.fuelPrice || '0') || (fuelType === 'electric' ? 10 : 62);
+  const vehicleLabel =
+    formData.vehicleType === 'e_trike' || formData.vehicleType === 'etrike'
+      ? 'E-Trike'
+      : formData.vehicleType === 'e_motorcycle' || formData.vehicleType === 'emotorcycle'
+        ? 'E-Motorcycle'
+        : formData.vehicleType === 'hybrid_car' || formData.vehicleType === 'hybrid'
+          ? 'Hybrid Car'
+          : formData.vehicleType === 'hybrid_van'
+            ? 'Hybrid Van'
+            : 'Sedan / Private Car';
+
+  const prototypes: Array<{
+    label: string;
+    description: string;
+    distanceKm: number;
+    durationMinutes: number;
+    trafficDelayMinutes: number;
+    trafficLevel: TrafficLevel;
+    speedStability: number;
+  }> = [
+    {
+      label: 'Balanced City Route',
+      description: 'Fallback estimate while live backend analysis is temporarily unavailable.',
+      distanceKm: 16.8,
+      durationMinutes: 42,
+      trafficDelayMinutes: 7,
+      trafficLevel: 'moderate',
+      speedStability: 76,
+    },
+    {
+      label: 'Fastest Main Road',
+      description: 'Higher traffic pressure but lower travel time.',
+      distanceKm: 18.3,
+      durationMinutes: 39,
+      trafficDelayMinutes: 11,
+      trafficLevel: 'heavy',
+      speedStability: 63,
+    },
+    {
+      label: 'Lower Traffic Bypass',
+      description: 'Longer distance with steadier traffic conditions.',
+      distanceKm: 19.5,
+      durationMinutes: 44,
+      trafficDelayMinutes: 4,
+      trafficLevel: 'low',
+      speedStability: 84,
+    },
+  ];
+
+  const baselineConsumptionPerKm = fuelType === 'electric' ? 0.14 : 0.085;
+
+  const routes = prototypes.map((item, index) => {
+    const trafficMultiplier = item.trafficLevel === 'heavy' ? 1.15 : item.trafficLevel === 'moderate' ? 1.05 : 0.95;
+    const unitsUsed = item.distanceKm * baselineConsumptionPerKm * trafficMultiplier;
+    const estimatedCostPhp = unitsUsed * fuelPrice;
+    const co2Kg = fuelType === 'electric' ? unitsUsed * 0.72 : unitsUsed * 2.31;
+    const efficiencyScore = Math.round(
+      (100 - item.trafficDelayMinutes * 3) * 0.35 +
+      (100 - (estimatedCostPhp / Math.max(estimatedCostPhp, 1)) * 40) * 0.25 +
+      item.speedStability * 0.4
+    );
+
+    return {
+      id: `route-${index + 1}`,
+      rank: index + 1,
+      label: item.label,
+      description: item.description,
+      distanceKm: item.distanceKm,
+      durationMinutes: item.durationMinutes,
+      staticDurationMinutes: Math.max(1, item.durationMinutes - item.trafficDelayMinutes),
+      trafficDelayMinutes: item.trafficDelayMinutes,
+      trafficLevel: item.trafficLevel,
+      estimatedCostPhp: Number(estimatedCostPhp.toFixed(2)),
+      totalFuelLiters: fuelType === 'electric' ? 0 : Number(unitsUsed.toFixed(3)),
+      totalEnergyKwh: fuelType === 'electric' ? Number(unitsUsed.toFixed(3)) : 0,
+      efficiencyScore,
+      co2Kg: Number(co2Kg.toFixed(2)),
+      isRecommended: false,
+      warnings: ['Fallback estimate only'],
+      componentScores: {
+        time: Math.max(50, 100 - item.durationMinutes),
+        fuel: Math.max(50, 100 - Math.round(unitsUsed * 10)),
+        traffic: item.trafficLevel === 'heavy' ? 58 : item.trafficLevel === 'moderate' ? 72 : 88,
+        speedStability: item.speedStability,
+      },
+      averageSpeedKph: Number((item.distanceKm / (item.durationMinutes / 60)).toFixed(1)),
+      stopCount: item.trafficLevel === 'heavy' ? 8 : item.trafficLevel === 'moderate' ? 5 : 3,
+      idleMinutes: Number((item.trafficDelayMinutes * 0.6).toFixed(1)),
+      vsp: {
+        averageKwPerTon: item.trafficLevel === 'heavy' ? 8.6 : item.trafficLevel === 'moderate' ? 7.2 : 6.1,
+        maxKwPerTon: item.trafficLevel === 'heavy' ? 21.5 : item.trafficLevel === 'moderate' ? 18.2 : 15.4,
+        ecoShare: item.trafficLevel === 'heavy' ? 28 : item.trafficLevel === 'moderate' ? 37 : 48,
+        moderateShare: item.trafficLevel === 'heavy' ? 44 : item.trafficLevel === 'moderate' ? 41 : 36,
+        wasteShare: item.trafficLevel === 'heavy' ? 28 : item.trafficLevel === 'moderate' ? 22 : 16,
+      },
+    };
+  });
+
+  routes.sort((left, right) => right.efficiencyScore - left.efficiencyScore);
+  routes.forEach((route, index) => {
+    route.rank = index + 1;
+    route.isRecommended = index === 0;
+  });
+
+  return {
+    generatedAt: new Date().toISOString(),
+    request: {
+      origin: formData.origin || DEFAULT_FORM_DATA.origin,
+      destination: formData.destination || DEFAULT_FORM_DATA.destination,
+      vehicleType: formData.vehicleType || DEFAULT_FORM_DATA.vehicleType,
+      vehicleLabel,
+      fuelType,
+      fuelPrice,
+      currency: 'PHP',
+    },
+    recommendedRouteId: routes[0].id,
+    routes,
+  };
+}
+
 export function RouteComparison() {
   const location = useLocation();
   const formData = (location.state as RouteFormData | null) || DEFAULT_FORM_DATA;
@@ -139,7 +262,14 @@ export function RouteComparison() {
           },
           body: JSON.stringify(formData),
         });
-        const payload = await response.json();
+        const rawPayload = await response.text();
+        let payload: any = null;
+
+        try {
+          payload = JSON.parse(rawPayload);
+        } catch {
+          payload = null;
+        }
 
         if (!response.ok) {
           throw new Error(payload?.details || payload?.error || 'Failed to analyze routes.');
@@ -157,7 +287,13 @@ export function RouteComparison() {
         }
       } catch (error) {
         if (!cancelled) {
-          setErrorMessage(error instanceof Error ? error.message : 'Failed to analyze routes.');
+          const fallback = buildFallbackAnalysis(formData);
+          setAnalysis(fallback);
+          setErrorMessage(
+            error instanceof Error
+              ? `Live backend analysis unavailable: ${error.message}. Showing fallback estimates.`
+              : 'Live backend analysis unavailable. Showing fallback estimates.'
+          );
         }
       } finally {
         if (!cancelled) {
@@ -216,7 +352,7 @@ export function RouteComparison() {
     );
   }
 
-  if (errorMessage || !analysis || !recommendedRoute) {
+  if (!analysis || !recommendedRoute) {
     return (
       <div className="min-h-[calc(100vh-4rem)] bg-slate-50">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
@@ -256,6 +392,11 @@ export function RouteComparison() {
             {analysis.request.fuelPrice.toFixed(2)}
             {analysis.request.fuelType === 'electric' ? '/kWh' : '/L'}.
           </p>
+          {errorMessage ? (
+            <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+              {errorMessage}
+            </div>
+          ) : null}
         </motion.div>
 
         <motion.div
