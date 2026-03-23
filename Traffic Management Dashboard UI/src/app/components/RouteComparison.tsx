@@ -3,7 +3,6 @@ import { motion } from 'motion/react';
 import {
   MapPin,
   Clock,
-  Gauge,
   Fuel,
   DollarSign,
   TrendingDown,
@@ -14,6 +13,7 @@ import {
   Leaf,
   Sparkles,
 } from 'lucide-react';
+import { DashboardMap } from './DashboardMap';
 
 interface RouteData {
   id: number;
@@ -35,7 +35,7 @@ export function RouteComparison() {
     destination: 'Airport Terminal',
     vehicleType: 'sedan',
     fuelType: 'gasoline',
-    fuelPrice: '3.50',
+    fuelPrice: '62.00',
   };
 
   // Mock route data
@@ -192,7 +192,7 @@ export function RouteComparison() {
                     <Fuel className="w-4 h-4 text-green-600" />
                     <span className="text-xs text-slate-600">Fuel Saved</span>
                   </div>
-                  <div className="text-2xl font-bold text-green-600">{fuelSavings} gal</div>
+                  <div className="text-2xl font-bold text-green-600">{fuelSavings} L</div>
                 </motion.div>
                 <motion.div
                   whileHover={{ scale: 1.05 }}
@@ -290,58 +290,45 @@ export function RouteComparison() {
           className="bg-white rounded-xl shadow-sm border border-slate-200 p-6"
         >
           <h2 className="text-xl font-bold text-slate-900 mb-4">Route Visualization</h2>
-          <div className="bg-gradient-to-br from-slate-100 to-slate-200 rounded-lg h-96 flex items-center justify-center relative overflow-hidden">
-            {/* Map Background */}
-            <img
-              src="https://images.unsplash.com/photo-1677161838747-ea0190b27b73?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxjaXR5JTIwdHJhZmZpYyUyMG5hdmlnYXRpb258ZW58MXx8fHwxNzczMjAxNjAxfDA&ixlib=rb-4.1.0&q=80&w=1080"
-              alt="City Traffic Navigation"
-              className="absolute inset-0 w-full h-full object-cover opacity-30"
+          <div className="relative rounded-lg overflow-hidden" style={{ height: '480px' }}>
+            <DashboardMap
+              origin={formData.origin || 'Tuguegarao City Hall, Tuguegarao City'}
+              destination={formData.destination || 'Tuguegarao Airport'}
+              liveTrackingEnabled={false}
             />
-            
-            <div className="text-center z-10 relative">
-              <motion.div
-                animate={{ rotate: 360 }}
-                transition={{ duration: 20, repeat: Infinity, ease: 'linear' }}
-              >
-                <Navigation className="w-12 h-12 text-teal-600 mx-auto mb-3" />
-              </motion.div>
-              <p className="text-slate-600">Interactive map with all routes highlighted</p>
-              <p className="text-sm text-slate-500 mt-2">
-                Green: Recommended • Orange: Alternative • Red: Congested
-              </p>
-            </div>
-            
-            {/* Route indicators */}
-            <div className="absolute top-4 left-4 space-y-2">
-              {routes.map((route, index) => (
-                <motion.div
-                  key={route.id}
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: 1 + index * 0.1 }}
-                  className={`flex items-center space-x-2 px-3 py-2 rounded-lg ${
-                    route.isRecommended
-                      ? 'bg-green-500 text-white'
-                      : 'bg-white border border-slate-300'
-                  }`}
-                >
-                  <motion.div
-                    animate={{ scale: route.isRecommended ? [1, 1.2, 1] : 1 }}
-                    transition={{ duration: 1.5, repeat: route.isRecommended ? Infinity : 0 }}
-                    className={`w-3 h-3 rounded-full ${
-                      route.isRecommended
-                        ? 'bg-white'
-                        : route.trafficLevel === 'heavy'
-                        ? 'bg-red-500'
-                        : route.trafficLevel === 'moderate'
-                        ? 'bg-orange-500'
-                        : 'bg-green-500'
-                    }`}
-                  ></motion.div>
-                  <span className="text-sm font-medium">{route.name}</span>
-                </motion.div>
-              ))}
-            </div>
+
+            {/* Eco-Route Badge */}
+            <motion.div
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.5 }}
+              className="absolute top-4 right-4 z-10 bg-green-500 text-white px-3 py-1.5 rounded-full text-xs font-bold flex items-center gap-1.5 shadow-lg"
+            >
+              <Leaf className="w-3.5 h-3.5" />
+              Eco-Routing Active
+            </motion.div>
+
+            {/* Legend */}
+            <motion.div
+              initial={{ opacity: 0, x: -10 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: 0.7 }}
+              className="absolute bottom-4 left-4 z-10 bg-white/90 backdrop-blur-sm rounded-lg px-3 py-2.5 shadow text-xs space-y-1.5"
+            >
+              <div className="font-semibold text-slate-700 mb-1">Route Legend</div>
+              <div className="flex items-center gap-2 text-slate-600">
+                <span className="w-3 h-1.5 rounded-full bg-green-500 inline-block" />
+                Eco / Recommended
+              </div>
+              <div className="flex items-center gap-2 text-slate-600">
+                <span className="w-3 h-1.5 rounded-full bg-blue-500 inline-block" />
+                Alternative
+              </div>
+              <div className="flex items-center gap-2 text-slate-600">
+                <span className="w-3 h-1.5 rounded-full bg-red-500 inline-block" />
+                Congested
+              </div>
+            </motion.div>
           </div>
         </motion.div>
       </div>
@@ -423,7 +410,7 @@ function RouteCard({ route, fuelType }: { route: RouteData; fuelType: string }) 
         <MetricRow
           icon={<Navigation className="w-4 h-4 text-blue-600" />}
           label="Distance"
-          value={`${route.distance} mi`}
+          value={`${route.distance} km`}
         />
         <MetricRow
           icon={<Clock className="w-4 h-4 text-purple-600" />}
@@ -433,7 +420,7 @@ function RouteCard({ route, fuelType }: { route: RouteData; fuelType: string }) 
         <MetricRow
           icon={<Fuel className="w-4 h-4 text-orange-600" />}
           label={fuelType === 'electric' ? 'Energy Used' : 'Fuel Used'}
-          value={`${route.fuelConsumption} ${fuelType === 'electric' ? 'kWh' : 'gal'}`}
+          value={`${route.fuelConsumption} ${fuelType === 'electric' ? 'kWh' : 'L'}`}
         />
         <MetricRow
           icon={<DollarSign className="w-4 h-4 text-green-600" />}
