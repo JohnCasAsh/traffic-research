@@ -15,6 +15,7 @@ import {
   Wifi,
   WifiOff,
 } from 'lucide-react';
+import { useNavigate } from 'react-router';
 import { formatLocationAccuracy } from '../location';
 import { API_URL } from '../api';
 
@@ -186,6 +187,7 @@ const DEFAULT_MODE: SpeedMeterMode = 'balanced';
 const DEFAULT_ENVIRONMENT: Environment = 'auto';
 const LAST_ANALYSIS_STORAGE_KEY = 'smartroute:last-analysis';
 const TRIP_HISTORY_STORAGE_KEY = 'smartroute:trip-history';
+const BEFORE_TRIP_STORAGE_KEY = 'smartroute:before-trip';
 
 const DEFAULT_FUEL_PRICE: Record<'gasoline' | 'diesel' | 'electric', number> = {
   gasoline: 62,
@@ -383,6 +385,31 @@ function readPredictedSummary(): PredictedTripSummary | null {
   }
 }
 
+function readBeforeTripData(): {
+  prediction: PredictedTripSummary;
+  vehicleType: string;
+  fuelType: 'gasoline' | 'diesel' | 'electric';
+  fuelPrice: number;
+} | null {
+  try {
+    const raw = window.localStorage.getItem(BEFORE_TRIP_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed?.prediction) return null;
+    // Consume the key so a future direct visit does not reuse stale data
+    window.localStorage.removeItem(BEFORE_TRIP_STORAGE_KEY);
+    const ft = String(parsed.fuelType || 'gasoline').toLowerCase();
+    return {
+      prediction: parsed.prediction as PredictedTripSummary,
+      vehicleType: String(parsed.vehicleType || 'sedan'),
+      fuelType: ft === 'diesel' ? 'diesel' : ft === 'electric' ? 'electric' : 'gasoline',
+      fuelPrice: Number(parsed.fuelPrice) || 62,
+    };
+  } catch {
+    return null;
+  }
+}
+
 /**
  * 1-D Kalman filter update step.
  * Blends the previous estimate with a new noisy measurement.
@@ -510,6 +537,7 @@ export function SpeedMeterPrototypePage() {
   const runningFuelOrEnergyRef = useRef(0);
   const runningCostPhpRef = useRef(0);
   const lastSmoothedSpeedRef = useRef(0);
+  const beforeTripFuelPriceRef = useRef<number | null>(null);
 
   const [isTracking, setIsTracking] = useState(false);
   const [isStarting, setIsStarting] = useState(false);
@@ -540,15 +568,30 @@ export function SpeedMeterPrototypePage() {
   const modeConfigRef = useRef<ModeConfig>(MODE_SETTINGS[DEFAULT_MODE]);
   const environmentRef = useRef<Environment>(DEFAULT_ENVIRONMENT);
 
+  const navigate = useNavigate();
+
   useEffect(() => {
-    setPredictedSummary(readPredictedSummary());
+    const beforeTrip = readBeforeTripData();
+    if (beforeTrip) {
+      setPredictedSummary(beforeTrip.prediction);
+      // Store price before setting vehicleType so the vehicleType effect can consume it
+      beforeTripFuelPriceRef.current = beforeTrip.fuelPrice;
+      setVehicleType(beforeTrip.vehicleType);
+    } else {
+      setPredictedSummary(readPredictedSummary());
+    }
   }, []);
 
   useEffect(() => {
     const profile = pickVehicleProfile(vehicleType, fuelType);
     setFuelType(profile.fuelType);
-    const defaultPrice = DEFAULT_FUEL_PRICE[profile.fuelType];
-    setFuelPrice(defaultPrice.toFixed(2));
+    if (beforeTripFuelPriceRef.current !== null) {
+      setFuelPrice(beforeTripFuelPriceRef.current.toFixed(2));
+      beforeTripFuelPriceRef.current = null;
+    } else {
+      const defaultPrice = DEFAULT_FUEL_PRICE[profile.fuelType];
+      setFuelPrice(defaultPrice.toFixed(2));
+    }
   }, [vehicleType]);
 
   const stopWatcher = () => {
@@ -1201,7 +1244,7 @@ export function SpeedMeterPrototypePage() {
               <MetricCard icon={<LocateFixed className="h-4 w-4" />} label="Accuracy" value={latestAccuracyText || '--'} />
               <MetricCard icon={<Activity className="h-4 w-4" />} label="Average" value={`${averageSpeedKph.toFixed(2)} km/h`} />
               <MetricCard icon={<Gauge className="h-4 w-4" />} label="Max" value={`${maxSpeedKph.toFixed(2)} km/h`} />
-              <MetricCard icon={<Activity className="h-4 w-4" />} label="Distance" value={`${totalDistanceMeters.toFixed(1)} m`} />
+              <MetricCard icon={<Activity className="h-4 w-4" />} label="Distance" value={`${(totalDistanceMeters / 1000).toFixed(2)} km`} />
               <MetricCard icon={<Download className="h-4 w-4" />} label="OK / Skipped" value={`${samples.length} / ${skippedSamples}`} />
             </div>
           </div>
@@ -1353,45 +1396,77 @@ export function SpeedMeterPrototypePage() {
               No completed trip yet. Start tracking, then click End Trip & Compare.
             </div>
           ) : (
-            <div className="mt-5 grid gap-4 md:grid-cols-3">
-              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-                <div className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Prediction</div>
-                {completedTrip.predicted ? (
-                  <div className="mt-2 space-y-1 text-sm text-slate-700">
-                    <div className="font-medium text-slate-900">{completedTrip.predicted.routeLabel}</div>
-                    <div>Time: {completedTrip.predicted.predictedDurationMinutes.toFixed(1)} min</div>
-                    <div>
-                      Usage: {completedTrip.predicted.predictedFuelOrEnergy.toFixed(2)} {completedTrip.predicted.unitLabel}
+            <>
+              <div className="mt-5 grid gap-4 md:grid-cols-3">
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                  <div className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Estimated</div>
+                  {completedTrip.predicted ? (
+                    <div className="mt-2 space-y-1 text-sm text-slate-700">
+                      <div className="font-medium text-slate-900">{completedTrip.predicted.routeLabel}</div>
+                      <div>Time: {completedTrip.predicted.predictedDurationMinutes.toFixed(1)} min</div>
+                      <div>Distance: {completedTrip.predicted.predictedDistanceKm.toFixed(2)} km</div>
+                      <div>
+                        {completedTrip.fuelType === 'electric' ? 'Energy' : 'Fuel'}: {completedTrip.predicted.predictedFuelOrEnergy.toFixed(2)} {completedTrip.predicted.unitLabel}
+                      </div>
+                      <div>Cost: ₱{completedTrip.predicted.predictedCostPhp.toFixed(2)}</div>
+                      <div>CO₂: {completedTrip.predicted.predictedCo2Kg.toFixed(2)} kg</div>
                     </div>
-                    <div>Cost: ₱{completedTrip.predicted.predictedCostPhp.toFixed(2)}</div>
-                  </div>
-                ) : (
-                  <div className="mt-2 text-sm text-slate-600">No route prediction saved.</div>
-                )}
-              </div>
+                  ) : (
+                    <div className="mt-2 text-sm text-slate-600">No route prediction saved.</div>
+                  )}
+                </div>
 
-              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-                <div className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Actual</div>
-                <div className="mt-2 space-y-1 text-sm text-slate-700">
-                  <div>Time: {completedTrip.actual.durationMinutes.toFixed(1)} min</div>
-                  <div>Distance: {completedTrip.actual.distanceKm.toFixed(2)} km</div>
-                  <div>
-                    Usage: {completedTrip.actual.fuelOrEnergy.toFixed(2)} {completedTrip.fuelType === 'electric' ? 'kWh' : 'L'}
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                  <div className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Actual</div>
+                  <div className="mt-2 space-y-1 text-sm text-slate-700">
+                    <div>Time: {completedTrip.actual.durationMinutes.toFixed(1)} min</div>
+                    <div>Distance: {completedTrip.actual.distanceKm.toFixed(2)} km</div>
+                    <div>
+                      {completedTrip.fuelType === 'electric' ? 'Energy' : 'Fuel'}: {completedTrip.actual.fuelOrEnergy.toFixed(2)} {completedTrip.fuelType === 'electric' ? 'kWh' : 'L'}
+                    </div>
+                    <div>Cost: ₱{completedTrip.actual.costPhp.toFixed(2)}</div>
+                    <div>CO₂: {completedTrip.actual.co2Kg.toFixed(2)} kg</div>
                   </div>
-                  <div>Cost: ₱{completedTrip.actual.costPhp.toFixed(2)}</div>
+                </div>
+
+                <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+                  <div className="text-xs font-semibold uppercase tracking-[0.12em] text-emerald-700">Accuracy</div>
+                  <div className="mt-2 space-y-1 text-sm text-emerald-900">
+                    <div>Time: {completedTrip.accuracy.timePct ?? 'N/A'}%</div>
+                    <div>Fuel/Energy: {completedTrip.accuracy.fuelPct ?? 'N/A'}%</div>
+                    <div>Cost: {completedTrip.accuracy.costPct ?? 'N/A'}%</div>
+                  </div>
+                  {completedTrip.predicted && (() => {
+                    const saved = completedTrip.predicted.predictedCostPhp - completedTrip.actual.costPhp;
+                    return (
+                      <div className="mt-2 text-xs font-semibold text-emerald-800">
+                        {saved >= 0
+                          ? `You saved ₱${saved.toFixed(2)} vs estimate ✅`
+                          : `₱${Math.abs(saved).toFixed(2)} more than estimated ⚠️`
+                        }
+                      </div>
+                    );
+                  })()}
+                  {(() => {
+                    const pcts = [completedTrip.accuracy.timePct, completedTrip.accuracy.fuelPct, completedTrip.accuracy.costPct].filter((v): v is number => v !== null);
+                    const avg = pcts.length > 0 ? Math.round(pcts.reduce((a, b) => a + b, 0) / pcts.length) : null;
+                    return avg !== null ? (
+                      <div className="mt-1 text-xs text-emerald-700">Prediction accuracy: {avg}%</div>
+                    ) : null;
+                  })()}
+                  <div className="mt-3 text-xs text-emerald-800">{syncStatus}</div>
                 </div>
               </div>
-
-              <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
-                <div className="text-xs font-semibold uppercase tracking-[0.12em] text-emerald-700">Accuracy</div>
-                <div className="mt-2 space-y-1 text-sm text-emerald-900">
-                  <div>Time: {completedTrip.accuracy.timePct ?? 'N/A'}%</div>
-                  <div>Fuel/Energy: {completedTrip.accuracy.fuelPct ?? 'N/A'}%</div>
-                  <div>Cost: {completedTrip.accuracy.costPct ?? 'N/A'}%</div>
-                </div>
-                <div className="mt-3 text-xs text-emerald-800">{syncStatus}</div>
+              <div className="mt-4 flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => { resetSession(); navigate('/dashboard'); }}
+                  className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                >
+                  New Route
+                </button>
               </div>
-            </div>
+            </>
           )}
         </motion.section>
 

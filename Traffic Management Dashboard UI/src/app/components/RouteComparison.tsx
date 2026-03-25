@@ -1,5 +1,5 @@
 import { type ReactNode, useEffect, useMemo, useState } from 'react';
-import { useLocation } from 'react-router';
+import { useLocation, useNavigate } from 'react-router';
 import { motion } from 'motion/react';
 import {
   AlertTriangle,
@@ -86,6 +86,7 @@ const DEFAULT_FORM_DATA: RouteFormData = {
 };
 
 const LAST_ANALYSIS_STORAGE_KEY = 'smartroute:last-analysis';
+const BEFORE_TRIP_STORAGE_KEY = 'smartroute:before-trip';
 
 function buildApiBaseUrl() {
   const raw = (
@@ -121,136 +122,38 @@ function toDisplayScore(value: unknown) {
   return Number.isFinite(parsed) ? Math.round(parsed) : null;
 }
 
-function buildFallbackAnalysis(formData: RouteFormData): AnalysisResponse {
-  const fuelType = String(formData.fuelType || 'gasoline').toLowerCase();
-  const fuelPrice = Number.parseFloat(formData.fuelPrice || '0') || (fuelType === 'electric' ? 10 : 62);
-  const vehicleLabel =
-    formData.vehicleType === 'e_trike' || formData.vehicleType === 'etrike'
-      ? 'E-Trike'
-      : formData.vehicleType === 'e_motorcycle' || formData.vehicleType === 'emotorcycle'
-        ? 'E-Motorcycle'
-        : formData.vehicleType === 'hybrid_car' || formData.vehicleType === 'hybrid'
-          ? 'Hybrid Car'
-          : formData.vehicleType === 'hybrid_van'
-            ? 'Hybrid Van'
-            : 'Sedan / Private Car';
-
-  const prototypes: Array<{
-    label: string;
-    description: string;
-    distanceKm: number;
-    durationMinutes: number;
-    trafficDelayMinutes: number;
-    trafficLevel: TrafficLevel;
-    speedStability: number;
-  }> = [
-    {
-      label: 'Balanced City Route',
-      description: 'Fallback estimate while live backend analysis is temporarily unavailable.',
-      distanceKm: 16.8,
-      durationMinutes: 42,
-      trafficDelayMinutes: 7,
-      trafficLevel: 'moderate',
-      speedStability: 76,
-    },
-    {
-      label: 'Fastest Main Road',
-      description: 'Higher traffic pressure but lower travel time.',
-      distanceKm: 18.3,
-      durationMinutes: 39,
-      trafficDelayMinutes: 11,
-      trafficLevel: 'heavy',
-      speedStability: 63,
-    },
-    {
-      label: 'Lower Traffic Bypass',
-      description: 'Longer distance with steadier traffic conditions.',
-      distanceKm: 19.5,
-      durationMinutes: 44,
-      trafficDelayMinutes: 4,
-      trafficLevel: 'low',
-      speedStability: 84,
-    },
-  ];
-
-  const baselineConsumptionPerKm = fuelType === 'electric' ? 0.14 : 0.085;
-
-  const routes = prototypes.map((item, index) => {
-    const trafficMultiplier = item.trafficLevel === 'heavy' ? 1.15 : item.trafficLevel === 'moderate' ? 1.05 : 0.95;
-    const unitsUsed = item.distanceKm * baselineConsumptionPerKm * trafficMultiplier;
-    const estimatedCostPhp = unitsUsed * fuelPrice;
-    const co2Kg = fuelType === 'electric' ? unitsUsed * 0.72 : unitsUsed * 2.31;
-    const efficiencyScore = Math.round(
-      (100 - item.trafficDelayMinutes * 3) * 0.35 +
-      (100 - (estimatedCostPhp / Math.max(estimatedCostPhp, 1)) * 40) * 0.25 +
-      item.speedStability * 0.4
-    );
-
-    return {
-      id: `route-${index + 1}`,
-      rank: index + 1,
-      label: item.label,
-      description: item.description,
-      distanceKm: item.distanceKm,
-      durationMinutes: item.durationMinutes,
-      staticDurationMinutes: Math.max(1, item.durationMinutes - item.trafficDelayMinutes),
-      trafficDelayMinutes: item.trafficDelayMinutes,
-      trafficLevel: item.trafficLevel,
-      estimatedCostPhp: Number(estimatedCostPhp.toFixed(2)),
-      totalFuelLiters: fuelType === 'electric' ? 0 : Number(unitsUsed.toFixed(3)),
-      totalEnergyKwh: fuelType === 'electric' ? Number(unitsUsed.toFixed(3)) : 0,
-      efficiencyScore,
-      co2Kg: Number(co2Kg.toFixed(2)),
-      isRecommended: false,
-      warnings: ['Fallback estimate only'],
-      componentScores: {
-        time: Math.max(50, 100 - item.durationMinutes),
-        fuel: Math.max(50, 100 - Math.round(unitsUsed * 10)),
-        traffic: item.trafficLevel === 'heavy' ? 58 : item.trafficLevel === 'moderate' ? 72 : 88,
-        speedStability: item.speedStability,
-      },
-      averageSpeedKph: Number((item.distanceKm / (item.durationMinutes / 60)).toFixed(1)),
-      stopCount: item.trafficLevel === 'heavy' ? 8 : item.trafficLevel === 'moderate' ? 5 : 3,
-      idleMinutes: Number((item.trafficDelayMinutes * 0.6).toFixed(1)),
-      vsp: {
-        averageKwPerTon: item.trafficLevel === 'heavy' ? 8.6 : item.trafficLevel === 'moderate' ? 7.2 : 6.1,
-        maxKwPerTon: item.trafficLevel === 'heavy' ? 21.5 : item.trafficLevel === 'moderate' ? 18.2 : 15.4,
-        ecoShare: item.trafficLevel === 'heavy' ? 28 : item.trafficLevel === 'moderate' ? 37 : 48,
-        moderateShare: item.trafficLevel === 'heavy' ? 44 : item.trafficLevel === 'moderate' ? 41 : 36,
-        wasteShare: item.trafficLevel === 'heavy' ? 28 : item.trafficLevel === 'moderate' ? 22 : 16,
-      },
-    };
-  });
-
-  routes.sort((left, right) => right.efficiencyScore - left.efficiencyScore);
-  routes.forEach((route, index) => {
-    route.rank = index + 1;
-    route.isRecommended = index === 0;
-  });
-
-  return {
-    generatedAt: new Date().toISOString(),
-    request: {
-      origin: formData.origin || DEFAULT_FORM_DATA.origin,
-      destination: formData.destination || DEFAULT_FORM_DATA.destination,
-      vehicleType: formData.vehicleType || DEFAULT_FORM_DATA.vehicleType,
-      vehicleLabel,
-      fuelType,
-      fuelPrice,
-      currency: 'PHP',
-    },
-    recommendedRouteId: routes[0].id,
-    routes,
-  };
-}
-
 export function RouteComparison() {
   const location = useLocation();
   const formData = (location.state as RouteFormData | null) || DEFAULT_FORM_DATA;
   const apiBaseUrl = useMemo(() => buildApiBaseUrl(), []);
+  const navigate = useNavigate();
   const [analysis, setAnalysis] = useState<AnalysisResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const handleStartTracking = (route: RouteMetrics) => {
+    if (!analysis) return;
+    const ft = analysis.request.fuelType;
+    window.localStorage.setItem(
+      BEFORE_TRIP_STORAGE_KEY,
+      JSON.stringify({
+        savedAt: new Date().toISOString(),
+        prediction: {
+          routeLabel: route.label,
+          predictedDurationMinutes: route.durationMinutes,
+          predictedDistanceKm: route.distanceKm,
+          predictedFuelOrEnergy: ft === 'electric' ? route.totalEnergyKwh : route.totalFuelLiters,
+          predictedCostPhp: route.estimatedCostPhp,
+          predictedCo2Kg: route.co2Kg,
+          unitLabel: ft === 'electric' ? 'kWh' : 'L',
+        },
+        vehicleType: analysis.request.vehicleType,
+        fuelType: ft,
+        fuelPrice: analysis.request.fuelPrice,
+      })
+    );
+    navigate('/speed-meter');
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -292,12 +195,11 @@ export function RouteComparison() {
         }
       } catch (error) {
         if (!cancelled) {
-          const fallback = buildFallbackAnalysis(formData);
-          setAnalysis(fallback);
+          setAnalysis(null);
           setErrorMessage(
             error instanceof Error
-              ? `Live backend analysis unavailable: ${error.message}. Showing fallback estimates.`
-              : 'Live backend analysis unavailable. Showing fallback estimates.'
+              ? `Live backend analysis unavailable: ${error.message}.`
+              : 'Live backend analysis unavailable.'
           );
         }
       } finally {
@@ -505,6 +407,21 @@ export function RouteComparison() {
                   </ReasonRow>
                 </ul>
               </motion.div>
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.9 }}
+                className="mt-4"
+              >
+                <button
+                  type="button"
+                  onClick={() => handleStartTracking(recommendedRoute)}
+                  className="inline-flex items-center gap-2 rounded-lg bg-green-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-green-700"
+                >
+                  <Navigation className="w-4 h-4" />
+                  Start Tracking This Route
+                </button>
+              </motion.div>
             </div>
           </div>
         </motion.div>
@@ -517,7 +434,7 @@ export function RouteComparison() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.3 + index * 0.1 }}
             >
-              <RouteCard route={route} fuelType={analysis.request.fuelType} />
+              <RouteCard route={route} fuelType={analysis.request.fuelType} onStartTracking={handleStartTracking} />
             </motion.div>
           ))}
         </div>
@@ -597,7 +514,7 @@ function ReasonRow({ children }: { children: ReactNode }) {
   );
 }
 
-function RouteCard({ route, fuelType }: { route: RouteMetrics; fuelType: string }) {
+function RouteCard({ route, fuelType, onStartTracking }: { route: RouteMetrics; fuelType: string; onStartTracking?: (route: RouteMetrics) => void }) {
   const score = toDisplayScore(route.efficiencyScore);
   const scoreForBar = score !== null ? Math.max(0, Math.min(100, score)) : 0;
 
@@ -670,6 +587,7 @@ function RouteCard({ route, fuelType }: { route: RouteMetrics; fuelType: string 
       </div>
 
       <div className="p-6 space-y-4">
+        <div className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-1">Pre-Trip Estimates</div>
         <MetricRow
           icon={<Navigation className="w-4 h-4 text-blue-600" />}
           label="Distance"
@@ -702,6 +620,18 @@ function RouteCard({ route, fuelType }: { route: RouteMetrics; fuelType: string 
           value={`${route.trafficDelayMinutes.toFixed(1)} min`}
         />
       </div>
+      {onStartTracking && (
+        <div className="px-6 pb-5">
+          <button
+            type="button"
+            onClick={() => onStartTracking(route)}
+            className="w-full inline-flex items-center justify-center gap-2 rounded-lg bg-teal-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-teal-700"
+          >
+            <Navigation className="w-4 h-4" />
+            Start Tracking
+          </button>
+        </div>
+      )}
     </motion.div>
   );
 }

@@ -780,6 +780,110 @@ function assignEfficiencyScores(routes) {
   return routes;
 }
 
+function buildFallbackResponse({
+  origin,
+  destination,
+  vehicleType,
+  vehicleProfile,
+  fuelPrice,
+  reason,
+}) {
+  const templates = [
+    {
+      label: 'Balanced City Route',
+      description: 'Fallback estimate generated while live Google route analysis is unavailable.',
+      distanceKm: 16.8,
+      durationMinutes: 42,
+      trafficDelayMinutes: 7,
+      trafficLevel: 'moderate',
+      speedStability: 76,
+    },
+    {
+      label: 'Fastest Main Road',
+      description: 'Lower travel time but typically heavier traffic queues.',
+      distanceKm: 18.3,
+      durationMinutes: 39,
+      trafficDelayMinutes: 11,
+      trafficLevel: 'heavy',
+      speedStability: 63,
+    },
+    {
+      label: 'Lower Traffic Bypass',
+      description: 'Smoother speed profile with a longer route distance.',
+      distanceKm: 19.5,
+      durationMinutes: 44,
+      trafficDelayMinutes: 4,
+      trafficLevel: 'low',
+      speedStability: 84,
+    },
+  ];
+
+  const baselineConsumptionPerKm = vehicleProfile.fuelType === 'electric' ? 0.14 : 0.085;
+
+  const routes = templates.map((item, index) => {
+    const trafficMultiplier = item.trafficLevel === 'heavy' ? 1.15 : item.trafficLevel === 'moderate' ? 1.05 : 0.95;
+    const unitsUsed = item.distanceKm * baselineConsumptionPerKm * trafficMultiplier;
+    const estimatedCostPhp = unitsUsed * fuelPrice;
+    const co2Kg = vehicleProfile.fuelType === 'electric' ? unitsUsed * CO2_FACTORS.electric : unitsUsed * CO2_FACTORS[vehicleProfile.fuelType];
+
+    return {
+      id: `fallback-route-${index + 1}`,
+      rank: index + 1,
+      label: item.label,
+      description: item.description,
+      distanceKm: item.distanceKm,
+      durationMinutes: item.durationMinutes,
+      staticDurationMinutes: Math.max(1, item.durationMinutes - item.trafficDelayMinutes),
+      trafficDelayMinutes: item.trafficDelayMinutes,
+      trafficLevel: item.trafficLevel,
+      estimatedCostPhp: Number(estimatedCostPhp.toFixed(2)),
+      totalFuelLiters: vehicleProfile.fuelType === 'electric' ? 0 : Number(unitsUsed.toFixed(3)),
+      totalEnergyKwh: vehicleProfile.fuelType === 'electric' ? Number(unitsUsed.toFixed(3)) : 0,
+      efficiencyScore: 0,
+      co2Kg: Number(co2Kg.toFixed(2)),
+      isRecommended: false,
+      warnings: [reason, 'Fallback estimate only'],
+      componentScores: {
+        time: Math.max(50, 100 - item.durationMinutes),
+        fuel: Math.max(50, 100 - Math.round(unitsUsed * 10)),
+        traffic: item.trafficLevel === 'heavy' ? 58 : item.trafficLevel === 'moderate' ? 72 : 88,
+        speedStability: item.speedStability,
+      },
+      averageSpeedKph: Number((item.distanceKm / (item.durationMinutes / 60)).toFixed(1)),
+      stopCount: item.trafficLevel === 'heavy' ? 8 : item.trafficLevel === 'moderate' ? 5 : 3,
+      idleMinutes: Number((item.trafficDelayMinutes * 0.6).toFixed(1)),
+      vsp: {
+        averageKwPerTon: item.trafficLevel === 'heavy' ? 8.6 : item.trafficLevel === 'moderate' ? 7.2 : 6.1,
+        maxKwPerTon: item.trafficLevel === 'heavy' ? 21.5 : item.trafficLevel === 'moderate' ? 18.2 : 15.4,
+        ecoShare: item.trafficLevel === 'heavy' ? 28 : item.trafficLevel === 'moderate' ? 37 : 48,
+        moderateShare: item.trafficLevel === 'heavy' ? 44 : item.trafficLevel === 'moderate' ? 41 : 36,
+        wasteShare: item.trafficLevel === 'heavy' ? 28 : item.trafficLevel === 'moderate' ? 22 : 16,
+      },
+    };
+  });
+
+  const rankedRoutes = assignEfficiencyScores(routes);
+  const recommendedRoute = rankedRoutes[0];
+
+  return {
+    generatedAt: new Date().toISOString(),
+    request: {
+      origin: origin?.original,
+      destination: destination?.original,
+      vehicleType: vehicleType || vehicleProfile.key,
+      vehicleLabel: vehicleProfile.label,
+      fuelType: vehicleProfile.fuelType,
+      fuelPrice: Number(fuelPrice.toFixed(2)),
+      currency: 'PHP',
+    },
+    recommendedRouteId: recommendedRoute.id,
+    routes: rankedRoutes,
+    geocodingResults: null,
+    fallback: true,
+    fallbackReason: reason,
+  };
+}
+
 router.post('/trips', (req, res) => {
   const payload = req.body && typeof req.body === 'object' ? req.body : null;
   if (!payload) {
@@ -830,9 +934,16 @@ router.post('/analyze', async (req, res) => {
   }
 
   if (!GOOGLE_MAPS_API_KEY) {
-    return res.status(500).json({
-      error: 'Google Maps API key is not configured on the backend.',
-    });
+    return res.json(
+      buildFallbackResponse({
+        origin,
+        destination,
+        vehicleType: req.body?.vehicleType,
+        vehicleProfile,
+        fuelPrice,
+        reason: 'Google Maps API key is not configured on the backend.',
+      })
+    );
   }
 
   try {
@@ -875,10 +986,16 @@ router.post('/analyze', async (req, res) => {
     });
   } catch (error) {
     console.error('Route analysis failed:', error);
-    res.status(502).json({
-      error: 'Failed to compute route analysis.',
-      details: error.message,
-    });
+    res.json(
+      buildFallbackResponse({
+        origin,
+        destination,
+        vehicleType: req.body?.vehicleType,
+        vehicleProfile,
+        fuelPrice,
+        reason: `Failed to compute live route analysis: ${error.message}`,
+      })
+    );
   }
 });
 
