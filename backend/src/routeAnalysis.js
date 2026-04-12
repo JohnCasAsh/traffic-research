@@ -1,6 +1,7 @@
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
+const jwt = require('jsonwebtoken');
 const { fetchWithRetry } = require('./resilientFetch');
 
 const router = express.Router();
@@ -13,6 +14,18 @@ const GOOGLE_MAPS_API_KEY = (
 
 const ROUTES_API_URL = 'https://routes.googleapis.com/directions/v2:computeRoutes';
 const ELEVATION_API_URL = 'https://maps.googleapis.com/maps/api/elevation/json';
+const GOOGLE_OAUTH_TOKEN_URL = 'https://oauth2.googleapis.com/token';
+const ROUTES_FIELD_MASK = [
+  'routes.routeLabels',
+  'routes.description',
+  'routes.distanceMeters',
+  'routes.duration',
+  'routes.staticDuration',
+  'routes.polyline.encodedPolyline',
+  'routes.travelAdvisory.speedReadingIntervals',
+  'routes.warnings',
+  'geocodingResults',
+].join(',');
 const DEFAULT_FUEL_PRICE_BY_TYPE = {
   gasoline: 62.0,
   diesel: 58.5,
@@ -24,6 +37,9 @@ const CO2_FACTORS = {
   electric: 0.72,
 };
 const TRIP_REPORTS_FILE = process.env.TRIP_REPORTS_FILE || './data/trip-reports.json';
+
+let cachedGoogleAccessToken = null;
+let cachedGoogleAccessTokenExpiryMs = 0;
 
 function resolveTripReportsPath() {
   if (path.isAbsolute(TRIP_REPORTS_FILE)) {
@@ -56,6 +72,111 @@ function writeTripReports(records) {
   } catch (error) {
     console.error('Failed to persist trip reports:', error.message);
   }
+}
+
+function loadFirebaseCredentialsFromFilePath(filePath) {
+  if (!filePath) {
+    return null;
+  }
+
+  const resolvedPath = path.isAbsolute(filePath)
+    ? filePath
+    : path.join(__dirname, '..', filePath);
+
+  if (!fs.existsSync(resolvedPath)) {
+    return null;
+  }
+
+  try {
+    const raw = fs.readFileSync(resolvedPath, 'utf8');
+    const parsed = JSON.parse(raw);
+    if (!parsed.client_email || !parsed.private_key) {
+      return null;
+    }
+
+    return {
+      clientEmail: parsed.client_email,
+      privateKey: parsed.private_key,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function getFirebaseServiceAccountCredentials() {
+  const inlineClientEmail = String(process.env.FIREBASE_CLIENT_EMAIL || '').trim();
+  const inlinePrivateKeyRaw = String(process.env.FIREBASE_PRIVATE_KEY || '').trim();
+
+  if (inlineClientEmail && inlinePrivateKeyRaw) {
+    return {
+      clientEmail: inlineClientEmail,
+      privateKey: inlinePrivateKeyRaw
+        .replace(/^"|"$/g, '')
+        .replace(/\r/g, '')
+        .replace(/\\n/g, '\n'),
+    };
+  }
+
+  return loadFirebaseCredentialsFromFilePath(process.env.FIREBASE_SERVICE_ACCOUNT_PATH);
+}
+
+async function getGoogleAccessToken() {
+  if (
+    cachedGoogleAccessToken &&
+    Number.isFinite(cachedGoogleAccessTokenExpiryMs) &&
+    Date.now() < cachedGoogleAccessTokenExpiryMs - 60_000
+  ) {
+    return cachedGoogleAccessToken;
+  }
+
+  const credentials = getFirebaseServiceAccountCredentials();
+  if (!credentials) {
+    throw new Error(
+      'No Firebase service account credentials are configured for OAuth route analysis.'
+    );
+  }
+
+  const issuedAtSeconds = Math.floor(Date.now() / 1000);
+  const assertion = jwt.sign(
+    {
+      iss: credentials.clientEmail,
+      scope: 'https://www.googleapis.com/auth/cloud-platform',
+      aud: GOOGLE_OAUTH_TOKEN_URL,
+      iat: issuedAtSeconds,
+      exp: issuedAtSeconds + 3600,
+    },
+    credentials.privateKey,
+    {
+      algorithm: 'RS256',
+      header: { typ: 'JWT' },
+    }
+  );
+
+  const tokenResponse = await fetch(GOOGLE_OAUTH_TOKEN_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
+    body: new URLSearchParams({
+      grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
+      assertion,
+    }),
+  });
+
+  const tokenPayload = await tokenResponse.json().catch(() => null);
+  if (!tokenResponse.ok || !tokenPayload?.access_token) {
+    throw new Error(
+      `Failed to obtain OAuth token for Routes API${
+        tokenPayload?.error ? `: ${tokenPayload.error}` : ''
+      }${tokenPayload?.error_description ? ` (${tokenPayload.error_description})` : ''}`
+    );
+  }
+
+  cachedGoogleAccessToken = tokenPayload.access_token;
+  cachedGoogleAccessTokenExpiryMs =
+    Date.now() + Math.max(300, Number(tokenPayload.expires_in) || 3600) * 1000;
+
+  return cachedGoogleAccessToken;
 }
 
 const VEHICLE_PROFILES = {
@@ -392,11 +513,11 @@ function buildRoutesRequest(origin, destination, vehicleProfile) {
     regionCode: 'ph',
     requestedReferenceRoutes: ['FUEL_EFFICIENT'],
     extraComputations: ['TRAFFIC_ON_POLYLINE'],
-    departureTime: new Date().toISOString(),
+    departureTime: new Date(Date.now() + 60_000).toISOString(),
   };
 }
 
-async function fetchRoutes(requestBody) {
+async function fetchRoutesWithApiKey(requestBody) {
   const response = await fetchWithRetry(
     ROUTES_API_URL,
     {
@@ -404,17 +525,7 @@ async function fetchRoutes(requestBody) {
       headers: {
         'Content-Type': 'application/json',
         'X-Goog-Api-Key': GOOGLE_MAPS_API_KEY,
-        'X-Goog-FieldMask': [
-          'routes.routeLabels',
-          'routes.description',
-          'routes.distanceMeters',
-          'routes.duration',
-          'routes.staticDuration',
-          'routes.polyline.encodedPolyline',
-          'routes.travelAdvisory.speedReadingIntervals',
-          'routes.warnings',
-          'geocodingResults',
-        ].join(','),
+        'X-Goog-FieldMask': ROUTES_FIELD_MASK,
       },
       body: JSON.stringify(requestBody),
     },
@@ -425,6 +536,57 @@ async function fetchRoutes(requestBody) {
   );
 
   return response.json();
+}
+
+async function fetchRoutesWithOAuth(requestBody) {
+  const accessToken = await getGoogleAccessToken();
+
+  const response = await fetchWithRetry(
+    ROUTES_API_URL,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${accessToken}`,
+        'X-Goog-FieldMask': ROUTES_FIELD_MASK,
+      },
+      body: JSON.stringify(requestBody),
+    },
+    {
+      requestName: 'google_routes_compute_routes_oauth',
+      timeoutMs: 15000,
+    }
+  );
+
+  return response.json();
+}
+
+async function fetchRoutes(requestBody) {
+  const hasApiKey = Boolean(GOOGLE_MAPS_API_KEY);
+  const hasOAuthCredentials = Boolean(getFirebaseServiceAccountCredentials());
+
+  if (!hasApiKey && !hasOAuthCredentials) {
+    throw new Error(
+      'No Google credentials configured for route analysis (API key or Firebase service account).'
+    );
+  }
+
+  if (hasApiKey) {
+    try {
+      return await fetchRoutesWithApiKey(requestBody);
+    } catch (apiKeyError) {
+      if (!hasOAuthCredentials) {
+        throw apiKeyError;
+      }
+
+      console.warn(
+        'Routes API key request failed, retrying with OAuth service account:',
+        apiKeyError.message
+      );
+    }
+  }
+
+  return fetchRoutesWithOAuth(requestBody);
 }
 
 function samplePathPoints(points, maxPoints = 80) {
@@ -449,6 +611,10 @@ async function fetchElevations(points) {
   }
 
   const sampledPoints = samplePathPoints(points, 60);
+  if (!GOOGLE_MAPS_API_KEY) {
+    return sampledPoints.map(() => null);
+  }
+
   const locationText = sampledPoints
     .map((point) => `${point.lat.toFixed(6)},${point.lng.toFixed(6)}`)
     .join('|');
@@ -829,9 +995,10 @@ router.post('/analyze', async (req, res) => {
     });
   }
 
-  if (!GOOGLE_MAPS_API_KEY) {
+  if (!GOOGLE_MAPS_API_KEY && !getFirebaseServiceAccountCredentials()) {
     return res.status(500).json({
-      error: 'Google Maps API key is not configured on the backend.',
+      error:
+        'Google credentials are not configured on the backend (API key or Firebase service account required).',
     });
   }
 
