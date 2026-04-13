@@ -511,7 +511,6 @@ function buildRoutesRequest(origin, destination, vehicleProfile) {
     computeAlternativeRoutes: true,
     languageCode: 'en-US',
     regionCode: 'ph',
-    requestedReferenceRoutes: ['FUEL_EFFICIENT'],
     extraComputations: ['TRAFFIC_ON_POLYLINE'],
     departureTime: new Date(Date.now() + 60_000).toISOString(),
   };

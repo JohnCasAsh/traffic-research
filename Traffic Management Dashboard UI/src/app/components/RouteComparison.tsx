@@ -15,7 +15,7 @@ import {
   Sparkles,
   TrendingDown,
 } from 'lucide-react';
-import { DashboardMap } from './DashboardMap';
+import { RouteAnalysisMap } from './RouteAnalysisMap';
 
 type TrafficLevel = 'low' | 'moderate' | 'heavy';
 
@@ -24,6 +24,7 @@ type RouteMetrics = {
   rank: number;
   label: string;
   description: string;
+  encodedPolyline?: string;
   distanceKm: number;
   durationMinutes: number;
   staticDurationMinutes: number;
@@ -443,38 +444,16 @@ export function RouteComparison() {
           initial={{ opacity: 0, y: 30 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.8 }}
-          className="bg-white rounded-xl shadow-sm border border-slate-200 p-6"
+          className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 sm:p-6"
         >
           <h2 className="text-xl font-bold text-slate-900 mb-4">Route Visualization</h2>
-          <div className="relative rounded-lg overflow-hidden" style={{ height: '480px' }}>
-            <DashboardMap
-              origin={analysis.request.origin || DEFAULT_FORM_DATA.origin}
-              destination={analysis.request.destination || DEFAULT_FORM_DATA.destination}
-              liveTrackingEnabled={false}
-            />
-
-            <motion.div
-              initial={{ opacity: 0, y: -10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.5 }}
-              className="absolute top-4 right-4 z-10 bg-green-500 text-white px-3 py-1.5 rounded-full text-xs font-bold flex items-center gap-1.5 shadow-lg"
-            >
-              <Leaf className="w-3.5 h-3.5" />
-              Eco-Routing Active
-            </motion.div>
-
-            <motion.div
-              initial={{ opacity: 0, x: -10 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: 0.7 }}
-              className="absolute bottom-4 left-4 z-10 bg-white/90 backdrop-blur-sm rounded-lg px-3 py-2.5 shadow text-xs space-y-1.5"
-            >
-              <div className="font-semibold text-slate-700 mb-1">Predicted Trip Snapshot</div>
-              <div className="text-slate-600">Before Trip: ₱{recommendedRoute.estimatedCostPhp.toFixed(2)} projected spend</div>
-              <div className="text-slate-600">Fuel / Energy: {formatFuelValue(recommendedRoute, analysis.request.fuelType)}</div>
-              <div className="text-slate-600">Time: {recommendedRoute.durationMinutes.toFixed(1)} min</div>
-            </motion.div>
-          </div>
+          <p className="text-sm text-slate-600 mb-4">
+            Map and details below use the same analyzed routes and prices shown above.
+          </p>
+          <RouteAnalysisMap
+            routes={routes}
+            fuelType={analysis.request.fuelType}
+          />
         </motion.div>
       </div>
     </div>
