@@ -31,6 +31,46 @@ const DEFAULT_FUEL_PRICE_BY_TYPE = {
   diesel: 58.5,
   electric: 10.0,
 };
+const DEFAULT_ANALYZED_ROUTES = 5;
+const MAX_ANALYZED_ROUTES = 8;
+const MAX_ROUTE_FETCH_TARGET = 5;
+const ELEVATION_SAMPLE_POINTS = 45;
+const ELEVATION_ANALYSIS_ROUTE_LIMIT = 6;
+const ANALYSIS_CONCURRENCY = 3;
+const MAX_DETOUR_DISTANCE_RATIO = 1.8;
+const MAX_DETOUR_DURATION_RATIO = 1.9;
+const MIN_KEEP_ROUTES = 2;
+const MAX_SIMILAR_DISTANCE_KM_DELTA = 0.35;
+const MAX_SIMILAR_DURATION_MIN_DELTA = 1.5;
+const MAX_SIMILAR_COST_PHP_DELTA = 1.2;
+const MAX_SIMILAR_FUEL_LITERS_DELTA = 0.03;
+const MAX_SIMILAR_ENERGY_KWH_DELTA = 0.05;
+const MAX_SIMILAR_CO2_KG_DELTA = 0.08;
+const PRIMARY_ROUTES_FETCH_CONFIG = {
+  requestName: 'google_routes_compute_routes_primary',
+  timeoutMs: 12000,
+  maxAttempts: 2,
+};
+const SECONDARY_ROUTES_FETCH_CONFIG = {
+  requestName: 'google_routes_compute_routes_secondary',
+  timeoutMs: 7000,
+  maxAttempts: 1,
+};
+const STEEL_BRIDGE_COORD = { lat: 17.6409, lng: 121.7015 };
+const BUNTUN_BRIDGE_COORD = { lat: 17.6185, lng: 121.6889 };
+const BRIDGE_MATCH_RADIUS_METERS = 850;
+const CAGAYAN_ROUTE_HINTS = [
+  'solana',
+  'tuguegarao',
+  'cagayan',
+  'caggay',
+  'buntun',
+  'steel bridge',
+  'tuguegarao-solana',
+];
+const STEEL_BRIDGE_KEYWORDS = ['steel bridge', 'solana bridge', 'tuguegarao-solana'];
+const BUNTUN_BRIDGE_KEYWORDS = ['buntun bridge', 'buntun brg'];
+const BRIDGE_KEYWORDS = [...STEEL_BRIDGE_KEYWORDS, ...BUNTUN_BRIDGE_KEYWORDS];
 const CO2_FACTORS = {
   gasoline: 2.31,
   diesel: 2.68,
@@ -368,6 +408,15 @@ function toFiniteNumber(value) {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+function resolveRequestedRouteLimit(value) {
+  const parsed = Number.parseInt(String(value || DEFAULT_ANALYZED_ROUTES), 10);
+  if (!Number.isFinite(parsed)) {
+    return DEFAULT_ANALYZED_ROUTES;
+  }
+
+  return Math.max(1, Math.min(MAX_ANALYZED_ROUTES, parsed));
+}
+
 function parseDurationSeconds(durationText) {
   if (typeof durationText !== 'string') {
     return 0;
@@ -483,6 +532,83 @@ function normalizeWaypoint(value) {
   };
 }
 
+function normalizeAddressText(value) {
+  return String(value || '')
+    .toLowerCase()
+    .replace(/[.,]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function includesAnyKeyword(text, keywords) {
+  return keywords.some((keyword) => text.includes(keyword));
+}
+
+function isLikelyCagayanTrip(originText, destinationText) {
+  const combined = normalizeAddressText(`${originText || ''} ${destinationText || ''}`);
+  return includesAnyKeyword(combined, CAGAYAN_ROUTE_HINTS);
+}
+
+function isLikelySolanaTrip(originText, destinationText) {
+  const originNormalized = normalizeAddressText(originText || '');
+  const destinationNormalized = normalizeAddressText(destinationText || '');
+
+  return originNormalized === 'solana' || destinationNormalized === 'solana';
+}
+
+function buildIntermediateWaypoint(coordinate) {
+  return {
+    location: {
+      latLng: {
+        latitude: coordinate.lat,
+        longitude: coordinate.lng,
+      },
+    },
+  };
+}
+
+function routePassesNearCoordinate(route, coordinate, radiusMeters = BRIDGE_MATCH_RADIUS_METERS) {
+  const decodedPoints = decodePolyline(route?.polyline?.encodedPolyline || '');
+  if (!decodedPoints.length) {
+    return false;
+  }
+
+  return decodedPoints.some((point) => haversineDistanceMeters(point, coordinate) <= radiusMeters);
+}
+
+function routeContainsKeyword(route, keywords) {
+  const text = normalizeAddressText(
+    `${route?.description || ''} ${(Array.isArray(route?.warnings) ? route.warnings.join(' ') : '')}`
+  );
+  return includesAnyKeyword(text, keywords);
+}
+
+function routeUsesSteelBridge(route) {
+  return (
+    routePassesNearCoordinate(route, STEEL_BRIDGE_COORD) ||
+    routeContainsKeyword(route, STEEL_BRIDGE_KEYWORDS)
+  );
+}
+
+function routeUsesBuntunBridge(route) {
+  return (
+    routePassesNearCoordinate(route, BUNTUN_BRIDGE_COORD) ||
+    routeContainsKeyword(route, BUNTUN_BRIDGE_KEYWORDS)
+  );
+}
+
+function hasBridgeMatch(route, requiredBridge) {
+  if (requiredBridge === 'steel') {
+    return routeUsesSteelBridge(route);
+  }
+
+  if (requiredBridge === 'buntun') {
+    return routeUsesBuntunBridge(route);
+  }
+
+  return routeUsesSteelBridge(route) || routeUsesBuntunBridge(route);
+}
+
 function getVehicleProfile(vehicleType, fuelType) {
   const normalizedVehicleType = String(vehicleType || 'sedan')
     .trim()
@@ -516,7 +642,24 @@ function buildRoutesRequest(origin, destination, vehicleProfile) {
   };
 }
 
-async function fetchRoutesWithApiKey(requestBody) {
+function resolvePositiveInteger(value, fallback) {
+  const parsed = Number.parseInt(String(value), 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function mergeRoutesFetchConfig(config = {}, fallbackRequestName) {
+  return {
+    requestName: String(config.requestName || fallbackRequestName),
+    timeoutMs: resolvePositiveInteger(config.timeoutMs, 15000),
+    maxAttempts: resolvePositiveInteger(config.maxAttempts, 2),
+  };
+}
+
+async function fetchRoutesWithApiKey(requestBody, requestConfig = {}) {
+  const mergedConfig = mergeRoutesFetchConfig(
+    requestConfig,
+    'google_routes_compute_routes'
+  );
   const response = await fetchWithRetry(
     ROUTES_API_URL,
     {
@@ -528,16 +671,17 @@ async function fetchRoutesWithApiKey(requestBody) {
       },
       body: JSON.stringify(requestBody),
     },
-    {
-      requestName: 'google_routes_compute_routes',
-      timeoutMs: 15000,
-    }
+    mergedConfig
   );
 
   return response.json();
 }
 
-async function fetchRoutesWithOAuth(requestBody) {
+async function fetchRoutesWithOAuth(requestBody, requestConfig = {}) {
+  const mergedConfig = mergeRoutesFetchConfig(
+    requestConfig,
+    'google_routes_compute_routes_oauth'
+  );
   const accessToken = await getGoogleAccessToken();
 
   const response = await fetchWithRetry(
@@ -551,16 +695,13 @@ async function fetchRoutesWithOAuth(requestBody) {
       },
       body: JSON.stringify(requestBody),
     },
-    {
-      requestName: 'google_routes_compute_routes_oauth',
-      timeoutMs: 15000,
-    }
+    mergedConfig
   );
 
   return response.json();
 }
 
-async function fetchRoutes(requestBody) {
+async function fetchRoutes(requestBody, requestConfig = {}) {
   const hasApiKey = Boolean(GOOGLE_MAPS_API_KEY);
   const hasOAuthCredentials = Boolean(getFirebaseServiceAccountCredentials());
 
@@ -572,7 +713,7 @@ async function fetchRoutes(requestBody) {
 
   if (hasApiKey) {
     try {
-      return await fetchRoutesWithApiKey(requestBody);
+      return await fetchRoutesWithApiKey(requestBody, requestConfig);
     } catch (apiKeyError) {
       if (!hasOAuthCredentials) {
         throw apiKeyError;
@@ -585,7 +726,496 @@ async function fetchRoutes(requestBody) {
     }
   }
 
-  return fetchRoutesWithOAuth(requestBody);
+  return fetchRoutesWithOAuth(requestBody, requestConfig);
+}
+
+function buildRouteFingerprint(route) {
+  const encoded = String(route?.polyline?.encodedPolyline || '').trim();
+  if (encoded) {
+    return `poly:${encoded}`;
+  }
+
+  const distanceMeters = Number(route?.distanceMeters || 0);
+  const durationSeconds = parseDurationSeconds(route?.duration);
+  const staticDurationSeconds = parseDurationSeconds(route?.staticDuration);
+  return `fallback:${distanceMeters}:${durationSeconds}:${staticDurationSeconds}`;
+}
+
+function buildRouteApproxFingerprint(route) {
+  const distanceMeters = Number(route?.distanceMeters || 0);
+  const durationSeconds = parseDurationSeconds(route?.duration);
+  const staticDurationSeconds = parseDurationSeconds(route?.staticDuration);
+  const decodedPoints = decodePolyline(route?.polyline?.encodedPolyline || '');
+
+  const pointIndexes = decodedPoints.length
+    ? [
+        0,
+        Math.floor(decodedPoints.length / 3),
+        Math.floor((decodedPoints.length * 2) / 3),
+        decodedPoints.length - 1,
+      ]
+    : [];
+
+  const pointSignature = pointIndexes
+    .map((index) => decodedPoints[index])
+    .filter(Boolean)
+    .map((point) => `${point.lat.toFixed(3)},${point.lng.toFixed(3)}`)
+    .join(';');
+
+  const distanceBucket = Math.round(distanceMeters / 120);
+  const durationBucket = Math.round(durationSeconds / 45);
+  const staticDurationBucket = Math.round(staticDurationSeconds / 45);
+
+  return `${distanceBucket}|${durationBucket}|${staticDurationBucket}|${pointSignature}`;
+}
+
+function removeOutlierRoutes(routes, minKeepRoutes = MIN_KEEP_ROUTES) {
+  if (!Array.isArray(routes) || routes.length <= minKeepRoutes) {
+    return Array.isArray(routes) ? routes : [];
+  }
+
+  const distanceValues = routes
+    .map((route) => Number(route?.distanceMeters || 0))
+    .filter((value) => Number.isFinite(value) && value > 0);
+  const durationValues = routes
+    .map((route) => parseDurationSeconds(route?.duration))
+    .filter((value) => Number.isFinite(value) && value > 0);
+
+  if (!distanceValues.length || !durationValues.length) {
+    return routes;
+  }
+
+  const minDistance = Math.min(...distanceValues);
+  const minDuration = Math.min(...durationValues);
+
+  const filteredRoutes = routes.filter((route) => {
+    const distanceMeters = Number(route?.distanceMeters || 0);
+    const durationSeconds = parseDurationSeconds(route?.duration);
+
+    if (
+      !Number.isFinite(distanceMeters) ||
+      !Number.isFinite(durationSeconds) ||
+      distanceMeters <= 0 ||
+      durationSeconds <= 0
+    ) {
+      return true;
+    }
+
+    const distanceRatio = distanceMeters / minDistance;
+    const durationRatio = durationSeconds / minDuration;
+    const isOutlier =
+      distanceRatio > MAX_DETOUR_DISTANCE_RATIO &&
+      durationRatio > MAX_DETOUR_DURATION_RATIO;
+
+    return !isOutlier;
+  });
+
+  if (filteredRoutes.length >= minKeepRoutes) {
+    return filteredRoutes;
+  }
+
+  return [...routes]
+    .sort((left, right) => {
+      const leftDistance = Number(left?.distanceMeters || Number.POSITIVE_INFINITY);
+      const rightDistance = Number(right?.distanceMeters || Number.POSITIVE_INFINITY);
+      if (leftDistance !== rightDistance) {
+        return leftDistance - rightDistance;
+      }
+
+      return parseDurationSeconds(left?.duration) - parseDurationSeconds(right?.duration);
+    })
+    .slice(0, minKeepRoutes);
+}
+
+function buildAnalyzedRouteShapeSignature(route) {
+  const decodedPoints = decodePolyline(route?.encodedPolyline || '');
+  if (!decodedPoints.length) {
+    return '';
+  }
+
+  const pointIndexes = [
+    0,
+    Math.floor(decodedPoints.length / 3),
+    Math.floor((decodedPoints.length * 2) / 3),
+    decodedPoints.length - 1,
+  ];
+
+  return pointIndexes
+    .map((index) => decodedPoints[index])
+    .filter(Boolean)
+    .map((point) => `${point.lat.toFixed(4)},${point.lng.toFixed(4)}`)
+    .join(';');
+}
+
+function isNearDuplicateAnalyzedRoute(leftRoute, rightRoute, fuelType) {
+  if (!leftRoute || !rightRoute) {
+    return false;
+  }
+
+  const leftShapeSignature = buildAnalyzedRouteShapeSignature(leftRoute);
+  const rightShapeSignature = buildAnalyzedRouteShapeSignature(rightRoute);
+  const hasComparableShape = Boolean(leftShapeSignature && rightShapeSignature);
+  if (hasComparableShape && leftShapeSignature !== rightShapeSignature) {
+    return false;
+  }
+
+  const distanceDelta = Math.abs(Number(leftRoute.distanceKm || 0) - Number(rightRoute.distanceKm || 0));
+  const durationDelta = Math.abs(
+    Number(leftRoute.durationMinutes || 0) - Number(rightRoute.durationMinutes || 0)
+  );
+  const costDelta = Math.abs(
+    Number(leftRoute.estimatedCostPhp || 0) - Number(rightRoute.estimatedCostPhp || 0)
+  );
+  const co2Delta = Math.abs(Number(leftRoute.co2Kg || 0) - Number(rightRoute.co2Kg || 0));
+
+  const unitUsageDelta =
+    fuelType === 'electric'
+      ? Math.abs(Number(leftRoute.totalEnergyKwh || 0) - Number(rightRoute.totalEnergyKwh || 0))
+      : Math.abs(Number(leftRoute.totalFuelLiters || 0) - Number(rightRoute.totalFuelLiters || 0));
+
+  const usageThreshold =
+    fuelType === 'electric' ? MAX_SIMILAR_ENERGY_KWH_DELTA : MAX_SIMILAR_FUEL_LITERS_DELTA;
+
+  return (
+    distanceDelta <= MAX_SIMILAR_DISTANCE_KM_DELTA &&
+    durationDelta <= MAX_SIMILAR_DURATION_MIN_DELTA &&
+    costDelta <= MAX_SIMILAR_COST_PHP_DELTA &&
+    unitUsageDelta <= usageThreshold &&
+    co2Delta <= MAX_SIMILAR_CO2_KG_DELTA
+  );
+}
+
+function removeNearDuplicateAnalyzedRoutes(routes, fuelType, minKeepRoutes = MIN_KEEP_ROUTES) {
+  if (!Array.isArray(routes) || routes.length < 2) {
+    return Array.isArray(routes) ? routes : [];
+  }
+
+  const uniqueRoutes = [];
+
+  for (const route of routes) {
+    const duplicateIndex = uniqueRoutes.findIndex((existingRoute) =>
+      isNearDuplicateAnalyzedRoute(existingRoute, route, fuelType)
+    );
+
+    if (duplicateIndex === -1) {
+      uniqueRoutes.push(route);
+      continue;
+    }
+
+    const existingRoute = uniqueRoutes[duplicateIndex];
+    const preserveExistingGoogle = existingRoute.isGoogleRecommended && !route.isGoogleRecommended;
+    if (preserveExistingGoogle) {
+      continue;
+    }
+
+    const preferIncomingGoogle = route.isGoogleRecommended && !existingRoute.isGoogleRecommended;
+    const preferLowerDuration =
+      Number(route.durationMinutes || 0) < Number(existingRoute.durationMinutes || 0) - 0.2;
+    const nearlySameDuration =
+      Math.abs(Number(route.durationMinutes || 0) - Number(existingRoute.durationMinutes || 0)) <=
+      0.2;
+    const preferLowerCost =
+      Number(route.estimatedCostPhp || 0) < Number(existingRoute.estimatedCostPhp || 0);
+
+    if (preferIncomingGoogle || preferLowerDuration || (nearlySameDuration && preferLowerCost)) {
+      uniqueRoutes[duplicateIndex] = route;
+    }
+  }
+
+  if (uniqueRoutes.length >= minKeepRoutes) {
+    return uniqueRoutes;
+  }
+
+  const seenFingerprints = new Set(
+    uniqueRoutes.map((route) => buildAnalyzedRouteShapeSignature(route) || route.id)
+  );
+  const candidates = [...routes]
+    .sort((left, right) => Number(left.durationMinutes || 0) - Number(right.durationMinutes || 0));
+
+  for (const candidate of candidates) {
+    if (uniqueRoutes.length >= minKeepRoutes) {
+      break;
+    }
+
+    const candidateFingerprint = buildAnalyzedRouteShapeSignature(candidate) || candidate.id;
+    if (seenFingerprints.has(candidateFingerprint)) {
+      continue;
+    }
+
+    seenFingerprints.add(candidateFingerprint);
+    uniqueRoutes.push(candidate);
+  }
+
+  return uniqueRoutes;
+}
+
+function addUniqueRoutes(
+  targetRoutes,
+  sourceRoutes,
+  seenFingerprints,
+  seenApproxFingerprints,
+  maxRoutes = MAX_ANALYZED_ROUTES
+) {
+  if (!Array.isArray(sourceRoutes)) {
+    return;
+  }
+
+  for (const route of sourceRoutes) {
+    if (!route || typeof route !== 'object') {
+      continue;
+    }
+
+    const fingerprint = buildRouteFingerprint(route);
+    if (seenFingerprints.has(fingerprint)) {
+      continue;
+    }
+
+    seenFingerprints.add(fingerprint);
+    targetRoutes.push(route);
+
+    if (targetRoutes.length >= maxRoutes) {
+      return;
+    }
+  }
+}
+
+async function fetchRoutesWithFallbackStrategies(
+  baseRequestBody,
+  desiredRoutes = DEFAULT_ANALYZED_ROUTES,
+  maxRoutes = MAX_ANALYZED_ROUTES,
+  routeContext = {}
+) {
+  const mergedRoutes = [];
+  const seenFingerprints = new Set();
+  const seenApproxFingerprints = new Set();
+  const originText = String(routeContext?.originText || '');
+  const destinationText = String(routeContext?.destinationText || '');
+  const normalizedTripText = normalizeAddressText(`${originText} ${destinationText}`);
+  const explicitBridgeRequest = includesAnyKeyword(normalizedTripText, BRIDGE_KEYWORDS);
+  const isSolanaTrip = isLikelySolanaTrip(originText, destinationText);
+  const requiredBridge = isSolanaTrip ? 'steel' : explicitBridgeRequest ? 'any' : null;
+  const shouldBridgeAlign = Boolean(requiredBridge);
+  const hasRequiredBridgeRoute = (routes) => {
+    if (!requiredBridge) {
+      return true;
+    }
+
+    return routes.some((route) => hasBridgeMatch(route, requiredBridge));
+  };
+
+  const finalizeRoutes = () => {
+    const minKeepRoutes = Math.min(Math.max(MIN_KEEP_ROUTES, 1), desiredRoutes);
+    const prunedRoutes = removeOutlierRoutes(mergedRoutes, minKeepRoutes);
+
+    if (
+      requiredBridge &&
+      !hasRequiredBridgeRoute(prunedRoutes) &&
+      hasRequiredBridgeRoute(mergedRoutes)
+    ) {
+      const firstBridgeRoute = mergedRoutes.find((route) =>
+        hasBridgeMatch(route, requiredBridge)
+      );
+
+      if (!firstBridgeRoute) {
+        return prunedRoutes.slice(0, desiredRoutes);
+      }
+
+      const strictFingerprint = buildRouteFingerprint(firstBridgeRoute);
+      const routeWithBridge = prunedRoutes.some(
+        (route) => buildRouteFingerprint(route) === strictFingerprint
+      );
+
+      if (!routeWithBridge) {
+        prunedRoutes.push(firstBridgeRoute);
+      }
+    }
+
+    return prunedRoutes.slice(0, desiredRoutes);
+  };
+
+  const primaryPayload = await fetchRoutes(baseRequestBody, PRIMARY_ROUTES_FETCH_CONFIG);
+  addUniqueRoutes(
+    mergedRoutes,
+    primaryPayload?.routes,
+    seenFingerprints,
+    seenApproxFingerprints,
+    maxRoutes
+  );
+
+  if (mergedRoutes.length >= desiredRoutes && hasRequiredBridgeRoute(mergedRoutes)) {
+    return {
+      geocodingResults: primaryPayload?.geocodingResults || null,
+      routes: finalizeRoutes(),
+    };
+  }
+
+  const requestVariants = [
+    {
+      ...baseRequestBody,
+      routingPreference: 'TRAFFIC_AWARE_OPTIMAL',
+      computeAlternativeRoutes: true,
+      departureTime: new Date(Date.now() + 60_000).toISOString(),
+    },
+  ];
+
+  for (const requestVariant of requestVariants) {
+    if (mergedRoutes.length >= desiredRoutes && hasRequiredBridgeRoute(mergedRoutes)) {
+      break;
+    }
+
+    try {
+      const payload = await fetchRoutes(requestVariant, SECONDARY_ROUTES_FETCH_CONFIG);
+      addUniqueRoutes(
+        mergedRoutes,
+        payload?.routes,
+        seenFingerprints,
+        seenApproxFingerprints,
+        maxRoutes
+      );
+    } catch (error) {
+      console.warn(
+        'Additional route variant failed:',
+        requestVariant?.routingPreference || 'unknown',
+        error?.message || error
+      );
+    }
+  }
+
+  if (shouldBridgeAlign && !hasRequiredBridgeRoute(mergedRoutes)) {
+    const bridgeStrategies = [
+      {
+        label: 'steel-bridge',
+        coordinate: STEEL_BRIDGE_COORD,
+        matcher: routeUsesSteelBridge,
+      },
+      {
+        label: 'buntun-bridge',
+        coordinate: BUNTUN_BRIDGE_COORD,
+        matcher: routeUsesBuntunBridge,
+      },
+    ].filter((strategy) => (isSolanaTrip ? strategy.label === 'steel-bridge' : true));
+
+    for (const strategy of bridgeStrategies) {
+      if (hasRequiredBridgeRoute(mergedRoutes)) {
+        break;
+      }
+
+      try {
+        const bridgePayload = await fetchRoutes(
+          {
+            ...baseRequestBody,
+            computeAlternativeRoutes: false,
+            intermediates: [buildIntermediateWaypoint(strategy.coordinate)],
+          },
+          SECONDARY_ROUTES_FETCH_CONFIG
+        );
+
+        const matchingBridgeRoutes = Array.isArray(bridgePayload?.routes)
+          ? bridgePayload.routes.filter((route) => strategy.matcher(route))
+          : [];
+
+        if (!matchingBridgeRoutes.length) {
+          continue;
+        }
+
+        if (mergedRoutes.length >= maxRoutes && !hasRequiredBridgeRoute(mergedRoutes)) {
+          const removedRoute = mergedRoutes.pop();
+          if (removedRoute) {
+            seenFingerprints.delete(buildRouteFingerprint(removedRoute));
+            const removedApproxFingerprint = buildRouteApproxFingerprint(removedRoute);
+            if (removedApproxFingerprint) {
+              seenApproxFingerprints.delete(removedApproxFingerprint);
+            }
+          }
+        }
+
+        addUniqueRoutes(
+          mergedRoutes,
+          matchingBridgeRoutes,
+          seenFingerprints,
+          seenApproxFingerprints,
+          maxRoutes
+        );
+      } catch (error) {
+        console.warn(
+          'Bridge-aligned route strategy failed:',
+          strategy.label,
+          error?.message || error
+        );
+      }
+    }
+  }
+
+  if (mergedRoutes.length < desiredRoutes) {
+    const routeFallbackStrategies = [
+      {
+        label: 'avoid-highways',
+        buildRequest: () => ({
+          ...baseRequestBody,
+          computeAlternativeRoutes: false,
+          routeModifiers: { avoidHighways: true },
+        }),
+      },
+      {
+        label: 'avoid-tolls',
+        buildRequest: () => ({
+          ...baseRequestBody,
+          computeAlternativeRoutes: false,
+          routeModifiers: { avoidTolls: true },
+        }),
+      },
+      {
+        label: 'traffic-unaware',
+        buildRequest: () => {
+          const { departureTime, ...requestWithoutDeparture } = baseRequestBody;
+          return {
+            ...requestWithoutDeparture,
+            routingPreference: 'TRAFFIC_UNAWARE',
+            computeAlternativeRoutes: false,
+          };
+        },
+      },
+    ];
+
+    for (const strategy of routeFallbackStrategies) {
+      if (mergedRoutes.length >= desiredRoutes && hasRequiredBridgeRoute(mergedRoutes)) {
+        break;
+      }
+
+      try {
+        const payload = await fetchRoutes(
+          strategy.buildRequest(),
+          SECONDARY_ROUTES_FETCH_CONFIG
+        );
+
+        addUniqueRoutes(
+          mergedRoutes,
+          payload?.routes,
+          seenFingerprints,
+          seenApproxFingerprints,
+          maxRoutes
+        );
+      } catch (error) {
+        console.warn(
+          'Fallback route strategy failed:',
+          strategy.label,
+          error?.message || error
+        );
+      }
+    }
+  }
+
+  if (mergedRoutes.length >= desiredRoutes && hasRequiredBridgeRoute(mergedRoutes)) {
+    return {
+      geocodingResults: primaryPayload?.geocodingResults || null,
+      routes: finalizeRoutes(),
+    };
+  }
+
+  return {
+    geocodingResults: primaryPayload?.geocodingResults || null,
+    routes: finalizeRoutes(),
+  };
 }
 
 function samplePathPoints(points, maxPoints = 80) {
@@ -604,12 +1234,36 @@ function samplePathPoints(points, maxPoints = 80) {
   return sampled;
 }
 
+async function mapWithConcurrency(items, maxConcurrency, mapper) {
+  if (!Array.isArray(items) || items.length === 0) {
+    return [];
+  }
+
+  const safeConcurrency = Math.max(1, Math.min(maxConcurrency, items.length));
+  const results = new Array(items.length);
+  let nextIndex = 0;
+
+  async function worker() {
+    while (nextIndex < items.length) {
+      const currentIndex = nextIndex;
+      nextIndex += 1;
+      results[currentIndex] = await mapper(items[currentIndex], currentIndex);
+    }
+  }
+
+  await Promise.all(
+    Array.from({ length: safeConcurrency }, () => worker())
+  );
+
+  return results;
+}
+
 async function fetchElevations(points) {
   if (!Array.isArray(points) || points.length < 2) {
     return [];
   }
 
-  const sampledPoints = samplePathPoints(points, 60);
+  const sampledPoints = samplePathPoints(points, ELEVATION_SAMPLE_POINTS);
   if (!GOOGLE_MAPS_API_KEY) {
     return sampledPoints.map(() => null);
   }
@@ -621,11 +1275,18 @@ async function fetchElevations(points) {
   const url = `${ELEVATION_API_URL}?locations=${encodeURIComponent(locationText)}&key=${encodeURIComponent(
     GOOGLE_MAPS_API_KEY
   )}`;
-  const response = await fetchWithRetry(url, undefined, {
-    requestName: 'google_elevation_sampled_points',
-    timeoutMs: 15000,
-  });
-  const payload = await response.json();
+  let payload = null;
+  try {
+    const response = await fetchWithRetry(url, undefined, {
+      requestName: 'google_elevation_sampled_points',
+      timeoutMs: 8000,
+      maxAttempts: 1,
+    });
+    payload = await response.json();
+  } catch (error) {
+    console.warn('Elevation lookup failed; continuing with flat-grade estimate:', error?.message || error);
+    return sampledPoints.map(() => null);
+  }
 
   if (payload.status !== 'OK' || !Array.isArray(payload.results)) {
     return sampledPoints.map(() => null);
@@ -807,13 +1468,16 @@ function analyzeRoute(route, routeIndex, vehicleProfile, fuelPrice, elevations) 
     vehicleProfile.powertrain === 'BEV' ? (idleSeconds / 3600) * 0.6 : 0;
   const totalFuelLiters = movingFuelLiters + idleFuelLiters + restartFuelLiters;
   const totalEnergyKwh = movingEnergyKwh + idleEnergyKwh;
+  const roundedTotalFuelLiters = Number(totalFuelLiters.toFixed(3));
+  const roundedTotalEnergyKwh = Number(totalEnergyKwh.toFixed(3));
   const spendUnits =
-    vehicleProfile.powertrain === 'BEV' ? totalEnergyKwh : totalFuelLiters;
+    vehicleProfile.powertrain === 'BEV' ? roundedTotalEnergyKwh : roundedTotalFuelLiters;
   const estimatedCostPhp = spendUnits * fuelPrice;
   const co2Kg =
     vehicleProfile.powertrain === 'BEV'
-      ? totalEnergyKwh * CO2_FACTORS.electric
-      : totalFuelLiters * (CO2_FACTORS[vehicleProfile.fuelType] || CO2_FACTORS.gasoline);
+      ? roundedTotalEnergyKwh * CO2_FACTORS.electric
+      : roundedTotalFuelLiters *
+        (CO2_FACTORS[vehicleProfile.fuelType] || CO2_FACTORS.gasoline);
 
   const jamShare = distanceMeters > 0 ? jamDistanceMeters / distanceMeters : 0;
   const slowShare = distanceMeters > 0 ? slowDistanceMeters / distanceMeters : 0;
@@ -837,13 +1501,15 @@ function analyzeRoute(route, routeIndex, vehicleProfile, fuelPrice, elevations) 
   return {
     id: `route-${routeIndex + 1}`,
     index: routeIndex,
-    label:
-      routeIndex === 0 ? 'Recommended by Google' : `Alternative Route ${routeIndex}`,
+    isGoogleRecommended: routeIndex === 0,
+    label: `Route ${routeIndex + 1}`,
     description:
-      String(route?.description || '').trim() ||
-      (Array.isArray(route?.routeLabels) && route.routeLabels.includes('FUEL_EFFICIENT')
-        ? 'Fuel-efficient reference route'
-        : `Alternative route ${routeIndex + 1}`),
+      routeIndex === 0
+        ? 'Recommended by Google'
+        : String(route?.description || '').trim() ||
+          (Array.isArray(route?.routeLabels) && route.routeLabels.includes('FUEL_EFFICIENT')
+            ? 'Fuel-efficient reference route'
+            : `Recommendation ${routeIndex + 1}`),
     routeLabels: Array.isArray(route?.routeLabels) ? route.routeLabels : [],
     encodedPolyline,
     warnings: Array.isArray(route?.warnings) ? route.warnings : [],
@@ -861,8 +1527,8 @@ function analyzeRoute(route, routeIndex, vehicleProfile, fuelPrice, elevations) 
     movingFuelLiters: Number(movingFuelLiters.toFixed(3)),
     idleFuelLiters: Number(idleFuelLiters.toFixed(3)),
     restartFuelLiters: Number(restartFuelLiters.toFixed(3)),
-    totalFuelLiters: Number(totalFuelLiters.toFixed(3)),
-    totalEnergyKwh: Number(totalEnergyKwh.toFixed(3)),
+    totalFuelLiters: roundedTotalFuelLiters,
+    totalEnergyKwh: roundedTotalEnergyKwh,
     estimatedCostPhp: Number(estimatedCostPhp.toFixed(2)),
     co2Kg: Number(co2Kg.toFixed(3)),
     stopCount,
@@ -982,6 +1648,11 @@ router.get('/trips', (req, res) => {
 router.post('/analyze', async (req, res) => {
   const origin = normalizeWaypoint(req.body?.origin);
   const destination = normalizeWaypoint(req.body?.destination);
+  const requestedRouteLimit = resolveRequestedRouteLimit(req.body?.routeLimit);
+  const effectiveRouteLimit = Math.max(
+    1,
+    Math.min(requestedRouteLimit, MAX_ROUTE_FETCH_TARGET)
+  );
   const fuelPrice =
     toFiniteNumber(req.body?.fuelPrice) ||
     DEFAULT_FUEL_PRICE_BY_TYPE[String(req.body?.fuelType || '').toLowerCase()] ||
@@ -1002,8 +1673,18 @@ router.post('/analyze', async (req, res) => {
   }
 
   try {
-    const routesPayload = await fetchRoutes(buildRoutesRequest(origin, destination, vehicleProfile));
-    const rawRoutes = Array.isArray(routesPayload?.routes) ? routesPayload.routes.slice(0, 3) : [];
+    const routesPayload = await fetchRoutesWithFallbackStrategies(
+      buildRoutesRequest(origin, destination, vehicleProfile),
+      effectiveRouteLimit,
+      effectiveRouteLimit,
+      {
+        originText: req.body?.origin,
+        destinationText: req.body?.destination,
+      }
+    );
+    const rawRoutes = Array.isArray(routesPayload?.routes)
+      ? routesPayload.routes.slice(0, effectiveRouteLimit)
+      : [];
 
     if (!rawRoutes.length) {
       return res.status(404).json({
@@ -1011,17 +1692,38 @@ router.post('/analyze', async (req, res) => {
       });
     }
 
-    const analyzedRoutes = [];
-    for (let index = 0; index < rawRoutes.length; index += 1) {
-      const rawRoute = rawRoutes[index];
-      const decodedPolyline = decodePolyline(rawRoute?.polyline?.encodedPolyline || '');
-      const elevations = await fetchElevations(decodedPolyline);
-      analyzedRoutes.push(
-        analyzeRoute(rawRoute, index, vehicleProfile, fuelPrice, elevations)
-      );
+    const analyzedRoutes = await mapWithConcurrency(
+      rawRoutes,
+      ANALYSIS_CONCURRENCY,
+      async (rawRoute, index) => {
+        const decodedPolyline = decodePolyline(rawRoute?.polyline?.encodedPolyline || '');
+        const shouldFetchElevation = index < ELEVATION_ANALYSIS_ROUTE_LIMIT;
+        const elevations = shouldFetchElevation
+          ? await fetchElevations(decodedPolyline)
+          : samplePathPoints(decodedPolyline, ELEVATION_SAMPLE_POINTS).map(() => null);
+
+        return analyzeRoute(rawRoute, index, vehicleProfile, fuelPrice, elevations);
+      }
+    );
+
+    const deduplicatedAnalyzedRoutes = removeNearDuplicateAnalyzedRoutes(
+      analyzedRoutes,
+      vehicleProfile.fuelType,
+      Math.min(MIN_KEEP_ROUTES, effectiveRouteLimit)
+    ).map((route, index) => ({
+      ...route,
+      id: `route-${index + 1}`,
+      index,
+      label: `Route ${index + 1}`,
+    }));
+
+    if (!deduplicatedAnalyzedRoutes.length) {
+      return res.status(404).json({
+        error: 'No distinct routes remained after route quality filtering.',
+      });
     }
 
-    const rankedRoutes = assignEfficiencyScores(analyzedRoutes);
+    const rankedRoutes = assignEfficiencyScores(deduplicatedAnalyzedRoutes);
     const recommendedRoute = rankedRoutes[0];
 
     res.json({

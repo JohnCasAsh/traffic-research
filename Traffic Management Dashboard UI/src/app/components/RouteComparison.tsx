@@ -16,59 +16,16 @@ import {
   TrendingDown,
 } from 'lucide-react';
 import { RouteAnalysisMap } from './RouteAnalysisMap';
-
-type TrafficLevel = 'low' | 'moderate' | 'heavy';
-
-type RouteMetrics = {
-  id: string;
-  rank: number;
-  label: string;
-  description: string;
-  encodedPolyline?: string;
-  distanceKm: number;
-  durationMinutes: number;
-  staticDurationMinutes: number;
-  trafficDelayMinutes: number;
-  trafficLevel: TrafficLevel;
-  estimatedCostPhp: number;
-  totalFuelLiters: number;
-  totalEnergyKwh: number;
-  efficiencyScore: number;
-  co2Kg: number;
-  isRecommended: boolean;
-  warnings: string[];
-  componentScores: {
-    time: number;
-    fuel: number;
-    traffic: number;
-    speedStability: number;
-  };
-  averageSpeedKph: number;
-  stopCount: number;
-  idleMinutes: number;
-  vsp: {
-    averageKwPerTon: number;
-    maxKwPerTon: number;
-    ecoShare: number;
-    moderateShare: number;
-    wasteShare: number;
-  };
-};
-
-type AnalysisResponse = {
-  generatedAt: string;
-  request: {
-    origin: string;
-    destination: string;
-    vehicleType: string;
-    vehicleLabel: string;
-    fuelType: string;
-    fuelPrice: number;
-    currency: string;
-  };
-  recommendedRouteId: string;
-  routes: RouteMetrics[];
-};
+import {
+  type RouteAnalysisResponse,
+  type RouteMetrics,
+  type TrafficLevel,
+  buildApiBaseUrl,
+  buildRouteAnalysisRequest,
+  buildRouteAnalysisRequestKey,
+  doesAnalysisMatchRequest,
+  fetchRouteAnalysis,
+} from '../routeAnalysis';
 
 type RouteFormData = {
   origin: string;
@@ -76,6 +33,11 @@ type RouteFormData = {
   vehicleType: string;
   fuelType: string;
   fuelPrice: string;
+};
+
+type RouteNavigationState = RouteFormData & {
+  preloadedAnalysis?: RouteAnalysisResponse;
+  analysisRequestKey?: string;
 };
 
 const DEFAULT_FORM_DATA: RouteFormData = {
@@ -89,29 +51,32 @@ const DEFAULT_FORM_DATA: RouteFormData = {
 const LAST_ANALYSIS_STORAGE_KEY = 'smartroute:last-analysis';
 const BEFORE_TRIP_STORAGE_KEY = 'smartroute:before-trip';
 
-function buildApiBaseUrl() {
-  const raw = (
-    import.meta as ImportMeta & {
-      env?: { VITE_API_URL?: string };
-    }
-  ).env?.VITE_API_URL;
-
-  const trimmed = String(raw || '').trim().replace(/\/$/, '');
-  if (trimmed) {
-    return trimmed;
-  }
-
-  return typeof window !== 'undefined' && window.location.hostname === 'localhost'
-    ? 'http://localhost:3001'
-    : 'https://api.navocs.com';
-}
-
 function formatFuelValue(route: RouteMetrics, fuelType: string) {
   if (fuelType === 'electric') {
-    return `${route.totalEnergyKwh.toFixed(2)} kWh`;
+    const energyValue = route.totalEnergyKwh < 10 ? route.totalEnergyKwh.toFixed(3) : route.totalEnergyKwh.toFixed(2);
+    return `${energyValue} kWh`;
   }
 
-  return `${route.totalFuelLiters.toFixed(2)} L`;
+  const fuelValue = route.totalFuelLiters < 1 ? route.totalFuelLiters.toFixed(3) : route.totalFuelLiters.toFixed(2);
+  return `${fuelValue} L`;
+}
+
+function formatCo2Value(co2Kg: number) {
+  return `${co2Kg < 1 ? co2Kg.toFixed(3) : co2Kg.toFixed(2)} kg`;
+}
+
+function formatDeltaValue(value: number, unit: string) {
+  const normalized = Math.max(0, Number.isFinite(value) ? value : 0);
+  const displayValue = normalized < 1 ? normalized.toFixed(3) : normalized.toFixed(2);
+  return `${displayValue} ${unit}`;
+}
+
+function formatSignedDeltaValue(value: number, unit: string) {
+  const safeValue = Number.isFinite(value) ? value : 0;
+  const sign = safeValue > 0 ? '+' : safeValue < 0 ? '-' : '';
+  const absoluteValue = Math.abs(safeValue);
+  const displayValue = absoluteValue < 1 ? absoluteValue.toFixed(3) : absoluteValue.toFixed(2);
+  return `${sign}${displayValue} ${unit}`;
 }
 
 function formatTrafficLabel(level: TrafficLevel) {
@@ -123,12 +88,79 @@ function toDisplayScore(value: unknown) {
   return Number.isFinite(parsed) ? Math.round(parsed) : null;
 }
 
+function routeSequenceFromId(routeId: string) {
+  const match = String(routeId || '').match(/^route-(\d+)$/i);
+  if (!match) {
+    return Number.POSITIVE_INFINITY;
+  }
+
+  const parsed = Number(match[1]);
+  return Number.isFinite(parsed) ? parsed : Number.POSITIVE_INFINITY;
+}
+
+function pickBaselineRoute(routes: RouteMetrics[], recommendedRoute: RouteMetrics | null) {
+  if (!recommendedRoute) {
+    return null;
+  }
+
+  const googleRoute = routes.find((route) => route.isGoogleRecommended) || null;
+  if (googleRoute && googleRoute.id !== recommendedRoute.id) {
+    return googleRoute;
+  }
+
+  const alternatives = routes.filter((route) => route.id !== recommendedRoute.id);
+  if (!alternatives.length) {
+    return null;
+  }
+
+  return [...alternatives].sort((left, right) => left.durationMinutes - right.durationMinutes)[0];
+}
+
+function formatChoiceLabel(value: string) {
+  return String(value || '')
+    .replace(/[_-]+/g, ' ')
+    .trim()
+    .replace(/\b\w/g, (character) => character.toUpperCase());
+}
+
 export function RouteComparison() {
   const location = useLocation();
-  const formData = (location.state as RouteFormData | null) || DEFAULT_FORM_DATA;
+  const locationState = (location.state as RouteNavigationState | null) || null;
+  const formData = useMemo<RouteFormData>(() => {
+    if (!locationState) {
+      return DEFAULT_FORM_DATA;
+    }
+
+    return {
+      origin: locationState.origin || DEFAULT_FORM_DATA.origin,
+      destination: locationState.destination || DEFAULT_FORM_DATA.destination,
+      vehicleType: locationState.vehicleType || DEFAULT_FORM_DATA.vehicleType,
+      fuelType: locationState.fuelType || DEFAULT_FORM_DATA.fuelType,
+      fuelPrice: locationState.fuelPrice || DEFAULT_FORM_DATA.fuelPrice,
+    };
+  }, [locationState]);
   const apiBaseUrl = useMemo(() => buildApiBaseUrl(), []);
   const navigate = useNavigate();
-  const [analysis, setAnalysis] = useState<AnalysisResponse | null>(null);
+  const analysisRequest = useMemo(() => buildRouteAnalysisRequest(formData), [formData]);
+  const analysisRequestKey = useMemo(
+    () => buildRouteAnalysisRequestKey(analysisRequest),
+    [analysisRequest]
+  );
+  const preloadedAnalysis = useMemo(() => {
+    const candidate = locationState?.preloadedAnalysis;
+    if (!candidate) {
+      return null;
+    }
+
+    const preloadedRequestKey = String(locationState?.analysisRequestKey || '').trim();
+    if (preloadedRequestKey && preloadedRequestKey !== analysisRequestKey) {
+      return null;
+    }
+
+    return doesAnalysisMatchRequest(candidate, analysisRequest) ? candidate : null;
+  }, [locationState, analysisRequest, analysisRequestKey]);
+
+  const [analysis, setAnalysis] = useState<RouteAnalysisResponse | null>(() => preloadedAnalysis);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -160,29 +192,18 @@ export function RouteComparison() {
     let cancelled = false;
 
     async function loadAnalysis() {
+      if (preloadedAnalysis) {
+        setAnalysis(preloadedAnalysis);
+        setErrorMessage(null);
+        setIsLoading(false);
+        return;
+      }
+
       setIsLoading(true);
       setErrorMessage(null);
 
       try {
-        const response = await fetch(`${apiBaseUrl}/api/routes/analyze`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(formData),
-        });
-        const rawPayload = await response.text();
-        let payload: any = null;
-
-        try {
-          payload = JSON.parse(rawPayload);
-        } catch {
-          payload = null;
-        }
-
-        if (!response.ok) {
-          throw new Error(payload?.details || payload?.error || 'Failed to analyze routes.');
-        }
+        const payload = await fetchRouteAnalysis(apiBaseUrl, analysisRequest);
 
         if (!cancelled) {
           setAnalysis(payload);
@@ -215,34 +236,55 @@ export function RouteComparison() {
     return () => {
       cancelled = true;
     };
-  }, [apiBaseUrl, formData]);
+  }, [apiBaseUrl, analysisRequest, preloadedAnalysis]);
 
-  const routes = analysis?.routes || [];
+  const routes = useMemo(() => {
+    const rawRoutes = analysis?.routes || [];
+    return [...rawRoutes].sort(
+      (left, right) => routeSequenceFromId(left.id) - routeSequenceFromId(right.id)
+    );
+  }, [analysis]);
   const recommendedRoute = routes.find((route) => route.isRecommended) || routes[0] || null;
+  const baselineRoute = pickBaselineRoute(routes, recommendedRoute);
   const fastestRoute = [...routes].sort((left, right) => left.durationMinutes - right.durationMinutes)[0];
   const cheapestRoute = [...routes].sort((left, right) => left.estimatedCostPhp - right.estimatedCostPhp)[0];
-  const referenceRoute = fastestRoute || recommendedRoute;
-  const savingsPhp =
-    recommendedRoute && referenceRoute
-      ? Math.max(0, referenceRoute.estimatedCostPhp - recommendedRoute.estimatedCostPhp)
+  const fallbackReferenceRoute = fastestRoute || recommendedRoute;
+  const effectiveBaselineRoute = baselineRoute || fallbackReferenceRoute;
+  const savingsPhpRaw =
+    recommendedRoute && effectiveBaselineRoute
+      ? effectiveBaselineRoute.estimatedCostPhp - recommendedRoute.estimatedCostPhp
       : 0;
+  const savingsPhp = Math.max(0, savingsPhpRaw);
+  const extraCostPhp = Math.max(0, -savingsPhpRaw);
   const savingsPercent =
-    recommendedRoute && referenceRoute && referenceRoute.estimatedCostPhp > 0
-      ? Math.round((savingsPhp / referenceRoute.estimatedCostPhp) * 100)
+    recommendedRoute && effectiveBaselineRoute && effectiveBaselineRoute.estimatedCostPhp > 0
+      ? Math.round((Math.abs(savingsPhpRaw) / effectiveBaselineRoute.estimatedCostPhp) * 100)
       : 0;
-  const fuelSavings =
-    recommendedRoute && referenceRoute
-      ? Math.max(
-          0,
-          (analysis?.request.fuelType === 'electric'
-            ? referenceRoute.totalEnergyKwh - recommendedRoute.totalEnergyKwh
-            : referenceRoute.totalFuelLiters - recommendedRoute.totalFuelLiters)
-        )
+  const fuelSavingsRaw =
+    recommendedRoute && effectiveBaselineRoute
+      ? (analysis?.request.fuelType === 'electric'
+          ? effectiveBaselineRoute.totalEnergyKwh - recommendedRoute.totalEnergyKwh
+          : effectiveBaselineRoute.totalFuelLiters - recommendedRoute.totalFuelLiters)
       : 0;
-  const co2Savings =
-    recommendedRoute && referenceRoute
-      ? Math.max(0, referenceRoute.co2Kg - recommendedRoute.co2Kg)
+  const co2SavingsRaw =
+    recommendedRoute && effectiveBaselineRoute
+      ? effectiveBaselineRoute.co2Kg - recommendedRoute.co2Kg
       : 0;
+  const baselineRouteLabel =
+    effectiveBaselineRoute && recommendedRoute && effectiveBaselineRoute.id !== recommendedRoute.id
+      ? effectiveBaselineRoute.label
+      : 'same route';
+  const requestedFuelPrice = Number(formData.fuelPrice);
+  const displayFuelPrice = Number.isFinite(requestedFuelPrice)
+    ? requestedFuelPrice
+    : analysis.request.fuelPrice;
+  const requestedTarget = {
+    origin: formData.origin.trim() || analysis.request.origin,
+    destination: formData.destination.trim() || analysis.request.destination,
+    vehicleType: formData.vehicleType.trim() || analysis.request.vehicleType,
+    fuelType: formData.fuelType.trim() || analysis.request.fuelType,
+    fuelPrice: displayFuelPrice,
+  };
 
   if (isLoading) {
     return (
@@ -300,6 +342,20 @@ export function RouteComparison() {
             {analysis.request.fuelPrice.toFixed(2)}
             {analysis.request.fuelType === 'electric' ? '/kWh' : '/L'}.
           </p>
+          <div className="mt-4 rounded-xl border border-slate-200 bg-white p-4">
+            <h2 className="text-sm font-semibold text-slate-900">User Target Inputs</h2>
+            <p className="mt-1 text-xs text-slate-500">These values are exactly what the user entered before analysis.</p>
+            <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-5">
+              <TargetField label="Origin" value={requestedTarget.origin} />
+              <TargetField label="Destination" value={requestedTarget.destination} />
+              <TargetField label="Vehicle" value={formatChoiceLabel(requestedTarget.vehicleType)} />
+              <TargetField label="Fuel Type" value={formatChoiceLabel(requestedTarget.fuelType)} />
+              <TargetField
+                label="Fuel Price"
+                value={`₱${requestedTarget.fuelPrice.toFixed(2)}${requestedTarget.fuelType === 'electric' ? '/kWh' : '/L'}`}
+              />
+            </div>
+          </div>
           {errorMessage ? (
             <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
               {errorMessage}
@@ -350,15 +406,22 @@ export function RouteComparison() {
                 transition={{ delay: 0.6 }}
                 className="text-green-900 mb-4 text-lg font-medium"
               >
-                {recommendedRoute.label} saves ₱{savingsPhp.toFixed(2)} ({savingsPercent}%)
-                {cheapestRoute?.id === recommendedRoute.id ? ' and is the cheapest option.' : ' while keeping traffic and speed stability balanced.'}
+                {recommendedRoute.label}{' '}
+                {savingsPhp > 0
+                  ? `saves ₱${savingsPhp.toFixed(2)} (${savingsPercent}%)`
+                  : extraCostPhp > 0
+                    ? `costs ₱${extraCostPhp.toFixed(2)} (${savingsPercent}%) more`
+                    : 'has the same estimated cost'}
+                {cheapestRoute?.id === recommendedRoute.id
+                  ? ` vs ${baselineRouteLabel} and is the cheapest option.`
+                  : ` vs ${baselineRouteLabel} while keeping traffic and speed stability balanced.`}
               </motion.p>
 
               <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.7 }}
-                className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4"
+                className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-4"
               >
                 <SummaryStat
                   icon={<TrendingDown className="w-4 h-4 text-green-600" />}
@@ -376,13 +439,18 @@ export function RouteComparison() {
                 />
                 <SummaryStat
                   icon={<Fuel className="w-4 h-4 text-green-600" />}
-                  label={analysis.request.fuelType === 'electric' ? 'Energy Saved' : 'Fuel Saved'}
-                  value={`${fuelSavings.toFixed(2)} ${analysis.request.fuelType === 'electric' ? 'kWh' : 'L'}`}
+                  label={analysis.request.fuelType === 'electric' ? 'Energy Used' : 'Fuel Used'}
+                  value={formatFuelValue(recommendedRoute, analysis.request.fuelType)}
+                />
+                <SummaryStat
+                  icon={<Fuel className="w-4 h-4 text-green-600" />}
+                  label={analysis.request.fuelType === 'electric' ? 'Energy Saved vs Baseline' : 'Fuel Saved vs Baseline'}
+                  value={formatSignedDeltaValue(fuelSavingsRaw, analysis.request.fuelType === 'electric' ? 'kWh' : 'L')}
                 />
                 <SummaryStat
                   icon={<Leaf className="w-4 h-4 text-green-600" />}
-                  label="CO₂ Reduced"
-                  value={`${co2Savings.toFixed(2)} kg`}
+                  label="CO₂ Reduced vs Baseline"
+                  value={formatSignedDeltaValue(co2SavingsRaw, 'kg')}
                 />
               </motion.div>
 
@@ -399,6 +467,9 @@ export function RouteComparison() {
                   </ReasonRow>
                   <ReasonRow>
                     <strong>Predicted {analysis.request.fuelType === 'electric' ? 'energy' : 'fuel'} use</strong> is {formatFuelValue(recommendedRoute, analysis.request.fuelType)} with {recommendedRoute.stopCount} estimated stop events.
+                  </ReasonRow>
+                  <ReasonRow>
+                    <strong>Cost basis</strong> is {formatFuelValue(recommendedRoute, analysis.request.fuelType)} × ₱{analysis.request.fuelPrice.toFixed(2)}{analysis.request.fuelType === 'electric' ? '/kWh' : '/L'} = ₱{recommendedRoute.estimatedCostPhp.toFixed(2)}.
                   </ReasonRow>
                   <ReasonRow>
                     <strong>Traffic delay stays at</strong> {recommendedRoute.trafficDelayMinutes.toFixed(1)} extra minutes with a {formatTrafficLabel(recommendedRoute.trafficLevel).toLowerCase()} profile.
@@ -480,6 +551,15 @@ function SummaryStat({
   );
 }
 
+function TargetField({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+      <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">{label}</div>
+      <div className="mt-1 text-sm font-medium text-slate-800 break-words">{value}</div>
+    </div>
+  );
+}
+
 function ReasonRow({ children }: { children: ReactNode }) {
   return (
     <motion.li
@@ -524,17 +604,24 @@ function RouteCard({ route, fuelType, onStartTracking }: { route: RouteMetrics; 
             <h3 className="font-bold text-slate-900 text-lg">{route.label}</h3>
             <p className="text-xs text-slate-500 mt-1">{route.description}</p>
           </div>
-          {route.isRecommended && (
-            <motion.span
-              initial={{ scale: 0, rotate: -180 }}
-              animate={{ scale: 1, rotate: 0 }}
-              transition={{ type: 'spring', stiffness: 200 }}
-              className="px-2 py-1 bg-green-500 text-white text-xs font-medium rounded-full flex items-center space-x-1"
-            >
-              <Award className="w-3 h-3" />
-              <span>BEST</span>
-            </motion.span>
-          )}
+          <div className="flex flex-wrap items-center justify-end gap-1.5">
+            {route.isGoogleRecommended && (
+              <span className="px-2 py-1 bg-blue-100 text-blue-700 text-[11px] font-semibold rounded-full border border-blue-200">
+                RECOMMENDED BY GOOGLE
+              </span>
+            )}
+            {route.isRecommended && (
+              <motion.span
+                initial={{ scale: 0, rotate: -180 }}
+                animate={{ scale: 1, rotate: 0 }}
+                transition={{ type: 'spring', stiffness: 200 }}
+                className="px-2 py-1 bg-green-500 text-white text-xs font-medium rounded-full flex items-center space-x-1"
+              >
+                <Award className="w-3 h-3" />
+                <span>BEST</span>
+              </motion.span>
+            )}
+          </div>
         </div>
 
         <div className="flex items-center space-x-2 mb-3">
@@ -591,7 +678,7 @@ function RouteCard({ route, fuelType, onStartTracking }: { route: RouteMetrics; 
         <MetricRow
           icon={<Leaf className="w-4 h-4 text-green-600" />}
           label="CO₂ Emission"
-          value={`${route.co2Kg.toFixed(2)} kg`}
+          value={formatCo2Value(route.co2Kg)}
         />
         <MetricRow
           icon={<TrendingDown className="w-4 h-4 text-teal-600" />}

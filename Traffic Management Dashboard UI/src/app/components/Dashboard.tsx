@@ -24,13 +24,21 @@ const VEHICLE_DEFAULTS: Record<string, { fuelType: string; fuelPrice: string }> 
   emotorcycle: { fuelType: 'electric', fuelPrice: '10.00' },
 };
 
+type RouteFormData = {
+  origin: string;
+  destination: string;
+  vehicleType: string;
+  fuelType: string;
+  fuelPrice: string;
+};
+
 export function Dashboard() {
   const navigate = useNavigate();
   const { consent, setConsent, currentLocation } = useLocationConsent();
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [originLocationStatus, setOriginLocationStatus] = useState<string | null>(null);
   const [showPrivacyModal, setShowPrivacyModal] = useState(false);
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<RouteFormData>({
     origin: '',
     destination: '',
     vehicleType: 'sedan',
@@ -41,12 +49,12 @@ export function Dashboard() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setIsAnalyzing(true);
-    
-    // Simulate analysis
-    setTimeout(() => {
-      setIsAnalyzing(false);
-      navigate('/routes', { state: formData });
-    }, 2000);
+
+    navigate('/routes', {
+      state: {
+        ...formData,
+      },
+    });
   };
 
   const handleChange = (field: string, value: string) => {

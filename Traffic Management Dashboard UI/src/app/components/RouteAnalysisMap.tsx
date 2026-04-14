@@ -8,6 +8,8 @@ type RouteMetric = {
   id: string;
   label: string;
   description: string;
+  isRecommended?: boolean;
+  isGoogleRecommended?: boolean;
   encodedPolyline?: string;
   distanceKm: number;
   durationMinutes: number;
@@ -82,10 +84,12 @@ function trafficColor(level: TrafficLevel) {
 
 function formatFuel(route: RouteMetric, fuelType: string) {
   if (fuelType === 'electric') {
-    return `${route.totalEnergyKwh.toFixed(2)} kWh`;
+    const energyValue = route.totalEnergyKwh < 10 ? route.totalEnergyKwh.toFixed(3) : route.totalEnergyKwh.toFixed(2);
+    return `${energyValue} kWh`;
   }
 
-  return `${route.totalFuelLiters.toFixed(2)} L`;
+  const fuelValue = route.totalFuelLiters < 1 ? route.totalFuelLiters.toFixed(3) : route.totalFuelLiters.toFixed(2);
+  return `${fuelValue} L`;
 }
 
 function scoreLabel(value: number) {
@@ -113,7 +117,7 @@ export function RouteAnalysisMap({ routes, fuelType }: RouteAnalysisMapProps) {
 
   useEffect(() => {
     if (!selectedRouteId && routes.length > 0) {
-      const recommended = routes.find((route) => scoreLabel(route.efficiencyScore) === 100) || routes[0];
+      const recommended = routes.find((route) => route.isRecommended) || routes[0];
       setSelectedRouteId(recommended.id);
       return;
     }
@@ -382,6 +386,11 @@ export function RouteAnalysisMap({ routes, fuelType }: RouteAnalysisMapProps) {
                   <div>
                     <div className="text-sm font-semibold text-slate-900">{route.label}</div>
                     <div className="text-[11px] text-slate-500 mt-0.5 line-clamp-2">{route.description}</div>
+                    {route.isGoogleRecommended && (
+                      <div className="mt-1 inline-flex items-center rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[10px] font-semibold text-blue-700">
+                        RECOMMENDED BY GOOGLE
+                      </div>
+                    )}
                   </div>
                   <div className={`text-xs font-bold px-2 py-1 rounded-full ${active ? 'bg-teal-600 text-white' : 'bg-slate-100 text-slate-700'}`}>
                     {scoreLabel(route.efficiencyScore)}

@@ -13,6 +13,11 @@ const MAX_INITIAL_TRACKING_ACCURACY_METERS = 400;
 const MAX_STEADY_TRACKING_ACCURACY_METERS = 200;
 const MIN_MOVEMENT_FOR_WEAK_SIGNAL_METERS = 35;
 const MAX_ROUTE_OPTIONS = 5;
+const MIN_PREVIEW_ROUTES = 2;
+const MAX_PREVIEW_NEAR_DUPLICATE_DISTANCE_METERS = 450;
+const MAX_PREVIEW_NEAR_DUPLICATE_DURATION_SECONDS = 140;
+const MAX_PREVIEW_DETOUR_DISTANCE_RATIO = 1.9;
+const MAX_PREVIEW_DETOUR_DURATION_RATIO = 2.0;
 const MAX_ALLOWED_FORCED_DETOUR_RATIO = 2.5;
 const MAX_ALLOWED_BRIDGE_DETOUR_RATIO = 1.7;
 const BRIDGE_MATCH_RADIUS_DEGREES = 0.0065;
@@ -382,6 +387,78 @@ function compareRouteOptionsByShortest(a: RouteOption, b: RouteOption) {
   }
 
   return a.summaryText.localeCompare(b.summaryText);
+}
+
+function getRouteOptionMetrics(routeOption: RouteOption) {
+  const leg = routeOption?.directionsResult?.routes?.[routeOption.resultRouteIndex]?.legs?.[0];
+  return {
+    distanceMeters: Number(leg?.distance?.value ?? Number.POSITIVE_INFINITY),
+    durationSeconds: Number(leg?.duration?.value ?? Number.POSITIVE_INFINITY),
+  };
+}
+
+function filterOutlierPreviewRoutes(routeOptions: RouteOption[]) {
+  if (!Array.isArray(routeOptions) || routeOptions.length <= MIN_PREVIEW_ROUTES) {
+    return Array.isArray(routeOptions) ? routeOptions : [];
+  }
+
+  const metrics = routeOptions.map((routeOption) => ({
+    routeOption,
+    ...getRouteOptionMetrics(routeOption),
+  }));
+  const minDistance = Math.min(...metrics.map((item) => item.distanceMeters));
+  const minDuration = Math.min(...metrics.map((item) => item.durationSeconds));
+
+  const filtered = metrics
+    .filter((item) => {
+      const distanceRatio = item.distanceMeters / minDistance;
+      const durationRatio = item.durationSeconds / minDuration;
+      const isOutlier =
+        distanceRatio > MAX_PREVIEW_DETOUR_DISTANCE_RATIO &&
+        durationRatio > MAX_PREVIEW_DETOUR_DURATION_RATIO;
+
+      return !isOutlier;
+    })
+    .map((item) => item.routeOption);
+
+  if (filtered.length >= MIN_PREVIEW_ROUTES) {
+    return filtered;
+  }
+
+  return routeOptions.slice(0, MIN_PREVIEW_ROUTES);
+}
+
+function filterNearDuplicatePreviewRoutes(routeOptions: RouteOption[]) {
+  if (!Array.isArray(routeOptions) || routeOptions.length <= MIN_PREVIEW_ROUTES) {
+    return Array.isArray(routeOptions) ? routeOptions : [];
+  }
+
+  const uniqueOptions: RouteOption[] = [];
+
+  for (const candidate of routeOptions) {
+    const candidateMetrics = getRouteOptionMetrics(candidate);
+
+    const duplicate = uniqueOptions.some((existingOption) => {
+      const existingMetrics = getRouteOptionMetrics(existingOption);
+      const distanceDelta = Math.abs(candidateMetrics.distanceMeters - existingMetrics.distanceMeters);
+      const durationDelta = Math.abs(candidateMetrics.durationSeconds - existingMetrics.durationSeconds);
+
+      return (
+        distanceDelta <= MAX_PREVIEW_NEAR_DUPLICATE_DISTANCE_METERS &&
+        durationDelta <= MAX_PREVIEW_NEAR_DUPLICATE_DURATION_SECONDS
+      );
+    });
+
+    if (!duplicate) {
+      uniqueOptions.push(candidate);
+    }
+  }
+
+  if (uniqueOptions.length >= MIN_PREVIEW_ROUTES) {
+    return uniqueOptions;
+  }
+
+  return routeOptions.slice(0, MIN_PREVIEW_ROUTES);
 }
 
 type TrafficLevel = 'low' | 'moderate' | 'heavy';
@@ -1030,6 +1107,9 @@ export function DashboardMap({
               });
             }
           }
+
+          normalizedRouteOptions = filterOutlierPreviewRoutes(normalizedRouteOptions);
+          normalizedRouteOptions = filterNearDuplicatePreviewRoutes(normalizedRouteOptions);
 
           normalizedRouteOptions = normalizedRouteOptions.slice(0, MAX_ROUTE_OPTIONS);
 
