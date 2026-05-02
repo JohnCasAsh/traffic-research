@@ -323,12 +323,14 @@ export function RouteComparison() {
 
   return (
     <div className="min-h-[calc(100vh-4rem)] bg-slate-50">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <motion.div
-          initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="mb-8"
-        >
+      <div className="flex h-full">
+        {/* Main Content */}
+        <div className="flex-1 max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8 overflow-auto">
+          <motion.div
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mb-8"
+          >
           <div className="flex items-center space-x-2 text-sm text-slate-600 mb-2">
             <MapPin className="w-4 h-4" />
             <span>
@@ -526,6 +528,23 @@ export function RouteComparison() {
             fuelType={analysis.request.fuelType}
           />
         </motion.div>
+        </div>
+
+        {/* Chat Sidebar */}
+        <div className="hidden lg:flex lg:w-96 bg-white border-l border-slate-200 flex-col p-4">
+          <h3 className="text-lg font-bold text-slate-900 mb-4">Route Assistant</h3>
+          <div className="flex-1 overflow-hidden rounded-lg border border-slate-200">
+            <iframe 
+              src="https://chat.navocs.com"
+              width="100%" 
+              height="100%"
+              frameBorder="0"
+              allow="microphone; camera"
+              title="Route Assistant Chat"
+              className="w-full h-full"
+            />
+          </div>
+        </div>
       </div>
     </div>
   );
