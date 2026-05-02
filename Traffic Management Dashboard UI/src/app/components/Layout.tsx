@@ -182,8 +182,8 @@ export function Layout() {
         </div>
       </footer>
 
-      {/* Floating Chat Bubble */}
-      <ChatBubble />
+      {/* Floating Chat Bubble — authenticated users only */}
+      {isAuthenticated && <ChatBubble />}
     </div>
   );
 }

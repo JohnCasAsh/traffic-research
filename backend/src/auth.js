@@ -1625,4 +1625,15 @@ router.post('/rotate-pepper', async (req, res) => {
   }
 });
 
+// ---- CHAT ASSISTANT TOKEN ----
+// Returns the Navocs chat URL (with embedded key) only to verified users.
+// The key lives in NAVOCS_CHAT_URL env var and is never sent to the browser directly.
+router.get('/chat-token', requireAuth, (req, res) => {
+  const chatUrl = process.env.NAVOCS_CHAT_URL;
+  if (!chatUrl) {
+    return res.status(503).json({ error: 'Chat service not configured' });
+  }
+  return res.json({ url: chatUrl });
+});
+
 module.exports = router;

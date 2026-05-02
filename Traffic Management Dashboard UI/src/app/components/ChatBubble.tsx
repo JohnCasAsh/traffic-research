@@ -1,8 +1,24 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { MessageCircle, X } from 'lucide-react';
+import { API_URL, buildAuthHeaders } from '../api';
+import { useAuth } from '../auth';
 
 export function ChatBubble() {
+  const { token } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
+  const [chatUrl, setChatUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!token) return;
+    fetch(`${API_URL}/api/auth/chat-token`, {
+      headers: buildAuthHeaders(token),
+    })
+      .then(r => r.ok ? r.json() : Promise.reject())
+      .then(data => setChatUrl(data.url))
+      .catch(() => setChatUrl(null));
+  }, [token]);
+
+  if (!chatUrl) return null;
 
   return (
     <>
@@ -26,7 +42,7 @@ export function ChatBubble() {
           </button>
         </div>
         <iframe
-          src="https://genai-app-navocstrafficassistant-1-1777735107346-986182900435.us-central1.run.app/?key=MIVJIWWAeD9kZwK5uysO8DmpIMrXoDp1"
+          src={chatUrl}
           className="flex-1 border-0 w-full"
           title="Route Assistant Chat"
           allow="microphone; camera"
