@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { MessageCircle, X } from 'lucide-react';
+import { MessageCircle, X, Loader2 } from 'lucide-react';
 import { API_URL, buildAuthHeaders } from '../api';
 import { useAuth } from '../auth';
 
@@ -7,18 +7,19 @@ export function ChatBubble() {
   const { token } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
   const [chatUrl, setChatUrl] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (!token) return;
+    setLoading(true);
     fetch(`${API_URL}/api/auth/chat-token`, {
       headers: buildAuthHeaders(token),
     })
       .then(r => r.ok ? r.json() : Promise.reject())
       .then(data => setChatUrl(data.url))
-      .catch(() => setChatUrl(null));
+      .catch(() => setChatUrl(null))
+      .finally(() => setLoading(false));
   }, [token]);
-
-  if (!chatUrl) return null;
 
   return (
     <>
@@ -41,12 +42,24 @@ export function ChatBubble() {
             <X className="w-5 h-5" />
           </button>
         </div>
-        <iframe
-          src={chatUrl}
-          className="flex-1 border-0 w-full"
-          title="Route Assistant Chat"
-          allow="microphone; camera"
-        />
+
+        {loading ? (
+          <div className="flex-1 flex items-center justify-center bg-white">
+            <Loader2 className="w-6 h-6 text-orange-500 animate-spin" />
+          </div>
+        ) : chatUrl ? (
+          <iframe
+            src={chatUrl}
+            className="flex-1 border-0 w-full"
+            title="Route Assistant Chat"
+            allow="microphone; camera"
+          />
+        ) : (
+          <div className="flex-1 flex flex-col items-center justify-center bg-white text-slate-500 gap-2 px-6 text-center">
+            <MessageCircle className="w-8 h-8 text-slate-300" />
+            <p className="text-sm">Route Assistant is temporarily unavailable.</p>
+          </div>
+        )}
       </div>
 
       {/* Floating Toggle Button */}
