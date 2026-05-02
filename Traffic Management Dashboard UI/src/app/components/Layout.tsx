@@ -3,6 +3,7 @@ import { Navigation, MapPin, BarChart3, Route, LogOut, UserRound, Gauge } from '
 import { motion, useScroll } from 'motion/react';
 import { useState, useEffect } from 'react';
 import { useAuth, type AuthUser } from '../auth';
+import { ChatBubble } from './ChatBubble';
 
 export function Layout() {
   const location = useLocation();
@@ -180,6 +181,9 @@ export function Layout() {
           </div>
         </div>
       </footer>
+
+      {/* Floating Chat Bubble */}
+      <ChatBubble />
     </div>
   );
 }
