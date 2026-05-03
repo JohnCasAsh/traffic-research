@@ -9,13 +9,17 @@ import {
   DollarSign,
   Fuel,
   Leaf,
+  Loader2,
   LoaderCircle,
   MapPin,
+  MessageCircle,
   Navigation,
   Sparkles,
   TrendingDown,
 } from 'lucide-react';
 import { RouteAnalysisMap } from './RouteAnalysisMap';
+import { useAuth } from '../auth';
+import { API_URL, buildAuthHeaders } from '../api';
 import {
   type RouteAnalysisResponse,
   type RouteMetrics,
@@ -126,6 +130,19 @@ function formatChoiceLabel(value: string) {
 export function RouteComparison() {
   const location = useLocation();
   const locationState = (location.state as RouteNavigationState | null) || null;
+  const { token } = useAuth();
+  const [chatUrl, setChatUrl] = useState<string | null>(null);
+  const [chatLoading, setChatLoading] = useState(true);
+
+  useEffect(() => {
+    if (!token) return;
+    setChatLoading(true);
+    fetch(`${API_URL}/api/auth/chat-token`, { headers: buildAuthHeaders(token) })
+      .then(r => r.ok ? r.json() : Promise.reject())
+      .then(data => setChatUrl(data.url))
+      .catch(() => setChatUrl(null))
+      .finally(() => setChatLoading(false));
+  }, [token]);
   const formData = useMemo<RouteFormData>(() => {
     if (!locationState) {
       return DEFAULT_FORM_DATA;
@@ -534,15 +551,26 @@ export function RouteComparison() {
         <div className="hidden lg:flex lg:w-96 bg-white border-l border-slate-200 flex-col p-4">
           <h3 className="text-lg font-bold text-slate-900 mb-4">Route Assistant</h3>
           <div className="flex-1 overflow-hidden rounded-lg border border-slate-200">
-            <iframe 
-              src="https://chat.navocs.com"
-              width="100%" 
-              height="100%"
-              frameBorder="0"
-              allow="microphone; camera"
-              title="Route Assistant Chat"
-              className="w-full h-full"
-            />
+            {chatLoading ? (
+              <div className="w-full h-full flex items-center justify-center bg-white">
+                <Loader2 className="w-6 h-6 text-orange-500 animate-spin" />
+              </div>
+            ) : chatUrl ? (
+              <iframe
+                src={chatUrl}
+                width="100%"
+                height="100%"
+                frameBorder="0"
+                allow="microphone; camera"
+                title="Route Assistant Chat"
+                className="w-full h-full"
+              />
+            ) : (
+              <div className="w-full h-full flex flex-col items-center justify-center bg-white text-slate-500 gap-2 px-6 text-center">
+                <MessageCircle className="w-8 h-8 text-slate-300" />
+                <p className="text-sm">Route Assistant is temporarily unavailable.</p>
+              </div>
+            )}
           </div>
         </div>
       </div>
