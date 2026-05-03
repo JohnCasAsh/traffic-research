@@ -144,6 +144,17 @@ function loadFirebaseCredentialsFromFilePath(filePath) {
 }
 
 function getFirebaseServiceAccountCredentials() {
+  // Prefer base64-encoded full JSON (most reliable across environments)
+  const base64 = process.env.FIREBASE_SERVICE_ACCOUNT_BASE64;
+  if (base64) {
+    try {
+      const parsed = JSON.parse(Buffer.from(base64, 'base64').toString('utf8'));
+      if (parsed.client_email && parsed.private_key) {
+        return { clientEmail: parsed.client_email, privateKey: parsed.private_key };
+      }
+    } catch {}
+  }
+
   const inlineClientEmail = String(process.env.FIREBASE_CLIENT_EMAIL || '').trim();
   const inlinePrivateKeyRaw = String(process.env.FIREBASE_PRIVATE_KEY || '').trim();
 

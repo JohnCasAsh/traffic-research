@@ -55,14 +55,23 @@ function buildServiceAccountFromEnv() {
   };
 }
 
+function buildServiceAccountFromBase64() {
+  const encoded = process.env.FIREBASE_SERVICE_ACCOUNT_BASE64;
+  if (!encoded) return null;
+  const json = Buffer.from(encoded, 'base64').toString('utf8');
+  return JSON.parse(json);
+}
+
 function getFirestore() {
   if (firestore) {
     return firestore;
   }
 
-  const serviceAccount = process.env.FIREBASE_SERVICE_ACCOUNT_PATH
-    ? loadServiceAccountFromFile(process.env.FIREBASE_SERVICE_ACCOUNT_PATH)
-    : buildServiceAccountFromEnv();
+  const serviceAccount =
+    buildServiceAccountFromBase64() ||
+    (process.env.FIREBASE_SERVICE_ACCOUNT_PATH
+      ? loadServiceAccountFromFile(process.env.FIREBASE_SERVICE_ACCOUNT_PATH)
+      : buildServiceAccountFromEnv());
 
   if (!admin.apps.length) {
     admin.initializeApp({
