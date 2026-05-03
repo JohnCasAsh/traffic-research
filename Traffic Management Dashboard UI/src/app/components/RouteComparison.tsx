@@ -548,7 +548,7 @@ export function RouteComparison() {
         </div>
 
         {/* Chat Sidebar */}
-        <div className="hidden lg:flex lg:w-96 bg-white border-l border-slate-200 flex-col p-4">
+        <div className="hidden lg:flex lg:w-96 bg-white border-l border-slate-200 flex-col p-4 sticky top-16 h-[calc(100vh-4rem)] self-start">
           <h3 className="text-lg font-bold text-slate-900 mb-4">Route Assistant</h3>
           <div className="flex-1 overflow-hidden rounded-lg border border-slate-200">
             {chatLoading ? (
