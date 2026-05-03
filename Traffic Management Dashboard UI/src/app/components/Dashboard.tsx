@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router';
 import { motion } from 'motion/react';
-import { MapPin, Navigation, Fuel, DollarSign, Car, Zap, TrendingUp, Settings, Info, X, AlertCircle, ArrowUpDown, Loader2, MessageCircle } from 'lucide-react';
+import { MapPin, Navigation, Fuel, DollarSign, Car, Zap, TrendingUp, Settings, Info, X, AlertCircle, ArrowUpDown } from 'lucide-react';
 import { DashboardMap } from './DashboardMap';
+import { AssistantPanel } from './AssistantPanel';
 import { useLocationConsent } from '../LocationConsentContext';
 import { formatLocationAccuracy } from '../location';
 import { useAuth } from '../auth';
@@ -420,40 +421,7 @@ export function Dashboard() {
       </div>
       </div>
 
-      {/* Chat Sidebar */}
-      <div className="hidden lg:flex lg:w-96 bg-white border-l border-slate-200 flex-col sticky top-16 h-[calc(100vh-4rem)] self-start">
-        <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 shrink-0">
-          <h3 className="text-sm font-semibold text-slate-900">Route Assistant</h3>
-          {chatUrl && (
-            <span className="flex items-center gap-1.5 text-xs text-emerald-600 font-medium">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-              Live
-            </span>
-          )}
-        </div>
-        <div className="flex-1 overflow-hidden">
-          {chatLoading ? (
-            <div className="w-full h-full flex items-center justify-center bg-white">
-              <Loader2 className="w-6 h-6 text-orange-500 animate-spin" />
-            </div>
-          ) : chatUrl ? (
-            <iframe
-              src={chatUrl}
-              width="100%"
-              height="100%"
-              frameBorder="0"
-              allow="microphone; camera"
-              title="Route Assistant Chat"
-              className="w-full h-full"
-            />
-          ) : (
-            <div className="w-full h-full flex flex-col items-center justify-center bg-white text-slate-500 gap-2 px-6 text-center">
-              <MessageCircle className="w-8 h-8 text-slate-300" />
-              <p className="text-sm">Route Assistant is temporarily unavailable.</p>
-            </div>
-          )}
-        </div>
-      </div>
+      <AssistantPanel chatUrl={chatUrl} chatLoading={chatLoading} />
 
       {/* Privacy Consent Modal */}
       {showPrivacyModal && (
