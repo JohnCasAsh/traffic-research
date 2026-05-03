@@ -548,9 +548,17 @@ export function RouteComparison() {
         </div>
 
         {/* Chat Sidebar */}
-        <div className="hidden lg:flex lg:w-96 bg-white border-l border-slate-200 flex-col p-4 sticky top-16 h-[calc(100vh-4rem)] self-start">
-          <h3 className="text-lg font-bold text-slate-900 mb-4">Route Assistant</h3>
-          <div className="flex-1 overflow-hidden rounded-lg border border-slate-200">
+        <div className="hidden lg:flex lg:w-96 bg-white border-l border-slate-200 flex-col sticky top-16 h-[calc(100vh-4rem)] self-start">
+          <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 shrink-0">
+            <h3 className="text-sm font-semibold text-slate-900">Route Assistant</h3>
+            {chatUrl && (
+              <span className="flex items-center gap-1.5 text-xs text-emerald-600 font-medium">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                Live
+              </span>
+            )}
+          </div>
+          <div className="flex-1 overflow-hidden">
             {chatLoading ? (
               <div className="w-full h-full flex items-center justify-center bg-white">
                 <Loader2 className="w-6 h-6 text-orange-500 animate-spin" />
