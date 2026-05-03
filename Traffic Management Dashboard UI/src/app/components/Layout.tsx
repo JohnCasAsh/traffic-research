@@ -182,8 +182,8 @@ export function Layout() {
         </div>
       </footer>
 
-      {/* Floating Chat Bubble — authenticated users only, hidden on pages with built-in assistants */}
-      {isAuthenticated && !location.pathname.startsWith('/routes') && !location.pathname.startsWith('/dashboard') && <ChatBubble />}
+      {/* Floating Chat Bubble — only on pages without a built-in assistant sidebar */}
+      {isAuthenticated && !['/dashboard', '/routes', '/analytics', '/speed-meter'].some(p => location.pathname.startsWith(p)) && <ChatBubble />}
     </div>
   );
 }

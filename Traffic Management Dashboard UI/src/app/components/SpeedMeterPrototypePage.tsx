@@ -17,7 +17,9 @@ import {
 } from 'lucide-react';
 import { useNavigate } from 'react-router';
 import { formatLocationAccuracy } from '../location';
-import { API_URL } from '../api';
+import { API_URL, buildAuthHeaders } from '../api';
+import { AssistantPanel } from './AssistantPanel';
+import { useAuth } from '../auth';
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -522,6 +524,20 @@ const ACCURACY_EXPLANATIONS = [
 // ─── Component ─────────────────────────────────────────────────────────────────
 
 export function SpeedMeterPrototypePage() {
+  const { token } = useAuth();
+  const [chatUrl, setChatUrl] = useState<string | null>(null);
+  const [chatLoading, setChatLoading] = useState(true);
+
+  useEffect(() => {
+    if (!token) return;
+    setChatLoading(true);
+    fetch(`${API_URL}/api/auth/chat-token`, { headers: buildAuthHeaders(token) })
+      .then(r => r.ok ? r.json() : Promise.reject())
+      .then(data => setChatUrl(data.url))
+      .catch(() => setChatUrl(null))
+      .finally(() => setChatLoading(false));
+  }, [token]);
+
   const watchIdRef = useRef<number | null>(null);
   const sessionStartMsRef = useRef<number | null>(null);
   const elapsedOffsetSecondsRef = useRef(0);
@@ -1049,7 +1065,8 @@ export function SpeedMeterPrototypePage() {
     signalQuality === 'poor' ? AlertTriangle : WifiOff;
 
   return (
-    <div className="min-h-[calc(100vh-4rem)] bg-slate-50 py-8">
+    <div className="min-h-[calc(100vh-4rem)] bg-slate-50 flex">
+      <div className="flex-1 overflow-auto py-8">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
 
         {/* ── Header + metrics ────────────────────────────────────────────────── */}
@@ -1492,6 +1509,8 @@ export function SpeedMeterPrototypePage() {
         </motion.section>
 
       </div>
+      </div>
+      <AssistantPanel chatUrl={chatUrl} chatLoading={chatLoading} />
     </div>
   );
 }
