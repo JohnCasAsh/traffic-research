@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { API_URL, buildAuthHeaders } from '../api';
 import { createEmptyAddress, useAuth, type UserAddress } from '../auth';
+import { AssistantPanel } from './AssistantPanel';
 
 type Notice = {
   type: 'success' | 'error' | 'info';
@@ -111,6 +112,18 @@ function formatProviderName(provider: string) {
 
 export function ProfilePage() {
   const { logout, token, updateUser, user } = useAuth();
+  const [chatUrl, setChatUrl] = useState<string | null>(null);
+  const [chatLoading, setChatLoading] = useState(true);
+
+  useEffect(() => {
+    if (!token) return;
+    setChatLoading(true);
+    fetch(`${API_URL}/api/auth/chat-token`, { headers: buildAuthHeaders(token) })
+      .then(r => r.ok ? r.json() : Promise.reject())
+      .then(data => setChatUrl(data.url))
+      .catch(() => setChatUrl(null))
+      .finally(() => setChatLoading(false));
+  }, [token]);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [profileForm, setProfileForm] = useState<ProfileFormState>(() => createProfileFormState(user));
   const [passwordForm, setPasswordForm] = useState({
@@ -317,7 +330,8 @@ export function ProfilePage() {
   };
 
   return (
-    <div className="min-h-[calc(100vh-4rem)] bg-slate-50">
+    <div className="min-h-[calc(100vh-4rem)] bg-slate-50 flex">
+      <div className="flex-1 overflow-auto">
       <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
         <motion.section
           initial={{ opacity: 0, y: 18 }}
@@ -752,6 +766,8 @@ export function ProfilePage() {
           </div>
         </div>
       </div>
+      </div>
+      <AssistantPanel chatUrl={chatUrl} chatLoading={chatLoading} />
     </div>
   );
 }

@@ -183,7 +183,7 @@ export function Layout() {
       </footer>
 
       {/* Floating Chat Bubble — only on pages without a built-in assistant sidebar */}
-      {isAuthenticated && !['/dashboard', '/routes', '/analytics', '/speed-meter'].some(p => location.pathname.startsWith(p)) && <ChatBubble />}
+      {isAuthenticated && !['/dashboard', '/routes', '/analytics', '/speed-meter', '/profile'].some(p => location.pathname.startsWith(p)) && <ChatBubble />}
     </div>
   );
 }
