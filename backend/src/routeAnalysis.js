@@ -241,6 +241,8 @@ const VEHICLE_PROFILES = {
     engineEfficiency: 0.28,
     fuelType: 'gasoline',
     travelMode: 'TWO_WHEELER',
+    // VSP at steady-state gives ~376 km/L for 150 kg; real PH city driving ~35 km/L → 11×
+    realWorldFactor: 11,
   },
   tricycle: {
     key: 'tricycle',
@@ -252,6 +254,8 @@ const VEHICLE_PROFILES = {
     engineEfficiency: 0.24,
     fuelType: 'gasoline',
     travelMode: 'DRIVE',
+    // VSP gives ~138 km/L for 350 kg; real PH city driving ~22 km/L → 6×
+    realWorldFactor: 6,
   },
   sedan: {
     key: 'sedan',
@@ -263,6 +267,8 @@ const VEHICLE_PROFILES = {
     engineEfficiency: 0.26,
     fuelType: 'gasoline',
     travelMode: 'DRIVE',
+    // VSP gives ~44 km/L for 1200 kg; real PH city driving ~10 km/L → 4.5×
+    realWorldFactor: 4.5,
   },
   private_car: {
     key: 'private_car',
@@ -274,6 +280,7 @@ const VEHICLE_PROFILES = {
     engineEfficiency: 0.26,
     fuelType: 'gasoline',
     travelMode: 'DRIVE',
+    realWorldFactor: 4.5,
   },
   van: {
     key: 'van',
@@ -285,6 +292,8 @@ const VEHICLE_PROFILES = {
     engineEfficiency: 0.28,
     fuelType: 'diesel',
     travelMode: 'DRIVE',
+    // VSP gives ~34 km/L for 2000 kg diesel; real PH city ~7 km/L → 5×
+    realWorldFactor: 5,
   },
   bus: {
     key: 'bus',
@@ -296,6 +305,8 @@ const VEHICLE_PROFILES = {
     engineEfficiency: 0.36,
     fuelType: 'diesel',
     travelMode: 'DRIVE',
+    // VSP gives ~11 km/L for 8000 kg diesel; real PH city ~4 km/L → 2.75×
+    realWorldFactor: 2.75,
   },
   hybrid_car: {
     key: 'hybrid_car',
@@ -307,6 +318,8 @@ const VEHICLE_PROFILES = {
     engineEfficiency: 0.38,
     fuelType: 'gasoline',
     travelMode: 'DRIVE',
+    // VSP gives ~57 km/L for 1350 kg HEV; real PH city ~17 km/L → 3.5×
+    realWorldFactor: 3.5,
   },
   hybrid_van: {
     key: 'hybrid_van',
@@ -318,6 +331,7 @@ const VEHICLE_PROFILES = {
     engineEfficiency: 0.36,
     fuelType: 'gasoline',
     travelMode: 'DRIVE',
+    realWorldFactor: 4,
   },
   e_trike: {
     key: 'e_trike',
@@ -353,6 +367,7 @@ const VEHICLE_PROFILES = {
     engineEfficiency: 0.28,
     fuelType: 'diesel',
     travelMode: 'DRIVE',
+    realWorldFactor: 5,
   },
   truck: {
     key: 'truck',
@@ -364,6 +379,7 @@ const VEHICLE_PROFILES = {
     engineEfficiency: 0.36,
     fuelType: 'diesel',
     travelMode: 'DRIVE',
+    realWorldFactor: 2.75,
   },
   electric: {
     key: 'electric',
@@ -387,6 +403,7 @@ const VEHICLE_PROFILES = {
     engineEfficiency: 0.38,
     fuelType: 'gasoline',
     travelMode: 'DRIVE',
+    realWorldFactor: 3.5,
   },
   etrike: {
     key: 'etrike',
@@ -1477,7 +1494,9 @@ function analyzeRoute(route, routeIndex, vehicleProfile, fuelPrice, elevations) 
 
   const idleEnergyKwh =
     vehicleProfile.powertrain === 'BEV' ? (idleSeconds / 3600) * 0.6 : 0;
-  const totalFuelLiters = movingFuelLiters + idleFuelLiters + restartFuelLiters;
+  // realWorldFactor corrects VSP moving fuel only; idle and restart rates are already calibrated
+  const correctedMovingFuelLiters = movingFuelLiters * (vehicleProfile.realWorldFactor || 1);
+  const totalFuelLiters = correctedMovingFuelLiters + idleFuelLiters + restartFuelLiters;
   const totalEnergyKwh = movingEnergyKwh + idleEnergyKwh;
   const roundedTotalFuelLiters = Number(totalFuelLiters.toFixed(3));
   const roundedTotalEnergyKwh = Number(totalEnergyKwh.toFixed(3));
