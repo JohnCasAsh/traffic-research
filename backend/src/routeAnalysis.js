@@ -1599,13 +1599,14 @@ function assignEfficiencyScores(routes) {
       maxCost === minCost
         ? 100
         : 100 - ((route.estimatedCostPhp - minCost) / (maxCost - minCost)) * 100;
-    const trafficPenaltyScore =
-      maxTrafficDelay === minTrafficDelay
-        ? route.componentScores.traffic
-        : 100 -
-          ((route.trafficDelayMinutes - minTrafficDelay) /
-            (maxTrafficDelay - minTrafficDelay)) *
-            100;
+    // Use a fixed 10-minute scale so a 0.7 min delay doesn't score 0 just because
+    // it's the worst among routes — small delays should barely penalize.
+    const TRAFFIC_DELAY_SCALE_MIN = 10;
+    const trafficPenaltyScore = clamp(
+      100 - (route.trafficDelayMinutes / TRAFFIC_DELAY_SCALE_MIN) * 100,
+      0,
+      100
+    );
 
     route.componentScores.time = Math.round(clamp(timeScore, 0, 100));
     route.componentScores.fuel = Math.round(clamp(fuelScore, 0, 100));
@@ -1613,12 +1614,14 @@ function assignEfficiencyScores(routes) {
       clamp((route.componentScores.traffic + trafficPenaltyScore) / 2, 0, 100)
     );
 
+    // Weights: fuel/cost = 0.50 (eco-routing thesis), time = 0.20,
+    // traffic = 0.20, speed stability = 0.10
     route.efficiencyScore = Math.round(
       clamp(
-        route.componentScores.time * 0.25 +
-          route.componentScores.fuel * 0.35 +
-          route.componentScores.traffic * 0.25 +
-          route.componentScores.speedStability * 0.15,
+        route.componentScores.time * 0.20 +
+          route.componentScores.fuel * 0.50 +
+          route.componentScores.traffic * 0.20 +
+          route.componentScores.speedStability * 0.10,
         0,
         100
       )
