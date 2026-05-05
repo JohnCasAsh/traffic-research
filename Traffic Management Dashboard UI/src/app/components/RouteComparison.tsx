@@ -275,10 +275,11 @@ export function RouteComparison() {
 
     fetch(`${API_URL}/api/routes/trips`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
       body: JSON.stringify({
         id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
         savedAt: new Date().toISOString(),
+        userId: token ? (() => { try { return JSON.parse(atob(token.split('.')[1])).sub; } catch { return null; } })() : null,
         baselineCost: effective.estimatedCostPhp,
         navocsCost: recommended.estimatedCostPhp,
         vehicleType: analysis.request.vehicleType,
@@ -288,7 +289,7 @@ export function RouteComparison() {
         destination: analysis.request.destination,
       }),
     }).catch(() => {});
-  }, [analysis, isLoading, analysisRequestKey]);
+  }, [analysis, isLoading, analysisRequestKey, token]);
 
   const routes = useMemo(() => {
     const rawRoutes = analysis?.routes || [];

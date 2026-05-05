@@ -1637,3 +1637,4 @@ router.get('/chat-token', requireAuth, (req, res) => {
 });
 
 module.exports = router;
+module.exports.requireAuth = requireAuth;

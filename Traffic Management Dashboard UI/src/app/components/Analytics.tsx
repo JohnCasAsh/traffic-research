@@ -26,6 +26,7 @@ import {
   Download,
   Copy,
   FlaskConical,
+  Trash2,
 } from 'lucide-react';
 import { AssistantPanel } from './AssistantPanel';
 import { useAuth } from '../auth';
@@ -51,6 +52,7 @@ export function Analytics() {
   const [stats, setStats] = useState<StatsResult | null>(null);
   const [statsLoading, setStatsLoading] = useState(true);
   const [copied, setCopied] = useState(false);
+  const [clearing, setClearing] = useState(false);
 
   useEffect(() => {
     if (!token) return;
@@ -62,14 +64,17 @@ export function Analytics() {
       .finally(() => setChatLoading(false));
   }, [token]);
 
-  useEffect(() => {
+  const loadStats = (tok: string | null) => {
+    if (!tok) return;
     setStatsLoading(true);
-    fetch(`${API_URL}/api/stats/analysis`)
+    fetch(`${API_URL}/api/stats/analysis`, { headers: buildAuthHeaders(tok) })
       .then(r => r.ok ? r.json() : Promise.reject())
       .then(data => setStats(data))
       .catch(() => setStats(null))
       .finally(() => setStatsLoading(false));
-  }, []);
+  };
+
+  useEffect(() => { loadStats(token); }, [token]);
 
   // Mock data for charts
   const monthlySavings = [
@@ -415,14 +420,23 @@ export function Analytics() {
 
               {/* Action buttons */}
               <div className="flex flex-wrap gap-3 pt-1">
-                <a
-                  href={`${API_URL}/api/stats/export-csv`}
-                  download="navocs-trip-analysis.csv"
+                <button
+                  onClick={() => {
+                    if (!token) return;
+                    fetch(`${API_URL}/api/stats/export-csv`, { headers: buildAuthHeaders(token) })
+                      .then(r => r.ok ? r.blob() : Promise.reject())
+                      .then(blob => {
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url; a.download = 'navocs-trip-analysis.csv'; a.click();
+                        URL.revokeObjectURL(url);
+                      }).catch(() => {});
+                  }}
                   className="inline-flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white text-sm font-medium rounded-lg transition-colors"
                 >
                   <Download className="w-4 h-4" />
                   Export CSV
-                </a>
+                </button>
                 <button
                   onClick={() => {
                     const sentence = buildThesisSentence(stats);
@@ -435,6 +449,20 @@ export function Analytics() {
                 >
                   <Copy className="w-4 h-4" />
                   {copied ? 'Copied!' : 'Copy thesis sentence'}
+                </button>
+                <button
+                  onClick={() => {
+                    if (!token || !window.confirm('Clear all your saved trip data? This cannot be undone.')) return;
+                    setClearing(true);
+                    fetch(`${API_URL}/api/stats/clear`, { method: 'DELETE', headers: buildAuthHeaders(token) })
+                      .then(() => { setStats(null); loadStats(token); })
+                      .catch(() => {})
+                      .finally(() => setClearing(false));
+                  }}
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-sm font-medium rounded-lg transition-colors"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  {clearing ? 'Clearing…' : 'Clear my data'}
                 </button>
               </div>
             </div>

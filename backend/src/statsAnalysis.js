@@ -1,13 +1,15 @@
 // ============================================================
 // STATISTICAL ANALYSIS MODULE — SmartRoute / Navocs
 // ============================================================
-// GET /api/stats/analysis  — normality + significance test + effect size + CI
-// GET /api/stats/export-csv — downloadable per-trip CSV
+// GET  /api/stats/analysis   — per-user normality + significance + effect size + CI
+// GET  /api/stats/export-csv — per-user downloadable CSV
+// DELETE /api/stats/clear    — delete current user's saved trips
 // ============================================================
 
 const express = require('express');
 const path = require('path');
 const fs = require('fs');
+const { requireAuth } = require('./auth');
 
 const router = express.Router();
 
@@ -27,6 +29,16 @@ function readTripReports() {
     return Array.isArray(parsed) ? parsed : [];
   } catch {
     return [];
+  }
+}
+
+function writeTripReports(records) {
+  try {
+    const filePath = resolveTripReportsPath();
+    fs.mkdirSync(path.dirname(filePath), { recursive: true });
+    fs.writeFileSync(filePath, JSON.stringify(records.slice(0, 1000), null, 2), 'utf8');
+  } catch (err) {
+    console.error('Failed to write trip reports:', err.message);
   }
 }
 
@@ -281,8 +293,10 @@ function r4(x) { return Math.round(x * 10000) / 10000; }
 
 // ─── Routes ──────────────────────────────────────────────────────────────────
 
-router.get('/analysis', (req, res) => {
-  const all = readTripReports();
+router.get('/analysis', requireAuth, (req, res) => {
+  const userId = req.authUser.id;
+  const all = readTripReports().filter(t => t.userId === userId);
+
   const pairs = all.reduce((acc, trip) => {
     const costs = extractCosts(trip);
     if (costs && costs.baseline > 0 && costs.navocs >= 0) {
@@ -295,7 +309,7 @@ router.get('/analysis', (req, res) => {
   if (n < 3) {
     return res.json({
       n,
-      message: n === 0 ? 'No trip data with cost comparisons yet.' : 'Minimum 3 trips required for statistical analysis.',
+      message: n === 0 ? 'No trip data yet. Run a few route analyses and come back.' : 'Minimum 3 trips required for statistical analysis.',
     });
   }
 
@@ -311,22 +325,12 @@ router.get('/analysis', (req, res) => {
   let test, effectSize;
   if (isNormal) {
     const tt = pairedTTest(diffs);
-    test = {
-      name: 'Paired-samples t-test',
-      statistic: tt.statistic,
-      p: tt.p,
-      significant: tt.p < 0.05,
-    };
+    test = { name: 'Paired-samples t-test', statistic: tt.statistic, p: tt.p, significant: tt.p < 0.05 };
     const cd = cohensD(diffs);
     effectSize = { name: "Cohen's d", value: cd.value, magnitude: cd.magnitude };
   } else {
     const wx = wilcoxonSignedRank(diffs);
-    test = {
-      name: 'Wilcoxon signed-rank test',
-      statistic: wx.statistic,
-      p: wx.p,
-      significant: wx.p < 0.05,
-    };
+    test = { name: 'Wilcoxon signed-rank test', statistic: wx.statistic, p: wx.p, significant: wx.p < 0.05 };
     const rb = rankBiserial(diffs);
     effectSize = { name: 'Rank-biserial correlation', value: rb.value, magnitude: rb.magnitude };
   }
@@ -346,8 +350,9 @@ router.get('/analysis', (req, res) => {
   });
 });
 
-router.get('/export-csv', (req, res) => {
-  const all = readTripReports();
+router.get('/export-csv', requireAuth, (req, res) => {
+  const userId = req.authUser.id;
+  const all = readTripReports().filter(t => t.userId === userId);
   const rows = [];
 
   for (const trip of all) {
@@ -372,6 +377,14 @@ router.get('/export-csv', (req, res) => {
   res.setHeader('Content-Type', 'text/csv');
   res.setHeader('Content-Disposition', 'attachment; filename="navocs-trip-analysis.csv"');
   res.send(csv);
+});
+
+router.delete('/clear', requireAuth, (req, res) => {
+  const userId = req.authUser.id;
+  const all = readTripReports();
+  const kept = all.filter(t => t.userId !== userId);
+  writeTripReports(kept);
+  return res.json({ message: 'Your trip data cleared.', removed: all.length - kept.length });
 });
 
 module.exports = { statsRouter: router };
