@@ -105,20 +105,50 @@ app.use(cors({
 app.use(express.json({ limit: '10kb' }));
 
 // Rate limiting (CIA Triad - Availability)
-const authLimiter = rateLimit({
-  windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS || '900000'),  // default 15 min
-  max: parseInt(process.env.RATE_LIMIT_MAX || '20'),                  // default 20 attempts
+//
+// Two tiers:
+//   sensitiveAuthLimiter — login, signup, password reset, email verify (brute-force targets)
+//   pageAuthLimiter      — /me, /chat-token, and other passive checks called on every page load
+//
+// Applying a single tight limiter to all /api/auth routes caused legitimate users to hit
+// the cap just by navigating between pages (each page calls /me + /chat-token).
+
+const keyGen = (req) => {
+  const normalizedIp = normalizeClientIp(req.ip || req.socket?.remoteAddress);
+  return ipKeyGenerator(normalizedIp);
+};
+
+// Strict: max 10 attempts per 15 min — login / signup / password flows
+const sensitiveAuthLimiter = rateLimit({
+  windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS || '900000'),
+  max: parseInt(process.env.RATE_LIMIT_MAX || '10'),
   message: { error: 'Too many requests. Try again later.' },
-  keyGenerator: (req) => {
-    const normalizedIp = normalizeClientIp(req.ip || req.socket?.remoteAddress);
-    return ipKeyGenerator(normalizedIp);
-  },
+  keyGenerator: keyGen,
   standardHeaders: true,
   legacyHeaders: false,
 });
 
-// Apply rate limiting to auth routes
-app.use('/api/auth', authLimiter);
+// Relaxed: max 300 per 15 min — passive checks every page load (/me, /chat-token)
+const pageAuthLimiter = rateLimit({
+  windowMs: 900000,
+  max: 300,
+  message: { error: 'Too many requests. Try again later.' },
+  keyGenerator: keyGen,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+// Apply strict limiter only to sensitive write/auth endpoints
+app.use('/api/auth/login', sensitiveAuthLimiter);
+app.use('/api/auth/signup', sensitiveAuthLimiter);
+app.use('/api/auth/forgot-password', sensitiveAuthLimiter);
+app.use('/api/auth/reset-password', sensitiveAuthLimiter);
+app.use('/api/auth/verify-email', sensitiveAuthLimiter);
+app.use('/api/auth/resend-verification', sensitiveAuthLimiter);
+
+// Apply relaxed limiter to passive page-load checks
+app.use('/api/auth/me', pageAuthLimiter);
+app.use('/api/auth/chat-token', pageAuthLimiter);
 
 // Routes
 app.use('/api/auth', authRoutes);
