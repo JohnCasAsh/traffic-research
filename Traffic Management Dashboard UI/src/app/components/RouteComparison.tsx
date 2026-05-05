@@ -1,4 +1,4 @@
-import { type ReactNode, useEffect, useMemo, useState } from 'react';
+import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router';
 import { motion } from 'motion/react';
 import {
@@ -179,6 +179,7 @@ export function RouteComparison() {
   const [analysis, setAnalysis] = useState<RouteAnalysisResponse | null>(() => preloadedAnalysis);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const savedAnalysisKeyRef = useRef<string | null>(null);
 
   const handleStartTracking = (route: RouteMetrics) => {
     if (!analysis) return;
@@ -253,6 +254,41 @@ export function RouteComparison() {
       cancelled = true;
     };
   }, [apiBaseUrl, analysisRequest, preloadedAnalysis]);
+
+  // Silently save each unique analysis result as a trip cost pair for the stats card.
+  useEffect(() => {
+    if (isLoading || !analysis?.routes?.length) return;
+    if (savedAnalysisKeyRef.current === analysisRequestKey) return;
+
+    const sorted = [...analysis.routes].sort(
+      (a, b) => routeSequenceFromId(a.id) - routeSequenceFromId(b.id)
+    );
+    const recommended = sorted.find(r => r.isRecommended) || sorted[0] || null;
+    if (!recommended) return;
+
+    const baseline = pickBaselineRoute(sorted, recommended);
+    const fastest = [...sorted].sort((a, b) => a.durationMinutes - b.durationMinutes)[0];
+    const effective = baseline || fastest || recommended;
+    if (!effective || effective.id === recommended.id || effective.estimatedCostPhp <= 0) return;
+
+    savedAnalysisKeyRef.current = analysisRequestKey;
+
+    fetch(`${API_URL}/api/routes/trips`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        savedAt: new Date().toISOString(),
+        baselineCost: effective.estimatedCostPhp,
+        navocsCost: recommended.estimatedCostPhp,
+        vehicleType: analysis.request.vehicleType,
+        fuelType: analysis.request.fuelType,
+        fuelPrice: analysis.request.fuelPrice,
+        origin: analysis.request.origin,
+        destination: analysis.request.destination,
+      }),
+    }).catch(() => {});
+  }, [analysis, isLoading, analysisRequestKey]);
 
   const routes = useMemo(() => {
     const rawRoutes = analysis?.routes || [];
