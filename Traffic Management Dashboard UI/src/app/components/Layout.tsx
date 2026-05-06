@@ -58,9 +58,11 @@ export function Layout() {
                 <NavLink to="/routes" icon={<Route className="w-4 h-4" />}>
                   Routes
                 </NavLink>
-                <NavLink to="/analytics" icon={<BarChart3 className="w-4 h-4" />}>
-                  Analytics
-                </NavLink>
+                {(user?.role === 'admin' || user?.role === 'researcher') && (
+                  <NavLink to="/analytics" icon={<BarChart3 className="w-4 h-4" />}>
+                    Analytics
+                  </NavLink>
+                )}
                 <NavLink to="/speed-meter" icon={<Gauge className="w-4 h-4" />}>
                   Speed Meter
                 </NavLink>
@@ -128,15 +130,22 @@ export function Layout() {
               <MobileNavLink to="/routes" icon={<Route className="w-5 h-5" />}>
                 Routes
               </MobileNavLink>
-              <MobileNavLink to="/analytics" icon={<BarChart3 className="w-5 h-5" />}>
-                Analytics
-              </MobileNavLink>
+              {(user?.role === 'admin' || user?.role === 'researcher') && (
+                <MobileNavLink to="/analytics" icon={<BarChart3 className="w-5 h-5" />}>
+                  Analytics
+                </MobileNavLink>
+              )}
               <MobileNavLink to="/speed-meter" icon={<Gauge className="w-5 h-5" />}>
                 Speed
               </MobileNavLink>
               <MobileNavLink to="/profile" icon={<UserRound className="w-5 h-5" />}>
                 Profile
               </MobileNavLink>
+              {user?.role === 'admin' && (
+                <MobileNavLink to="/admin" icon={<Shield className="w-5 h-5" />}>
+                  Admin
+                </MobileNavLink>
+              )}
             </div>
           </div>
         )}
