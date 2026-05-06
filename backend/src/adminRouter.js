@@ -22,6 +22,48 @@ adminRouter.get('/users', requireAuth, requireAdmin, async (req, res) => {
   }
 });
 
+// POST /api/admin/users/:id/ban
+adminRouter.post('/users/:id/ban', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const target = await db.getUserById(req.params.id);
+    if (!target) return res.status(404).json({ error: 'User not found.' });
+    if (target.role === 'admin') return res.status(403).json({ error: 'Cannot ban an admin.' });
+    await db.setBannedStatus(req.params.id, true);
+    res.json({ message: 'User banned.' });
+  } catch (err) {
+    console.error('Ban error:', err);
+    res.status(500).json({ error: 'Failed to ban user.' });
+  }
+});
+
+// POST /api/admin/users/:id/unban
+adminRouter.post('/users/:id/unban', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    await db.setBannedStatus(req.params.id, false);
+    res.json({ message: 'User unbanned.' });
+  } catch (err) {
+    console.error('Unban error:', err);
+    res.status(500).json({ error: 'Failed to unban user.' });
+  }
+});
+
+// DELETE /api/admin/users/:id
+adminRouter.delete('/users/:id', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    if (req.params.id === req.authUser.id) {
+      return res.status(403).json({ error: 'Cannot delete your own account.' });
+    }
+    const target = await db.getUserById(req.params.id);
+    if (!target) return res.status(404).json({ error: 'User not found.' });
+    if (target.role === 'admin') return res.status(403).json({ error: 'Cannot delete an admin.' });
+    await db.deleteUser(req.params.id);
+    res.json({ message: 'User deleted.' });
+  } catch (err) {
+    console.error('Delete error:', err);
+    res.status(500).json({ error: 'Failed to delete user.' });
+  }
+});
+
 // GET /api/admin/logins — recent login events
 adminRouter.get('/logins', requireAuth, requireAdmin, async (req, res) => {
   try {

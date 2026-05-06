@@ -275,6 +275,15 @@ async function deleteUser(userId) {
   await db.collection(COLLECTIONS.users).doc(userId).delete();
 }
 
+async function setBannedStatus(userId, banned) {
+  await ready();
+  const db = getFirestore();
+  await db.collection(COLLECTIONS.users).doc(userId).update({
+    banned: banned,
+    updated_at: new Date().toISOString(),
+  });
+}
+
 async function getCurrentPepperVersion() {
   await ready();
   const db = getFirestore();
@@ -408,6 +417,7 @@ async function getAllUsers() {
       last_name: d.last_name || '',
       role: d.role || 'driver',
       email_verified: d.email_verified !== false,
+      banned: d.banned === true,
       created_at: d.created_at || null,
       updated_at: d.updated_at || null,
       auth_providers: d.auth_providers || (d.auth_provider ? [d.auth_provider] : []),
@@ -465,4 +475,5 @@ module.exports = {
   countUsersWithPepperVersionLessThan,
   getAllUsers,
   getRecentLoginLogs,
+  setBannedStatus,
 };

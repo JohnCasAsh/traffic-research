@@ -590,6 +590,11 @@ async function findOrCreateOAuthUser({ provider, email, firstName, lastName, ipA
   const { user: existingUser } = await findUserByEmailVariants(canonicalEmail, hmacKey);
 
   if (existingUser) {
+    // Block banned accounts
+    if (existingUser.banned === true) {
+      throw createCodeError('ACCOUNT_BANNED', 'Your account has been suspended. Contact support.');
+    }
+
     // Block OAuth login for accounts registered with email/password
     if (existingUser.password_hash) {
       throw createCodeError(
@@ -1485,6 +1490,11 @@ router.post(
 
       if (!user) {
         return res.status(401).json({ error: 'Invalid credentials' });
+      }
+
+      // Check if account is banned
+      if (user.banned === true) {
+        return res.status(403).json({ error: 'Your account has been suspended. Contact support.' });
       }
 
       // Check account lockout (Availability — prevent brute force)
