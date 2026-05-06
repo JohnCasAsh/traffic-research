@@ -233,6 +233,9 @@ export function RouteComparison() {
       BEFORE_TRIP_STORAGE_KEY,
       JSON.stringify({
         savedAt: new Date().toISOString(),
+        origin: analysis.request.origin,
+        destination: analysis.request.destination,
+        routeDescription: route.description,
         prediction: {
           routeLabel: route.label,
           predictedDurationMinutes: route.durationMinutes,

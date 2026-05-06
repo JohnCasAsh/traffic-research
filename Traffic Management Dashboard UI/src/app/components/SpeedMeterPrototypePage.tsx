@@ -3,11 +3,13 @@ import { motion } from 'motion/react';
 import {
   Activity,
   AlertTriangle,
+  ArrowRight,
   CheckCircle2,
   Download,
   Fuel,
   Gauge,
   LocateFixed,
+  MapPin,
   Pause,
   Play,
   RotateCcw,
@@ -392,6 +394,9 @@ function readBeforeTripData(): {
   vehicleType: string;
   fuelType: 'gasoline' | 'diesel' | 'electric';
   fuelPrice: number;
+  origin: string;
+  destination: string;
+  routeDescription: string;
 } | null {
   try {
     const raw = window.localStorage.getItem(BEFORE_TRIP_STORAGE_KEY);
@@ -406,6 +411,9 @@ function readBeforeTripData(): {
       vehicleType: String(parsed.vehicleType || 'sedan'),
       fuelType: ft === 'diesel' ? 'diesel' : ft === 'electric' ? 'electric' : 'gasoline',
       fuelPrice: Number(parsed.fuelPrice) || 62,
+      origin: String(parsed.origin || ''),
+      destination: String(parsed.destination || ''),
+      routeDescription: String(parsed.routeDescription || ''),
     };
   } catch {
     return null;
@@ -544,6 +552,9 @@ export function SpeedMeterPrototypePage() {
   const [runningFuelOrEnergy, setRunningFuelOrEnergy] = useState(0);
   const [runningCostPhp, setRunningCostPhp] = useState(0);
   const [predictedSummary, setPredictedSummary] = useState<PredictedTripSummary | null>(null);
+  const [tripOrigin, setTripOrigin] = useState('');
+  const [tripDestination, setTripDestination] = useState('');
+  const [tripRouteDescription, setTripRouteDescription] = useState('');
   const [completedTrip, setCompletedTrip] = useState<CompletedTripRecord | null>(null);
   const [syncStatus, setSyncStatus] = useState('Not synced');
 
@@ -557,6 +568,9 @@ export function SpeedMeterPrototypePage() {
     const beforeTrip = readBeforeTripData();
     if (beforeTrip) {
       setPredictedSummary(beforeTrip.prediction);
+      setTripOrigin(beforeTrip.origin);
+      setTripDestination(beforeTrip.destination);
+      setTripRouteDescription(beforeTrip.routeDescription);
       // Store fuel type and price before setting vehicleType so the vehicleType effect can consume them
       beforeTripFuelTypeRef.current = beforeTrip.fuelType;
       beforeTripFuelPriceRef.current = beforeTrip.fuelPrice;
@@ -1304,6 +1318,47 @@ export function SpeedMeterPrototypePage() {
             </div>
           </div>
         </motion.section>
+
+        {/* ── Route context banner ─────────────────────────────────────────────── */}
+        {(tripOrigin || tripDestination) && (
+          <motion.div
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mt-4 rounded-2xl border border-teal-200 bg-gradient-to-r from-teal-50 to-blue-50 px-5 py-4 shadow-sm"
+          >
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-teal-600">
+                  Active Route
+                </p>
+                {predictedSummary?.routeLabel && (
+                  <p className="mt-0.5 text-base font-bold text-slate-900">
+                    {predictedSummary.routeLabel}
+                    {tripRouteDescription ? (
+                      <span className="ml-2 text-sm font-normal text-slate-500">
+                        via {tripRouteDescription}
+                      </span>
+                    ) : null}
+                  </p>
+                )}
+                {!predictedSummary?.routeLabel && tripRouteDescription && (
+                  <p className="mt-0.5 text-base font-bold text-slate-900">{tripRouteDescription}</p>
+                )}
+              </div>
+              <div className="flex items-center gap-2 text-sm text-slate-700 flex-wrap">
+                <span className="inline-flex items-center gap-1.5 rounded-lg border border-teal-200 bg-white px-3 py-1.5 font-medium">
+                  <MapPin className="h-3.5 w-3.5 text-teal-500" />
+                  {tripOrigin || '—'}
+                </span>
+                <ArrowRight className="h-4 w-4 text-slate-400 flex-shrink-0" />
+                <span className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-white px-3 py-1.5 font-medium">
+                  <MapPin className="h-3.5 w-3.5 text-blue-500" />
+                  {tripDestination || '—'}
+                </span>
+              </div>
+            </div>
+          </motion.div>
+        )}
 
         {/* ── Latest samples table ─────────────────────────────────────────────── */}
         <motion.section
