@@ -381,14 +381,6 @@ export function Dashboard() {
                   <Navigation className="w-4 h-4" />
                   <span>{consent.isConsented ? 'Tracking Live' : 'Enable Live Tracking'}</span>
                 </button>
-                <button 
-                  type="button" 
-                  title="Coming Soon: Connect OBD-II via Bluetooth for real vehicle data"
-                  className="flex-1 py-3 px-4 border border-slate-200 rounded-xl bg-slate-50 text-slate-400 text-sm font-medium flex items-center justify-center space-x-2 cursor-not-allowed"
-                >
-                  <Settings className="w-4 h-4" />
-                  <span>Connect OBD-II</span>
-                </button>
               </div>
             </form>
 
