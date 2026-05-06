@@ -721,7 +721,7 @@ router.post(
       .isLength({ min: 8, max: 128 })
       .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/)
       .withMessage('Password must have uppercase, lowercase, and number'),
-    body('role').isIn(['driver', 'researcher']),
+    body('role').isIn(['driver']),
   ],
   async (req, res) => {
     try {

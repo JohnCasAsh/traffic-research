@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Shield, Users, LogIn, RefreshCw, Clock, Wifi, Ban, Trash2, CheckCircle, ShieldCheck } from 'lucide-react';
+import { Shield, Users, LogIn, RefreshCw, Clock, Wifi, Ban, Trash2, CheckCircle, ShieldCheck, FlaskConical } from 'lucide-react';
 import { useAuth } from '../auth';
 import { API_URL, buildAuthHeaders } from '../api';
 
@@ -92,6 +92,20 @@ export function AdminPage() {
         headers: buildAuthHeaders(token),
       });
       if (res.ok) setUsers(prev => prev.map(x => x.id === u.id ? { ...x, role: 'admin' } : x));
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleMakeResearcher = async (u: UserRow) => {
+    if (!token) return;
+    setActionLoading(`make-researcher-${u.id}`);
+    try {
+      const res = await fetch(`${API_URL}/api/admin/users/${u.id}/make-researcher`, {
+        method: 'POST',
+        headers: buildAuthHeaders(token),
+      });
+      if (res.ok) setUsers(prev => prev.map(x => x.id === u.id ? { ...x, role: 'researcher' } : x));
     } finally {
       setActionLoading(null);
     }
@@ -279,9 +293,11 @@ export function AdminPage() {
                     {users.map((u) => {
                       const isMe = u.id === me?.id;
                       const isAdmin = u.role === 'admin';
+                      const isResearcher = u.role === 'researcher';
                       const banKey = `${u.banned ? 'unban' : 'ban'}-${u.id}`;
                       const deleteKey = `delete-${u.id}`;
                       const makeAdminKey = `make-admin-${u.id}`;
+                      const makeResearcherKey = `make-researcher-${u.id}`;
                       return (
                         <tr key={u.id} className={`hover:bg-slate-50 transition ${u.banned ? 'opacity-60' : ''}`}>
                           <td className="px-6 py-3 font-medium text-slate-800">
@@ -290,7 +306,7 @@ export function AdminPage() {
                           </td>
                           <td className="px-6 py-3">
                             <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
-                              isAdmin ? 'bg-red-100 text-red-700' : 'bg-slate-100 text-slate-600'
+                              isAdmin ? 'bg-red-100 text-red-700' : isResearcher ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-600'
                             }`}>
                               {u.role}
                             </span>
@@ -330,6 +346,16 @@ export function AdminPage() {
                                   <Ban className="w-3 h-3" />
                                   {u.banned ? 'Unban' : 'Ban'}
                                 </button>
+                                {!u.banned && !isResearcher && (
+                                  <button
+                                    onClick={() => handleMakeResearcher(u)}
+                                    disabled={actionLoading === makeResearcherKey}
+                                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium bg-blue-50 text-blue-700 hover:bg-blue-100 transition disabled:opacity-50"
+                                  >
+                                    <FlaskConical className="w-3 h-3" />
+                                    Make Researcher
+                                  </button>
+                                )}
                                 {!u.banned && (
                                   <button
                                     onClick={() => handleMakeAdmin(u)}

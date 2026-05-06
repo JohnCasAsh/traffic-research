@@ -9,6 +9,7 @@ import { PasswordRecoveryPage } from "./components/PasswordRecoveryPage";
 import { ProfilePage } from "./components/ProfilePage";
 import { RequireAuth } from "./components/RequireAuth";
 import { RequireAdmin } from "./components/RequireAdmin";
+import { RequireAnalytics } from "./components/RequireAnalytics";
 import { SignUpPage } from "./components/SignUpPage";
 import { SpeedMeterPrototypePage } from "./components/SpeedMeterPrototypePage";
 import { AdminPage } from "./components/AdminPage";
@@ -26,8 +27,13 @@ export const router = createBrowserRouter([
         children: [
           { path: "dashboard", Component: Dashboard },
           { path: "routes", Component: RouteComparison },
-          { path: "analytics", Component: Analytics },
           { path: "profile", Component: ProfilePage },
+          {
+            Component: RequireAnalytics,
+            children: [
+              { path: "analytics", Component: Analytics },
+            ],
+          },
           {
             Component: RequireAdmin,
             children: [

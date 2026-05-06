@@ -1,6 +1,6 @@
 import { Link, useNavigate } from 'react-router';
 import { motion } from 'motion/react';
-import { Navigation, Mail, Lock, User, ArrowRight, Car, FlaskConical } from 'lucide-react';
+import { Navigation, Mail, Lock, User, ArrowRight, Car } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { API_URL } from '../api';
 import { useAuth } from '../auth';
@@ -10,7 +10,7 @@ export function SignUpPage() {
   const { isAuthenticated } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
-  const [role, setRole] = useState<'driver' | 'researcher'>('driver');
+  const role = 'driver';
   const [form, setForm] = useState({ firstName: '', lastName: '', email: '', password: '' });
   const [confirmPassword, setConfirmPassword] = useState('');
 
@@ -136,36 +136,6 @@ export function SignUpPage() {
           </div>
 
           <form onSubmit={handleSignUp} className="space-y-6">
-            {/* Role Selection */}
-            <div className="space-y-3">
-              <label className="block text-sm font-medium text-slate-700">I am a...</label>
-              <div className="grid grid-cols-2 gap-3">
-                <button
-                  type="button"
-                  onClick={() => setRole('driver')}
-                  className={`flex flex-col items-center justify-center p-3 rounded-xl border-2 transition-all ${
-                    role === 'driver'
-                      ? 'border-teal-500 bg-teal-50 text-teal-700'
-                      : 'border-slate-200 hover:border-slate-300 text-slate-600'
-                  }`}
-                >
-                  <Car className={`w-6 h-6 mb-2 ${role === 'driver' ? 'text-teal-600' : 'text-slate-400'}`} />
-                  <span className="text-xs font-semibold">Driver</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setRole('researcher')}
-                  className={`flex flex-col items-center justify-center p-3 rounded-xl border-2 transition-all ${
-                    role === 'researcher'
-                      ? 'border-blue-500 bg-blue-50 text-blue-700'
-                      : 'border-slate-200 hover:border-slate-300 text-slate-600'
-                  }`}
-                >
-                  <FlaskConical className={`w-6 h-6 mb-2 ${role === 'researcher' ? 'text-blue-600' : 'text-slate-400'}`} />
-                  <span className="text-xs font-semibold">Researcher</span>
-                </button>
-              </div>
-            </div>
 
             <div className="grid grid-cols-2 gap-4">
               <div>

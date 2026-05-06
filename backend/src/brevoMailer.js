@@ -252,7 +252,7 @@ async function sendAccountDeletedEmail({ toEmail, firstName }) {
   }
 }
 
-async function sendAccountPromotedEmail({ toEmail, firstName }) {
+async function sendAccountPromotedEmail({ toEmail, firstName, role = 'admin' }) {
   const apiKey = (process.env.BREVO_API_KEY || '').trim();
   const emailFrom = (process.env.EMAIL_FROM || '').trim();
 
@@ -266,19 +266,22 @@ async function sendAccountPromotedEmail({ toEmail, firstName }) {
   const payload = {
     sender: { email: emailFrom, name: senderName },
     to: [{ email: toEmail, name: firstName || toEmail }],
-    subject: 'Your SmartRoute account has been granted admin access',
+    subject: `Your SmartRoute account has been granted ${role} access`,
     htmlContent: `
       <div style="font-family:Arial,sans-serif;line-height:1.6;color:#1f2937;max-width:600px;margin:0 auto;padding:24px;">
-        <h2 style="color:#7c3aed;margin-bottom:12px;">Admin Access Granted</h2>
+        <h2 style="color:#7c3aed;margin-bottom:12px;">${role === 'admin' ? 'Admin' : 'Researcher'} Access Granted</h2>
         <p>Hi ${safeName},</p>
-        <p>Your SmartRoute account has been <strong>granted administrator access</strong>.</p>
-        <p>You now have full access to the admin panel, where you can manage users, view login activity, and maintain the platform.</p>
+        <p>Your SmartRoute account has been <strong>granted ${role} access</strong>.</p>
+        ${role === 'admin'
+          ? '<p>You now have full access to the admin panel, where you can manage users, view login activity, and maintain the platform.</p>'
+          : '<p>You now have access to the Research Analytics dashboard, where you can view statistical analysis of route data.</p>'
+        }
         <p>Please use this access responsibly.</p>
         <p style="margin-top:24px;">Welcome to the team.</p>
         <p>— The SmartRoute Team</p>
       </div>
     `,
-    textContent: `Hi ${firstName || 'there'},\n\nYour SmartRoute account has been granted administrator access.\n\nYou now have full access to the admin panel. Please use this access responsibly.\n\nWelcome to the team.\n\n— The SmartRoute Team`,
+    textContent: `Hi ${firstName || 'there'},\n\nYour SmartRoute account has been granted ${role} access.\n\nPlease use this access responsibly.\n\nWelcome to the team.\n\n— The SmartRoute Team`,
   };
 
   try {

@@ -84,6 +84,29 @@ adminRouter.delete('/users/:id', requireAuth, requireAdmin, async (req, res) => 
   }
 });
 
+// POST /api/admin/users/:id/make-researcher
+adminRouter.post('/users/:id/make-researcher', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const target = await db.getUserById(req.params.id);
+    if (!target) return res.status(404).json({ error: 'User not found.' });
+    if (target.role === 'admin') return res.status(403).json({ error: 'Cannot change role of an admin.' });
+    if (target.role === 'researcher') return res.status(400).json({ error: 'User is already a researcher.' });
+    await db.updateUserProfile(req.params.id, { role: 'researcher' });
+    const email = tryDecryptUserEmail(target);
+    if (email) {
+      sendAccountPromotedEmail({
+        toEmail: email,
+        firstName: target.first_name,
+        role: 'researcher',
+      }).catch(() => {});
+    }
+    res.json({ message: 'User promoted to researcher.' });
+  } catch (err) {
+    console.error('Make researcher error:', err);
+    res.status(500).json({ error: 'Failed to update role.' });
+  }
+});
+
 // POST /api/admin/users/:id/make-admin
 adminRouter.post('/users/:id/make-admin', requireAuth, requireAdmin, async (req, res) => {
   try {
