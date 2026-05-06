@@ -4,6 +4,7 @@ import { motion } from 'motion/react';
 import {
   AlertTriangle,
   Award,
+  Bookmark,
   CheckCircle2,
   Clock,
   DollarSign,
@@ -180,6 +181,34 @@ export function RouteComparison() {
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const savedAnalysisKeyRef = useRef<string | null>(null);
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error' | 'limit'>('idle');
+
+  const handleSaveRoute = async () => {
+    if (!token || !formData.origin || !formData.destination) return;
+    setSaveStatus('saving');
+    try {
+      const label = `${formData.origin.split(',')[0]} → ${formData.destination.split(',')[0]}`;
+      const res = await fetch(`${API_URL}/api/saved-routes`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          label,
+          origin: formData.origin,
+          destination: formData.destination,
+          vehicle_type: formData.vehicleType,
+          fuel_type: formData.fuelType,
+          fuel_price: formData.fuelPrice,
+        }),
+      });
+      if (res.status === 409) { setSaveStatus('limit'); return; }
+      if (!res.ok) throw new Error();
+      setSaveStatus('saved');
+      setTimeout(() => setSaveStatus('idle'), 3000);
+    } catch {
+      setSaveStatus('error');
+      setTimeout(() => setSaveStatus('idle'), 3000);
+    }
+  };
 
   const handleStartTracking = (route: RouteMetrics) => {
     if (!analysis) return;
@@ -390,13 +419,34 @@ export function RouteComparison() {
               {analysis.request.origin} → {analysis.request.destination}
             </span>
           </div>
-          <h1 className="text-3xl font-bold text-slate-900 mb-2">Route Analysis Complete</h1>
-          <p className="text-slate-600">
-            Comparing {routes.length} Google route{routes.length === 1 ? '' : 's'} for{' '}
-            {analysis.request.vehicleLabel} using a VSP-based cost model at ₱
-            {analysis.request.fuelPrice.toFixed(2)}
-            {analysis.request.fuelType === 'electric' ? '/kWh' : '/L'}.
-          </p>
+          <div className="flex items-start justify-between gap-4 flex-wrap">
+            <div>
+              <h1 className="text-3xl font-bold text-slate-900 mb-2">Route Analysis Complete</h1>
+              <p className="text-slate-600">
+                Comparing {routes.length} Google route{routes.length === 1 ? '' : 's'} for{' '}
+                {analysis.request.vehicleLabel} using a VSP-based cost model at ₱
+                {analysis.request.fuelPrice.toFixed(2)}
+                {analysis.request.fuelType === 'electric' ? '/kWh' : '/L'}.
+              </p>
+            </div>
+            <button
+              onClick={handleSaveRoute}
+              disabled={saveStatus === 'saving' || saveStatus === 'saved'}
+              className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition shrink-0 ${
+                saveStatus === 'saved' ? 'bg-teal-100 text-teal-700' :
+                saveStatus === 'limit' ? 'bg-amber-100 text-amber-700' :
+                saveStatus === 'error' ? 'bg-red-100 text-red-700' :
+                'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
+              } disabled:opacity-60`}
+            >
+              <Bookmark className="w-4 h-4" />
+              {saveStatus === 'saving' ? 'Saving…' :
+               saveStatus === 'saved' ? 'Saved!' :
+               saveStatus === 'limit' ? 'Limit reached (10 max)' :
+               saveStatus === 'error' ? 'Failed — try again' :
+               'Save Route'}
+            </button>
+          </div>
           <div className="mt-4 rounded-xl border border-slate-200 bg-white p-4">
             <h2 className="text-sm font-semibold text-slate-900">User Target Inputs</h2>
             <p className="mt-1 text-xs text-slate-500">These values are exactly what the user entered before analysis.</p>

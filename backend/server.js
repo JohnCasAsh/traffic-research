@@ -58,6 +58,7 @@ const { liveTrackingRouter } = require('./src/liveTracking');
 const { routeAnalysisRouter } = require('./src/routeAnalysis');
 const { statsRouter } = require('./src/statsAnalysis');
 const { adminRouter } = require('./src/adminRouter');
+const { savedRoutesRouter } = require('./src/savedRoutesRouter');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -157,6 +158,7 @@ app.use('/api/tracking', liveTrackingRouter);
 app.use('/api/routes', routeAnalysisRouter);
 app.use('/api/stats', statsRouter);
 app.use('/api/admin', adminRouter);
+app.use('/api/saved-routes', savedRoutesRouter);
 
 // Health check
 app.get('/api/health', (req, res) => {

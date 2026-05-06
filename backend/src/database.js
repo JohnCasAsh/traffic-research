@@ -450,6 +450,38 @@ async function getRecentLoginLogs(limitCount = 100) {
     .slice(0, limitCount);
 }
 
+// ---- SAVED ROUTES (per-user subcollection) ----
+
+async function getSavedRoutes(userId) {
+  await ready();
+  const db = getFirestore();
+  const snapshot = await db
+    .collection(COLLECTIONS.users).doc(userId)
+    .collection('saved_routes')
+    .orderBy('saved_at', 'desc')
+    .limit(10)
+    .get();
+  return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+}
+
+async function saveRoute(userId, route) {
+  await ready();
+  const db = getFirestore();
+  const colRef = db.collection(COLLECTIONS.users).doc(userId).collection('saved_routes');
+  const existing = await colRef.get();
+  if (existing.size >= 10) {
+    throw Object.assign(new Error('Saved route limit reached.'), { code: 'LIMIT_REACHED' });
+  }
+  const doc = await colRef.add({ ...route, saved_at: new Date().toISOString() });
+  return doc.id;
+}
+
+async function deleteSavedRoute(userId, routeId) {
+  await ready();
+  const db = getFirestore();
+  await db.collection(COLLECTIONS.users).doc(userId).collection('saved_routes').doc(routeId).delete();
+}
+
 module.exports = {
   ready,
   getUserById,
@@ -476,4 +508,7 @@ module.exports = {
   getAllUsers,
   getRecentLoginLogs,
   setBannedStatus,
+  getSavedRoutes,
+  saveRoute,
+  deleteSavedRoute,
 };
