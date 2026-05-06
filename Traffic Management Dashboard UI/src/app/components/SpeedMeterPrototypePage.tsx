@@ -1125,7 +1125,7 @@ export function SpeedMeterPrototypePage() {
                 Live VSP Meter
               </p>
               <h1 className="mt-3 text-3xl font-bold tracking-tight text-slate-900 md:text-4xl">
-                SmartRoute Speed Meter
+                Navocs Speed Meter
               </h1>
               <p className="mt-3 max-w-3xl text-sm text-slate-600 md:text-base">
                 Live GPS speed and Vehicle Specific Power with running fuel burn, cost per km,

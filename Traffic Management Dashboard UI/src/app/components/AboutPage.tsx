@@ -14,7 +14,7 @@ const gpsFactors = [
   {
     title: 'GPS Speed (Chipset Native)',
     color: 'bg-emerald-50 border-emerald-200',
-    body: "Your phone's GPS chip reports speed directly using Doppler shift of satellite signals. SmartRoute displays that reading with a Kalman filter to smooth out jitter, but doesn't reject or recompute anything — just uses what the GPS API provides.",
+    body: "Your phone's GPS chip reports speed directly using Doppler shift of satellite signals. Navocs displays that reading with a Kalman filter to smooth out jitter, but doesn't reject or recompute anything — just uses what the GPS API provides.",
   },
   {
     title: 'Kalman Filter (Smoothing Only)',
@@ -78,7 +78,7 @@ export function AboutPage() {
                 <Navigation className="w-7 h-7 text-white" />
               </div>
               <div>
-                <div className="text-2xl font-bold">SmartRoute</div>
+                <div className="text-2xl font-bold">Navocs</div>
                 <div className="text-sm text-slate-400">Energy & Cost Optimizer</div>
               </div>
             </div>
@@ -88,7 +88,7 @@ export function AboutPage() {
             </h1>
             <p className="text-slate-300 max-w-xl text-base leading-relaxed">
               A thesis research system built for Tuguegarao City, Cagayan, Philippines.
-              SmartRoute finds the most fuel-efficient and cost-effective route — not just the fastest or shortest.
+              Navocs finds the most fuel-efficient and cost-effective route — not just the fastest or shortest.
             </p>
 
             <div className="flex flex-wrap gap-3 text-sm">
@@ -121,7 +121,7 @@ export function AboutPage() {
             </div>
           </div>
           <p className="mt-5 text-slate-600 text-sm leading-relaxed">
-            SmartRoute uses a <strong>Modified A* algorithm</strong> with an energy-aware edge cost function to recommend
+            Navocs uses a <strong>Modified A* algorithm</strong> with an energy-aware edge cost function to recommend
             the route with the best balance of time, fuel cost, traffic delay, and speed stability — tunable per user.
           </p>
         </motion.section>
@@ -279,7 +279,7 @@ export function AboutPage() {
         >
           <h2 className="text-xl font-bold text-slate-900 mb-3">Who Is This For?</h2>
           <p className="text-slate-600 text-sm mb-5">
-            SmartRoute is designed for everyday commuters in Tuguegarao City, Cagayan, Philippines.
+            Navocs is designed for everyday commuters in Tuguegarao City, Cagayan, Philippines.
           </p>
           <div className="flex flex-wrap gap-3 text-sm">
             {['Tricycle operators', 'Delivery drivers', 'Private car commuters', 'Researchers & planners'].map((u) => (

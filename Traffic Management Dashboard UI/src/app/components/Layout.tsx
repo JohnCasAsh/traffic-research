@@ -45,7 +45,7 @@ export function Layout() {
                 <Navigation className="w-6 h-6 text-white" />
               </motion.div>
               <div>
-                <div className="font-bold text-slate-900">SmartRoute</div>
+                <div className="font-bold text-slate-900">Navocs</div>
                 <div className="text-xs text-slate-500">Energy & Cost Optimizer</div>
               </div>
             </Link>
@@ -165,7 +165,7 @@ export function Layout() {
                 <div className="w-8 h-8 bg-gradient-to-br from-teal-500 to-blue-600 rounded-lg flex items-center justify-center">
                   <Navigation className="w-5 h-5 text-white" />
                 </div>
-                <span className="font-bold text-white">SmartRoute</span>
+                <span className="font-bold text-white">Navocs</span>
               </div>
               <p className="text-sm text-slate-400 max-w-md">
                 Advanced traffic management system for energy-efficient and cost-effective route optimization.
@@ -191,7 +191,7 @@ export function Layout() {
             </div>
           </div>
           <div className="border-t border-slate-800 mt-8 pt-6 text-center text-sm text-slate-500">
-            © 2026 SmartRoute. Traffic Management System Research Prototype.
+            © 2026 Navocs. Traffic Management System Research Prototype.
           </div>
         </div>
       </footer>

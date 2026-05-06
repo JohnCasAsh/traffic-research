@@ -221,7 +221,7 @@ export function LoginPage() {
             <div className="w-12 h-12 bg-gradient-to-br from-teal-500 to-blue-600 rounded-xl flex items-center justify-center shadow-lg shadow-teal-500/30">
               <Navigation className="w-7 h-7 text-white" />
             </div>
-            <span className="text-2xl font-bold text-white tracking-tight">SmartRoute</span>
+            <span className="text-2xl font-bold text-white tracking-tight">Navocs</span>
           </Link>
 
           <motion.div
@@ -258,7 +258,7 @@ export function LoginPage() {
             <div className="w-8 h-8 bg-gradient-to-br from-teal-500 to-blue-600 rounded-lg flex items-center justify-center">
               <Navigation className="w-5 h-5 text-white" />
             </div>
-            <span className="font-bold text-slate-900">SmartRoute</span>
+            <span className="font-bold text-slate-900">Navocs</span>
           </Link>
         </div>
 

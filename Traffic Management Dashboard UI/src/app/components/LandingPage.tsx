@@ -281,7 +281,7 @@ export function LandingPage() {
           className="text-center mb-16"
         >
           <h2 className="text-3xl md:text-4xl font-bold text-slate-900 mb-4">
-            Why SmartRoute?
+            Why Navocs?
           </h2>
           <p className="text-lg text-slate-600 max-w-2xl mx-auto">
             Our intelligent system goes beyond traditional routing to optimize for what truly matters: 
@@ -427,7 +427,7 @@ export function LandingPage() {
               Beyond Speed: Optimize for Sustainability
             </h2>
             <p className="text-lg text-slate-600 mb-8">
-              Traditional navigation apps prioritize speed. SmartRoute considers the complete picture: 
+              Traditional navigation apps prioritize speed. Navocs considers the complete picture: 
               energy efficiency, environmental impact, and cost-effectiveness while maintaining reasonable travel times.
             </p>
             
@@ -492,7 +492,7 @@ export function LandingPage() {
               delay={0.2}
             />
             <TestimonialCard
-              quote="I've saved over ₱200 on fuel costs in just three months using SmartRoute."
+              quote="I've saved over ₱200 on fuel costs in just three months using Navocs."
               author="Michael Rodriguez"
               role="Daily Commuter"
               delay={0.4}

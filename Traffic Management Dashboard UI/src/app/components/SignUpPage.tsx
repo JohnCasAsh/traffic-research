@@ -79,7 +79,7 @@ export function SignUpPage() {
         <div className="relative z-10 flex flex-col justify-between p-12 w-full h-full">
           <div className="flex justify-end">
             <Link to="/" className="flex items-center space-x-3">
-              <span className="text-2xl font-bold text-white tracking-tight">SmartRoute</span>
+              <span className="text-2xl font-bold text-white tracking-tight">Navocs</span>
               <div className="w-12 h-12 bg-gradient-to-br from-teal-500 to-blue-600 rounded-xl flex items-center justify-center shadow-lg shadow-blue-500/30">
                 <Navigation className="w-7 h-7 text-white" />
               </div>
@@ -96,7 +96,7 @@ export function SignUpPage() {
               Join the future of route optimization.
             </h1>
             <p className="text-lg text-slate-300 mb-8">
-              Whether you're a commuter looking to save on fuel, or a researcher analyzing traffic patterns, SmartRoute is built for you.
+              Whether you're a commuter looking to save on fuel, or a researcher analyzing traffic patterns, Navocs is built for you.
             </p>
             
             <div className="grid grid-cols-2 gap-4 text-left">
@@ -120,7 +120,7 @@ export function SignUpPage() {
             <div className="w-8 h-8 bg-gradient-to-br from-teal-500 to-blue-600 rounded-lg flex items-center justify-center">
               <Navigation className="w-5 h-5 text-white" />
             </div>
-            <span className="font-bold text-slate-900">SmartRoute</span>
+            <span className="font-bold text-slate-900">Navocs</span>
           </Link>
         </div>
 

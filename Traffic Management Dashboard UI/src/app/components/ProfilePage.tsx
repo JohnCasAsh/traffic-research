@@ -779,7 +779,7 @@ export function ProfilePage() {
                   <Info className="h-5 w-5" />
                 </div>
                 <div>
-                  <h2 className="text-base font-semibold text-slate-900 group-hover:text-teal-700 transition">About SmartRoute</h2>
+                  <h2 className="text-base font-semibold text-slate-900 group-hover:text-teal-700 transition">About Navocs</h2>
                   <p className="text-sm text-slate-500">Research overview, algorithm, and tech stack</p>
                 </div>
               </Link>
