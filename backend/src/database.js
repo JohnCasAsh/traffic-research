@@ -393,6 +393,49 @@ async function countUsersWithPepperVersionLessThan(version) {
   return snapshot.size;
 }
 
+async function getAllUsers() {
+  await ready();
+  const db = getFirestore();
+  const snapshot = await db
+    .collection(COLLECTIONS.users)
+    .orderBy('created_at', 'desc')
+    .get();
+  return snapshot.docs.map((doc) => {
+    const d = doc.data();
+    return {
+      id: doc.id,
+      first_name: d.first_name || '',
+      last_name: d.last_name || '',
+      role: d.role || 'driver',
+      email_verified: d.email_verified !== false,
+      created_at: d.created_at || null,
+      updated_at: d.updated_at || null,
+      auth_providers: d.auth_providers || (d.auth_provider ? [d.auth_provider] : []),
+    };
+  });
+}
+
+async function getRecentLoginLogs(limitCount = 100) {
+  await ready();
+  const db = getFirestore();
+  const snapshot = await db
+    .collection(COLLECTIONS.auditLog)
+    .where('action', 'in', ['LOGIN_SUCCESS', 'OAUTH_LOGIN_SUCCESS'])
+    .orderBy('created_at', 'desc')
+    .limit(limitCount)
+    .get();
+  return snapshot.docs.map((doc) => {
+    const d = doc.data();
+    return {
+      id: doc.id,
+      user_id: d.user_id || null,
+      action: d.action,
+      ip_address: d.ip_address || null,
+      created_at: d.created_at || null,
+    };
+  });
+}
+
 module.exports = {
   ready,
   getUserById,
@@ -416,4 +459,6 @@ module.exports = {
   getMaxPepperVersion,
   rotatePepperVersion,
   countUsersWithPepperVersionLessThan,
+  getAllUsers,
+  getRecentLoginLogs,
 };

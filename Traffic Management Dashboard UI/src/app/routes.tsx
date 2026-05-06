@@ -8,8 +8,10 @@ import { LoginPage } from "./components/LoginPage";
 import { PasswordRecoveryPage } from "./components/PasswordRecoveryPage";
 import { ProfilePage } from "./components/ProfilePage";
 import { RequireAuth } from "./components/RequireAuth";
+import { RequireAdmin } from "./components/RequireAdmin";
 import { SignUpPage } from "./components/SignUpPage";
 import { SpeedMeterPrototypePage } from "./components/SpeedMeterPrototypePage";
+import { AdminPage } from "./components/AdminPage";
 
 export const router = createBrowserRouter([
   {
@@ -25,6 +27,12 @@ export const router = createBrowserRouter([
           { path: "routes", Component: RouteComparison },
           { path: "analytics", Component: Analytics },
           { path: "profile", Component: ProfilePage },
+          {
+            Component: RequireAdmin,
+            children: [
+              { path: "admin", Component: AdminPage },
+            ],
+          },
         ],
       },
     ],

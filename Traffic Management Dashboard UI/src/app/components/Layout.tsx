@@ -1,5 +1,5 @@
 import { Outlet, Link, useLocation } from 'react-router';
-import { Navigation, MapPin, BarChart3, Route, LogOut, UserRound, Gauge } from 'lucide-react';
+import { Navigation, MapPin, BarChart3, Route, LogOut, UserRound, Gauge, Shield } from 'lucide-react';
 import { motion, useScroll } from 'motion/react';
 import { useState, useEffect } from 'react';
 import { useAuth, type AuthUser } from '../auth';
@@ -67,6 +67,11 @@ export function Layout() {
                 <NavLink to="/profile" icon={<UserRound className="w-4 h-4" />}>
                   Profile
                 </NavLink>
+                {user?.role === 'admin' && (
+                  <NavLink to="/admin" icon={<Shield className="w-4 h-4" />}>
+                    Admin
+                  </NavLink>
+                )}
               </div>
             )}
 
