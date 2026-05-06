@@ -1123,102 +1123,53 @@ export function SpeedMeterPrototypePage() {
             </span>
           </div>
 
-          <div className="mt-6 flex flex-wrap items-center gap-2">
-            {isResearchRole ? (
-              <>
-                <select
-                  value={vehicleType}
-                  onChange={(event) => setVehicleType(event.target.value)}
-                  className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700"
-                >
-                  <option value="motorcycle">Motorcycle (ICE)</option>
-                  <option value="tricycle">Tricycle (ICE)</option>
-                  <option value="sedan">Sedan / Private Car (ICE)</option>
-                  <option value="van">Van (ICE)</option>
-                  <option value="bus">Bus (ICE)</option>
-                  <option value="hybrid_car">Hybrid Car (HEV)</option>
-                  <option value="hybrid_van">Hybrid Van (HEV)</option>
-                  <option value="e_trike">E-Trike (BEV)</option>
-                  <option value="e_motorcycle">E-Motorcycle (BEV)</option>
-                </select>
-                <select
-                  value={fuelType}
-                  onChange={(event) => setFuelType(event.target.value as 'gasoline' | 'diesel' | 'electric')}
-                  className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700"
-                >
-                  <option value="gasoline">Gasoline</option>
-                  <option value="diesel">Diesel</option>
-                  <option value="electric">Electric</option>
-                </select>
-                <input
-                  type="number"
-                  step="0.01"
-                  value={fuelPrice}
-                  onChange={(event) => setFuelPrice(event.target.value)}
-                  className="w-32 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700"
-                  title={`Price per ${unitLabel}`}
-                />
-              </>
-            ) : (
-              <span className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
-                <Fuel className="h-4 w-4 text-slate-400" />
-                {profile.label} · {fuelType.charAt(0).toUpperCase() + fuelType.slice(1)} · ₱{fuelPrice}/{unitLabel}
-              </span>
-            )}
-            <button
-              type="button"
-              onClick={isTracking ? pauseTracking : startTracking}
-              disabled={isStarting}
-              className={`inline-flex items-center gap-2 rounded-lg bg-gradient-to-r from-teal-600 to-blue-600 px-4 py-2.5 text-sm font-semibold text-white transition ${isStarting ? 'cursor-wait opacity-70' : 'hover:from-teal-700 hover:to-blue-700'}`}
-            >
-              {isTracking ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
-              {isTracking ? 'Pause Tracking' : isStarting ? 'Starting...' : 'Start Tracking'}
-            </button>
-            <button
-              type="button"
-              onClick={finalizeTrip}
-              className="inline-flex items-center gap-2 rounded-lg border border-emerald-300 bg-emerald-50 px-4 py-2.5 text-sm font-semibold text-emerald-700 transition hover:bg-emerald-100"
-            >
-              <CheckCircle2 className="h-4 w-4" />
-              End Trip & Compare
-            </button>
-            <button
-              type="button"
-              onClick={resetSession}
-              className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-slate-400 hover:bg-slate-50"
-            >
-              <RotateCcw className="h-4 w-4" />
-              Reset Session
-            </button>
-            {isResearchRole && (
-              <button
-                type="button"
-                onClick={exportCsv}
-                className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-slate-400 hover:bg-slate-50"
-              >
-                <Download className="h-4 w-4" />
-                Export CSV
-              </button>
-            )}
-          </div>
-
-          {/* Route context — stays visible through refreshes and connection loss */}
-          {(tripOrigin || tripDestination) && (
-            <div className="mt-4 rounded-xl border border-teal-200 bg-gradient-to-r from-teal-50 to-blue-50 px-4 py-3">
+          {/* ── Active Route panel (when coming from Routes page) ────────────────── */}
+          {(tripOrigin || tripDestination) ? (
+            <div className="mt-6 rounded-xl border border-teal-200 bg-gradient-to-r from-teal-50 to-blue-50 px-4 py-4">
+              {/* Row 1 — label + action buttons */}
               <div className="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-teal-600">
-                    Active Route
-                  </p>
-                  <p className="mt-0.5 text-sm font-bold text-slate-900">
-                    {predictedSummary?.routeLabel || ''}
-                    {tripRouteDescription ? (
-                      <span className="ml-2 text-sm font-normal text-slate-500">
-                        via {tripRouteDescription}
-                      </span>
-                    ) : null}
-                  </p>
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-teal-600">
+                  Active Route
+                </p>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={isTracking ? pauseTracking : startTracking}
+                    disabled={isStarting}
+                    className={`inline-flex items-center gap-2 rounded-lg bg-gradient-to-r from-teal-600 to-blue-600 px-4 py-2 text-sm font-semibold text-white transition ${isStarting ? 'cursor-wait opacity-70' : 'hover:from-teal-700 hover:to-blue-700'}`}
+                  >
+                    {isTracking ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+                    {isTracking ? 'Pause Tracking' : isStarting ? 'Starting...' : 'Start Tracking'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={finalizeTrip}
+                    className="inline-flex items-center gap-2 rounded-lg border border-emerald-300 bg-emerald-50 px-4 py-2 text-sm font-semibold text-emerald-700 transition hover:bg-emerald-100"
+                  >
+                    <CheckCircle2 className="h-4 w-4" />
+                    End Trip & Compare
+                  </button>
+                  <button
+                    type="button"
+                    onClick={resetSession}
+                    className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-600 transition hover:bg-slate-50"
+                  >
+                    <RotateCcw className="h-4 w-4" />
+                    Reset
+                  </button>
                 </div>
+              </div>
+
+              {/* Row 2 — route name + origin→destination */}
+              <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+                <p className="text-sm font-bold text-slate-900">
+                  {predictedSummary?.routeLabel || ''}
+                  {tripRouteDescription ? (
+                    <span className="ml-2 text-sm font-normal text-slate-500">
+                      via {tripRouteDescription}
+                    </span>
+                  ) : null}
+                </p>
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="inline-flex items-center gap-1.5 rounded-lg border border-teal-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700">
                     <MapPin className="h-3.5 w-3.5 text-teal-500" />
@@ -1231,6 +1182,141 @@ export function SpeedMeterPrototypePage() {
                   </span>
                 </div>
               </div>
+
+              {/* Row 3 — vehicle / fuel / price + researcher selectors */}
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                {isResearchRole ? (
+                  <>
+                    <select
+                      value={vehicleType}
+                      onChange={(event) => setVehicleType(event.target.value)}
+                      className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-700"
+                    >
+                      <option value="motorcycle">Motorcycle (ICE)</option>
+                      <option value="tricycle">Tricycle (ICE)</option>
+                      <option value="sedan">Sedan / Private Car (ICE)</option>
+                      <option value="van">Van (ICE)</option>
+                      <option value="bus">Bus (ICE)</option>
+                      <option value="hybrid_car">Hybrid Car (HEV)</option>
+                      <option value="hybrid_van">Hybrid Van (HEV)</option>
+                      <option value="e_trike">E-Trike (BEV)</option>
+                      <option value="e_motorcycle">E-Motorcycle (BEV)</option>
+                    </select>
+                    <select
+                      value={fuelType}
+                      onChange={(event) => setFuelType(event.target.value as 'gasoline' | 'diesel' | 'electric')}
+                      className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-700"
+                    >
+                      <option value="gasoline">Gasoline</option>
+                      <option value="diesel">Diesel</option>
+                      <option value="electric">Electric</option>
+                    </select>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={fuelPrice}
+                      onChange={(event) => setFuelPrice(event.target.value)}
+                      className="w-28 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-700"
+                      title={`Price per ${unitLabel}`}
+                    />
+                    {isResearchRole && (
+                      <button
+                        type="button"
+                        onClick={exportCsv}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
+                      >
+                        <Download className="h-3.5 w-3.5" />
+                        Export CSV
+                      </button>
+                    )}
+                  </>
+                ) : (
+                  <span className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-600">
+                    <Fuel className="h-3.5 w-3.5 text-slate-400" />
+                    {profile.label} · {fuelType.charAt(0).toUpperCase() + fuelType.slice(1)} · ₱{fuelPrice}/{unitLabel}
+                  </span>
+                )}
+              </div>
+            </div>
+          ) : (
+            /* ── No active route — show standalone controls ─────────────────────── */
+            <div className="mt-6 flex flex-wrap items-center gap-2">
+              {isResearchRole ? (
+                <>
+                  <select
+                    value={vehicleType}
+                    onChange={(event) => setVehicleType(event.target.value)}
+                    className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700"
+                  >
+                    <option value="motorcycle">Motorcycle (ICE)</option>
+                    <option value="tricycle">Tricycle (ICE)</option>
+                    <option value="sedan">Sedan / Private Car (ICE)</option>
+                    <option value="van">Van (ICE)</option>
+                    <option value="bus">Bus (ICE)</option>
+                    <option value="hybrid_car">Hybrid Car (HEV)</option>
+                    <option value="hybrid_van">Hybrid Van (HEV)</option>
+                    <option value="e_trike">E-Trike (BEV)</option>
+                    <option value="e_motorcycle">E-Motorcycle (BEV)</option>
+                  </select>
+                  <select
+                    value={fuelType}
+                    onChange={(event) => setFuelType(event.target.value as 'gasoline' | 'diesel' | 'electric')}
+                    className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700"
+                  >
+                    <option value="gasoline">Gasoline</option>
+                    <option value="diesel">Diesel</option>
+                    <option value="electric">Electric</option>
+                  </select>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={fuelPrice}
+                    onChange={(event) => setFuelPrice(event.target.value)}
+                    className="w-32 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700"
+                    title={`Price per ${unitLabel}`}
+                  />
+                </>
+              ) : (
+                <span className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
+                  <Fuel className="h-4 w-4 text-slate-400" />
+                  {profile.label} · {fuelType.charAt(0).toUpperCase() + fuelType.slice(1)} · ₱{fuelPrice}/{unitLabel}
+                </span>
+              )}
+              <button
+                type="button"
+                onClick={isTracking ? pauseTracking : startTracking}
+                disabled={isStarting}
+                className={`inline-flex items-center gap-2 rounded-lg bg-gradient-to-r from-teal-600 to-blue-600 px-4 py-2.5 text-sm font-semibold text-white transition ${isStarting ? 'cursor-wait opacity-70' : 'hover:from-teal-700 hover:to-blue-700'}`}
+              >
+                {isTracking ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+                {isTracking ? 'Pause Tracking' : isStarting ? 'Starting...' : 'Start Tracking'}
+              </button>
+              <button
+                type="button"
+                onClick={finalizeTrip}
+                className="inline-flex items-center gap-2 rounded-lg border border-emerald-300 bg-emerald-50 px-4 py-2.5 text-sm font-semibold text-emerald-700 transition hover:bg-emerald-100"
+              >
+                <CheckCircle2 className="h-4 w-4" />
+                End Trip & Compare
+              </button>
+              <button
+                type="button"
+                onClick={resetSession}
+                className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-slate-400 hover:bg-slate-50"
+              >
+                <RotateCcw className="h-4 w-4" />
+                Reset Session
+              </button>
+              {isResearchRole && (
+                <button
+                  type="button"
+                  onClick={exportCsv}
+                  className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-slate-400 hover:bg-slate-50"
+                >
+                  <Download className="h-4 w-4" />
+                  Export CSV
+                </button>
+              )}
             </div>
           )}
 
