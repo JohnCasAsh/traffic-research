@@ -520,6 +520,7 @@ export function SpeedMeterPrototypePage() {
   const runningCostPhpRef = useRef(0);
   const lastSmoothedSpeedRef = useRef(0);
   const beforeTripFuelPriceRef = useRef<number | null>(null);
+  const beforeTripFuelTypeRef = useRef<string | null>(null);
 
   const [isTracking, setIsTracking] = useState(false);
   const [isStarting, setIsStarting] = useState(false);
@@ -556,7 +557,8 @@ export function SpeedMeterPrototypePage() {
     const beforeTrip = readBeforeTripData();
     if (beforeTrip) {
       setPredictedSummary(beforeTrip.prediction);
-      // Store price before setting vehicleType so the vehicleType effect can consume it
+      // Store fuel type and price before setting vehicleType so the vehicleType effect can consume them
+      beforeTripFuelTypeRef.current = beforeTrip.fuelType;
       beforeTripFuelPriceRef.current = beforeTrip.fuelPrice;
       setVehicleType(beforeTrip.vehicleType);
     } else {
@@ -565,7 +567,9 @@ export function SpeedMeterPrototypePage() {
   }, []);
 
   useEffect(() => {
-    const profile = pickVehicleProfile(vehicleType, fuelType);
+    const overrideFuelType = beforeTripFuelTypeRef.current;
+    beforeTripFuelTypeRef.current = null;
+    const profile = pickVehicleProfile(vehicleType, overrideFuelType || fuelType);
     setFuelType(profile.fuelType);
     if (beforeTripFuelPriceRef.current !== null) {
       setFuelPrice(beforeTripFuelPriceRef.current.toFixed(2));
