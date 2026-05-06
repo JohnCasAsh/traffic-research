@@ -12,6 +12,7 @@ import { RequireAdmin } from "./components/RequireAdmin";
 import { SignUpPage } from "./components/SignUpPage";
 import { SpeedMeterPrototypePage } from "./components/SpeedMeterPrototypePage";
 import { AdminPage } from "./components/AdminPage";
+import { NotFoundPage } from "./components/NotFoundPage";
 
 export const router = createBrowserRouter([
   {
@@ -48,5 +49,9 @@ export const router = createBrowserRouter([
   {
     path: "/password-recovery",
     Component: PasswordRecoveryPage,
+  },
+  {
+    path: "*",
+    Component: NotFoundPage,
   },
 ]);
