@@ -344,6 +344,10 @@ async function requireAuth(req, res, next) {
       return res.status(401).json({ error: 'Unauthorized' });
     }
 
+    if (user.banned === true) {
+      return res.status(403).json({ error: 'Your account has been suspended. Contact support.' });
+    }
+
     req.authUser = user;
     return next();
   } catch {
