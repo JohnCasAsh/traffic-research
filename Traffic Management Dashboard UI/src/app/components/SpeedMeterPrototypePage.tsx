@@ -1122,14 +1122,15 @@ export function SpeedMeterPrototypePage() {
             <div>
               <p className="inline-flex items-center gap-2 rounded-lg bg-teal-50 px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-teal-700">
                 <Gauge className="h-4 w-4" />
-                Live VSP Meter
+                {isResearchRole ? 'Live VSP Meter' : 'Speed Tracker'}
               </p>
               <h1 className="mt-3 text-3xl font-bold tracking-tight text-slate-900 md:text-4xl">
                 Navocs Speed Meter
               </h1>
               <p className="mt-3 max-w-3xl text-sm text-slate-600 md:text-base">
-                Live GPS speed and Vehicle Specific Power with running fuel burn, cost per km,
-                and trip total cost. End each trip to compare predicted vs actual accuracy.
+                {isResearchRole
+                  ? 'Live GPS speed and Vehicle Specific Power with running fuel burn, cost per km, and trip total cost. End each trip to compare predicted vs actual accuracy.'
+                  : 'Track your live speed, distance, and trip cost in real time. End each trip to see how it compares to the estimated route.'}
               </p>
             </div>
 
@@ -1392,7 +1393,7 @@ export function SpeedMeterPrototypePage() {
             <span className="font-semibold">Accuracy tip: </span>
             Wait a few seconds after pressing Start so GPS can stabilize, and test in open-sky areas when possible.
             The tracker automatically applies filtering in the background while recording live samples.
-            {skippedSamples > 0 && (
+            {isResearchRole && skippedSamples > 0 && (
               <span className="ml-1 font-semibold text-amber-900">
                 ({skippedSamples} sample{skippedSamples !== 1 ? 's' : ''} rejected so far.)
               </span>
@@ -1440,12 +1441,21 @@ export function SpeedMeterPrototypePage() {
                 value={formatDuration(elapsedSeconds)}
                 accent={isTracking ? 'emerald' : 'slate'}
               />
-              <MetricCard
-                icon={<LocateFixed className="h-4 w-4" />}
-                label="GPS Accuracy"
-                value={latestAccuracyText || '--'}
-                accent={signalQuality === 'good' ? 'emerald' : signalQuality === 'ok' ? 'amber' : signalQuality === 'poor' ? 'red' : 'slate'}
-              />
+              {isResearchRole ? (
+                <MetricCard
+                  icon={<LocateFixed className="h-4 w-4" />}
+                  label="GPS Accuracy"
+                  value={latestAccuracyText || '--'}
+                  accent={signalQuality === 'good' ? 'emerald' : signalQuality === 'ok' ? 'amber' : signalQuality === 'poor' ? 'red' : 'slate'}
+                />
+              ) : (
+                <MetricCard
+                  icon={<Fuel className="h-4 w-4" />}
+                  label={profile.fuelType === 'electric' ? 'Energy Used' : 'Fuel Used'}
+                  value={`${runningFuelOrEnergy.toFixed(3)} ${unitLabel}`}
+                  accent="teal"
+                />
+              )}
               <MetricCard
                 icon={<Activity className="h-4 w-4" />}
                 label="Average"
@@ -1464,78 +1474,99 @@ export function SpeedMeterPrototypePage() {
                 value={`${(totalDistanceMeters / 1000).toFixed(2)} km`}
                 accent="teal"
               />
-              <MetricCard
-                icon={<Download className="h-4 w-4" />}
-                label="Samples / Skipped"
-                value={`${samples.length} / ${skippedSamples}`}
-                accent="slate"
-              />
-            </div>
-          </div>
-
-          <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-            {/* VSP card spans 2 cols to give room for the bar */}
-            <div className="col-span-2 sm:col-span-1 lg:col-span-2 rounded-xl border border-slate-200 bg-white px-3 py-2.5 shadow-sm">
-              <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">Live VSP</div>
-              <div className="mt-1 text-xl font-bold text-slate-900">{liveVspKwPerTon.toFixed(2)} <span className="text-xs font-normal text-slate-500">kW/ton</span></div>
-              <div className="mt-2 h-2 w-full rounded-full bg-slate-100 overflow-hidden">
-                <div
-                  className={`h-full transition-all duration-300 ${
-                    liveBand === 'eco' ? 'bg-emerald-500' : liveBand === 'moderate' ? 'bg-amber-500' : 'bg-red-500'
-                  }`}
-                  style={{ width: `${Math.min(100, Math.max(0, (liveVspKwPerTon / 18) * 100))}%` }}
+              {isResearchRole ? (
+                <MetricCard
+                  icon={<Download className="h-4 w-4" />}
+                  label="Samples / Skipped"
+                  value={`${samples.length} / ${skippedSamples}`}
+                  accent="slate"
                 />
-              </div>
-              <div className="mt-1 text-[10px] text-slate-500">
-                {liveBand === 'eco' ? 'Eco (0–4)' : liveBand === 'moderate' ? 'Moderate (4–10)' : 'High (10+)'}
-              </div>
-            </div>
-
-            <MetricCard
-              icon={<Fuel className="h-4 w-4" />}
-              label={profile.fuelType === 'electric' ? 'Energy / km' : 'Fuel / km'}
-              value={`${liveFuelOrEnergyPerKm.toFixed(3)} ${unitLabel}/km`}
-              accent="amber"
-            />
-            <MetricCard
-              icon={<Download className="h-4 w-4" />}
-              label="Cost / km"
-              value={`₱${liveCostPerKm.toFixed(2)}`}
-              accent="orange"
-            />
-            <MetricCard
-              icon={<Activity className="h-4 w-4" />}
-              label={profile.fuelType === 'electric' ? 'Running kWh' : 'Running Fuel'}
-              value={`${runningFuelOrEnergy.toFixed(3)} ${unitLabel}`}
-              accent="teal"
-            />
-            <MetricCard
-              icon={<Timer className="h-4 w-4" />}
-              label="Total Cost"
-              value={`₱${runningCostPhp.toFixed(2)}`}
-              accent="emerald"
-            />
-            <div className="rounded-xl border border-slate-200 bg-white px-3 py-3 shadow-sm">
-              <div className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Before Trip Snapshot</div>
-              {predictedSummary ? (
-                <div className="mt-2 space-y-1 text-sm text-slate-700">
-                  <div className="font-medium text-slate-900">{predictedSummary.routeLabel}</div>
-                  <div>Predicted: ₱{predictedSummary.predictedCostPhp.toFixed(2)}</div>
-                  <div>
-                    Predicted {predictedSummary.unitLabel}: {predictedSummary.predictedFuelOrEnergy.toFixed(2)} {predictedSummary.unitLabel}
-                  </div>
-                  <div>Predicted time: {predictedSummary.predictedDurationMinutes.toFixed(1)} min</div>
-                </div>
               ) : (
-                <div className="mt-2 text-sm text-slate-600">
-                  No predicted route snapshot yet. Analyze routes first, then return here.
-                </div>
+                <MetricCard
+                  icon={<Timer className="h-4 w-4" />}
+                  label="Total Cost"
+                  value={`₱${runningCostPhp.toFixed(2)}`}
+                  accent="emerald"
+                />
               )}
             </div>
           </div>
+
+          {isResearchRole ? (
+            <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+              {/* VSP card spans 2 cols to give room for the bar */}
+              <div className="col-span-2 sm:col-span-1 lg:col-span-2 rounded-xl border border-slate-200 bg-white px-3 py-2.5 shadow-sm">
+                <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">Live VSP</div>
+                <div className="mt-1 text-xl font-bold text-slate-900">{liveVspKwPerTon.toFixed(2)} <span className="text-xs font-normal text-slate-500">kW/ton</span></div>
+                <div className="mt-2 h-2 w-full rounded-full bg-slate-100 overflow-hidden">
+                  <div
+                    className={`h-full transition-all duration-300 ${
+                      liveBand === 'eco' ? 'bg-emerald-500' : liveBand === 'moderate' ? 'bg-amber-500' : 'bg-red-500'
+                    }`}
+                    style={{ width: `${Math.min(100, Math.max(0, (liveVspKwPerTon / 18) * 100))}%` }}
+                  />
+                </div>
+                <div className="mt-1 text-[10px] text-slate-500">
+                  {liveBand === 'eco' ? 'Eco (0–4)' : liveBand === 'moderate' ? 'Moderate (4–10)' : 'High (10+)'}
+                </div>
+              </div>
+              <MetricCard
+                icon={<Fuel className="h-4 w-4" />}
+                label={profile.fuelType === 'electric' ? 'Energy / km' : 'Fuel / km'}
+                value={`${liveFuelOrEnergyPerKm.toFixed(3)} ${unitLabel}/km`}
+                accent="amber"
+              />
+              <MetricCard
+                icon={<Download className="h-4 w-4" />}
+                label="Cost / km"
+                value={`₱${liveCostPerKm.toFixed(2)}`}
+                accent="orange"
+              />
+              <MetricCard
+                icon={<Activity className="h-4 w-4" />}
+                label={profile.fuelType === 'electric' ? 'Running kWh' : 'Running Fuel'}
+                value={`${runningFuelOrEnergy.toFixed(3)} ${unitLabel}`}
+                accent="teal"
+              />
+              <MetricCard
+                icon={<Timer className="h-4 w-4" />}
+                label="Total Cost"
+                value={`₱${runningCostPhp.toFixed(2)}`}
+                accent="emerald"
+              />
+              <div className="rounded-xl border border-slate-200 bg-white px-3 py-3 shadow-sm">
+                <div className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Before Trip Snapshot</div>
+                {predictedSummary ? (
+                  <div className="mt-2 space-y-1 text-sm text-slate-700">
+                    <div className="font-medium text-slate-900">{predictedSummary.routeLabel}</div>
+                    <div>Predicted: ₱{predictedSummary.predictedCostPhp.toFixed(2)}</div>
+                    <div>
+                      Predicted {predictedSummary.unitLabel}: {predictedSummary.predictedFuelOrEnergy.toFixed(2)} {predictedSummary.unitLabel}
+                    </div>
+                    <div>Predicted time: {predictedSummary.predictedDurationMinutes.toFixed(1)} min</div>
+                  </div>
+                ) : (
+                  <div className="mt-2 text-sm text-slate-600">
+                    No predicted route snapshot yet. Analyze routes first, then return here.
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : predictedSummary ? (
+            <div className="mt-4 rounded-xl border border-teal-100 bg-teal-50/50 px-4 py-3">
+              <div className="text-xs font-semibold uppercase tracking-[0.12em] text-teal-600">Route Estimate</div>
+              <div className="mt-1.5 flex flex-wrap gap-x-5 gap-y-1 text-sm text-slate-700">
+                <span className="font-semibold text-slate-900">{predictedSummary.routeLabel}</span>
+                <span>Est. cost: ₱{predictedSummary.predictedCostPhp.toFixed(2)}</span>
+                <span>Est. {predictedSummary.unitLabel}: {predictedSummary.predictedFuelOrEnergy.toFixed(2)} {predictedSummary.unitLabel}</span>
+                <span>Est. time: {predictedSummary.predictedDurationMinutes.toFixed(1)} min</span>
+              </div>
+            </div>
+          ) : null}
         </motion.section>
 
         {/* ── Latest samples table ─────────────────────────────────────────────── */}
+        {isResearchRole && (
         <motion.section
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
@@ -1609,6 +1640,7 @@ export function SpeedMeterPrototypePage() {
             </div>
           )}
         </motion.section>
+        )}
 
         <motion.section
           initial={{ opacity: 0, y: 16 }}
@@ -1618,7 +1650,9 @@ export function SpeedMeterPrototypePage() {
         >
           <h2 className="text-xl font-semibold text-slate-900">Before vs After Trip Comparison</h2>
           <p className="mt-2 text-sm text-slate-600">
-            End a trip to compare predicted route metrics against actual live GPS + VSP totals.
+            {isResearchRole
+              ? 'End a trip to compare predicted route metrics against actual live GPS + VSP totals.'
+              : 'End a trip to see how your actual time, fuel, and cost compare to what was estimated.'}
           </p>
 
           {!completedTrip ? (
