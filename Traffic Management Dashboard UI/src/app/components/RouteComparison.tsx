@@ -183,6 +183,22 @@ export function RouteComparison() {
   const savedAnalysisKeyRef = useRef<string | null>(null);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error' | 'limit'>('idle');
 
+  type SavedRoute = { id: string; label: string; origin: string; destination: string; vehicle_type: string; fuel_type: string; fuel_price: string };
+  const [savedRoutes, setSavedRoutes] = useState<SavedRoute[]>([]);
+  useEffect(() => {
+    if (!token || locationState) return;
+    fetch(`${API_URL}/api/saved-routes`, { headers: buildAuthHeaders(token) })
+      .then(r => r.ok ? r.json() : Promise.reject())
+      .then(data => setSavedRoutes(data.routes || []))
+      .catch(() => {});
+  }, [token, locationState]);
+
+  const handleLoadSaved = (r: SavedRoute) => {
+    navigate('/routes', {
+      state: { origin: r.origin, destination: r.destination, vehicleType: r.vehicle_type, fuelType: r.fuel_type, fuelPrice: r.fuel_price },
+    });
+  };
+
   const handleSaveRoute = async () => {
     if (!token || !formData.origin || !formData.destination) return;
     setSaveStatus('saving');
@@ -376,15 +392,40 @@ export function RouteComparison() {
   if (!locationState && !analysis) {
     return (
       <div className="min-h-[calc(100vh-4rem)] bg-slate-50 flex items-center justify-center px-6">
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-10 text-center max-w-md w-full">
-          <Navigation className="w-10 h-10 text-teal-500 mx-auto mb-4" />
-          <h1 className="text-2xl font-bold text-slate-900 mb-2">No Route Started</h1>
-          <p className="text-slate-500 mb-6">
-            Enter your origin, destination, and vehicle details on the Dashboard to analyze routes.
-          </p>
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-8 max-w-md w-full">
+          <div className="text-center mb-6">
+            <Navigation className="w-10 h-10 text-teal-500 mx-auto mb-3" />
+            <h1 className="text-2xl font-bold text-slate-900 mb-1">No Route Started</h1>
+            <p className="text-slate-500 text-sm">
+              Enter your origin, destination, and vehicle details on the Dashboard to analyze routes.
+            </p>
+          </div>
+
+          {savedRoutes.length > 0 && (
+            <div className="mb-5">
+              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Your Saved Routes</p>
+              <div className="space-y-2">
+                {savedRoutes.map((r) => (
+                  <button
+                    key={r.id}
+                    onClick={() => handleLoadSaved(r)}
+                    className="w-full text-left flex items-center gap-3 px-3 py-2.5 rounded-xl border border-slate-200 hover:border-teal-400 hover:bg-teal-50 transition group"
+                  >
+                    <Bookmark className="w-4 h-4 text-teal-500 shrink-0" />
+                    <div className="min-w-0">
+                      <div className="text-sm font-medium text-slate-800 truncate">{r.label}</div>
+                      <div className="text-xs text-slate-400 capitalize">{r.vehicle_type.replace('_', ' ')} · {r.fuel_type}</div>
+                    </div>
+                    <Navigation className="w-3.5 h-3.5 text-slate-300 group-hover:text-teal-500 ml-auto shrink-0 transition" />
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           <button
             onClick={() => navigate('/dashboard')}
-            className="inline-flex items-center gap-2 px-5 py-2.5 bg-teal-600 hover:bg-teal-700 text-white text-sm font-medium rounded-xl transition"
+            className="w-full inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-teal-600 hover:bg-teal-700 text-white text-sm font-medium rounded-xl transition"
           >
             <MapPin className="w-4 h-4" />
             Go to Dashboard
