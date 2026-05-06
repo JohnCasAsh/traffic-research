@@ -418,22 +418,26 @@ async function getAllUsers() {
 async function getRecentLoginLogs(limitCount = 100) {
   await ready();
   const db = getFirestore();
+  // Avoid composite index requirement by filtering action in JS after fetching
   const snapshot = await db
     .collection(COLLECTIONS.auditLog)
-    .where('action', 'in', ['LOGIN_SUCCESS', 'OAUTH_LOGIN_SUCCESS'])
     .orderBy('created_at', 'desc')
-    .limit(limitCount)
+    .limit(500)
     .get();
-  return snapshot.docs.map((doc) => {
-    const d = doc.data();
-    return {
-      id: doc.id,
-      user_id: d.user_id || null,
-      action: d.action,
-      ip_address: d.ip_address || null,
-      created_at: d.created_at || null,
-    };
-  });
+  const loginActions = new Set(['LOGIN_SUCCESS', 'OAUTH_LOGIN_SUCCESS']);
+  return snapshot.docs
+    .map((doc) => {
+      const d = doc.data();
+      return {
+        id: doc.id,
+        user_id: d.user_id || null,
+        action: d.action,
+        ip_address: d.ip_address || null,
+        created_at: d.created_at || null,
+      };
+    })
+    .filter((d) => loginActions.has(d.action))
+    .slice(0, limitCount);
 }
 
 module.exports = {
