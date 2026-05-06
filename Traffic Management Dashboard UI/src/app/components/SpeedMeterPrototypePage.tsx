@@ -1332,9 +1332,16 @@ export function SpeedMeterPrototypePage() {
             </div>
           )}
 
-          <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
-            <div className="font-medium text-slate-900">
-              {isTracking ? 'Tracking is active' : 'Tracking is not active'}
+          <div className={`mt-4 rounded-xl border px-4 py-3 text-sm transition-colors duration-300 ${
+            isTracking
+              ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
+              : 'border-slate-200 bg-slate-50 text-slate-700'
+          }`}>
+            <div className="flex items-center gap-2 font-semibold">
+              {isTracking && (
+                <span className="inline-block w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+              )}
+              {isTracking ? 'Tracking active' : 'Tracking is not active'}
             </div>
             <div className="mt-1">{statusMessage}</div>
             {errorMessage === 'PERMISSION_DENIED' ? (
@@ -1392,63 +1399,77 @@ export function SpeedMeterPrototypePage() {
             )}
           </div>
 
-          <div className="mt-8 grid gap-5 lg:grid-cols-[1.2fr,1fr]">
-            <div className="rounded-2xl border border-slate-200 bg-[linear-gradient(145deg,_rgba(13,148,136,0.08),_rgba(59,130,246,0.08)_60%,_rgba(248,250,252,0.95))] p-6">
+          <div className="mt-8 grid gap-5 lg:grid-cols-[auto,1fr]">
+            {/* ── Speed display ─────────────────────────────────────────── */}
+            <div className="flex items-center justify-center rounded-2xl border border-slate-200 bg-gradient-to-b from-slate-50 to-white p-4 shadow-sm">
               {isResearchRole ? (
-                <>
-                  <div className="inline-flex items-center gap-2 rounded-md bg-white/80 px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-700">
-                    <Activity className="h-4 w-4" />
+                <div className="w-full">
+                  <div className="inline-flex items-center gap-2 rounded-md bg-white px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-600 shadow-sm border border-slate-200">
+                    <Activity className="h-3.5 w-3.5 text-teal-500" />
                     Instant vs Smoothed
                   </div>
-                  <div className="mt-4 grid gap-4 md:grid-cols-2">
-                    <div className="rounded-xl border border-slate-200 bg-white/70 px-4 py-3">
-                      <div className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
-                        Instant (Raw)
+                  <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                    <div className="rounded-xl border border-slate-200 bg-white px-5 py-4 shadow-sm">
+                      <div className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">Instant (Raw)</div>
+                      <div className="mt-2 flex items-end gap-1.5">
+                        <span className="text-4xl font-bold tracking-tight text-slate-900">{instantSpeedKph.toFixed(1)}</span>
+                        <span className="mb-1 text-sm font-semibold text-slate-500">km/h</span>
                       </div>
-                      <div className="mt-1 flex items-end gap-1">
-                        <div className="text-3xl font-bold tracking-tight text-slate-900">{instantSpeedKph.toFixed(2)}</div>
-                        <div className="pb-1 text-sm font-semibold text-slate-700">km/h</div>
-                      </div>
-                      <div className="text-xs text-slate-600">{instantSpeedMps.toFixed(3)} m/s</div>
+                      <div className="mt-1 text-xs text-slate-500">{instantSpeedMps.toFixed(3)} m/s</div>
                     </div>
-                    <div className="rounded-xl border border-teal-200 bg-teal-50/70 px-4 py-3">
-                      <div className="text-xs font-semibold uppercase tracking-[0.12em] text-teal-700">
-                        Smoothed (Analysis)
+                    <div className="rounded-xl border border-teal-200 bg-gradient-to-br from-teal-50 to-white px-5 py-4 shadow-sm">
+                      <div className="text-xs font-semibold uppercase tracking-[0.12em] text-teal-600">Smoothed (Analysis)</div>
+                      <div className="mt-2 flex items-end gap-1.5">
+                        <span className="text-4xl font-bold tracking-tight text-slate-900">{currentSpeedKph.toFixed(1)}</span>
+                        <span className="mb-1 text-sm font-semibold text-slate-500">km/h</span>
                       </div>
-                      <div className="mt-1 flex items-end gap-1">
-                        <div className="text-3xl font-bold tracking-tight text-slate-900">{currentSpeedKph.toFixed(2)}</div>
-                        <div className="pb-1 text-sm font-semibold text-slate-700">km/h</div>
-                      </div>
-                      <div className="text-xs text-slate-600">{currentSpeedMps.toFixed(3)} m/s · Pace {currentPaceText}</div>
+                      <div className="mt-1 text-xs text-slate-500">{currentSpeedMps.toFixed(3)} m/s · {currentPaceText}</div>
                     </div>
                   </div>
-                </>
+                </div>
               ) : (
-                <>
-                  <div className="inline-flex items-center gap-2 rounded-md bg-white/80 px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-700">
-                    <Gauge className="h-4 w-4" />
-                    Current Speed
-                  </div>
-                  <div className="mt-4">
-                    <div className="rounded-xl border border-teal-200 bg-teal-50/70 px-6 py-5">
-                      <div className="flex items-end gap-2">
-                        <div className="text-5xl font-bold tracking-tight text-slate-900">{currentSpeedKph.toFixed(1)}</div>
-                        <div className="pb-1.5 text-lg font-semibold text-slate-700">km/h</div>
-                      </div>
-                      <div className="mt-2 text-sm text-slate-600">{currentSpeedMps.toFixed(3)} m/s · Pace {currentPaceText}</div>
-                    </div>
-                  </div>
-                </>
+                <SpeedometerGauge speedKph={currentSpeedKph} isTracking={isTracking} paceText={currentPaceText} />
               )}
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
-              <MetricCard icon={<Timer className="h-4 w-4" />} label="Elapsed" value={formatDuration(elapsedSeconds)} />
-              <MetricCard icon={<LocateFixed className="h-4 w-4" />} label="Accuracy" value={latestAccuracyText || '--'} />
-              <MetricCard icon={<Activity className="h-4 w-4" />} label="Average" value={`${averageSpeedKph.toFixed(2)} km/h`} />
-              <MetricCard icon={<Gauge className="h-4 w-4" />} label="Max" value={`${maxSpeedKph.toFixed(2)} km/h`} />
-              <MetricCard icon={<Activity className="h-4 w-4" />} label="Distance" value={`${(totalDistanceMeters / 1000).toFixed(2)} km`} />
-              <MetricCard icon={<Download className="h-4 w-4" />} label="OK / Skipped" value={`${samples.length} / ${skippedSamples}`} />
+            {/* ── Metric cards ──────────────────────────────────────────── */}
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-2 xl:grid-cols-3">
+              <MetricCard
+                icon={<Timer className="h-4 w-4" />}
+                label="Elapsed"
+                value={formatDuration(elapsedSeconds)}
+                accent={isTracking ? 'emerald' : 'slate'}
+              />
+              <MetricCard
+                icon={<LocateFixed className="h-4 w-4" />}
+                label="GPS Accuracy"
+                value={latestAccuracyText || '--'}
+                accent={signalQuality === 'good' ? 'emerald' : signalQuality === 'ok' ? 'amber' : signalQuality === 'poor' ? 'red' : 'slate'}
+              />
+              <MetricCard
+                icon={<Activity className="h-4 w-4" />}
+                label="Average"
+                value={`${averageSpeedKph.toFixed(1)} km/h`}
+                accent="blue"
+              />
+              <MetricCard
+                icon={<Gauge className="h-4 w-4" />}
+                label="Max Speed"
+                value={`${maxSpeedKph.toFixed(1)} km/h`}
+                accent="violet"
+              />
+              <MetricCard
+                icon={<Activity className="h-4 w-4" />}
+                label="Distance"
+                value={`${(totalDistanceMeters / 1000).toFixed(2)} km`}
+                accent="teal"
+              />
+              <MetricCard
+                icon={<Download className="h-4 w-4" />}
+                label="Samples / Skipped"
+                value={`${samples.length} / ${skippedSamples}`}
+                accent="slate"
+              />
             </div>
           </div>
 
@@ -1683,14 +1704,82 @@ export function SpeedMeterPrototypePage() {
   );
 }
 
-function MetricCard({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
+const ACCENT_CLASSES: Record<string, { border: string; icon: string; bg: string }> = {
+  emerald: { border: 'border-emerald-200', icon: 'text-emerald-500', bg: 'bg-emerald-50/60' },
+  teal:    { border: 'border-teal-200',    icon: 'text-teal-500',    bg: 'bg-teal-50/60'    },
+  blue:    { border: 'border-blue-200',    icon: 'text-blue-500',    bg: 'bg-blue-50/60'    },
+  violet:  { border: 'border-violet-200',  icon: 'text-violet-500',  bg: 'bg-violet-50/60'  },
+  amber:   { border: 'border-amber-200',   icon: 'text-amber-500',   bg: 'bg-amber-50/60'   },
+  red:     { border: 'border-red-200',     icon: 'text-red-500',     bg: 'bg-red-50/60'     },
+  slate:   { border: 'border-slate-200',   icon: 'text-slate-400',   bg: 'bg-white'         },
+};
+
+function MetricCard({ icon, label, value, accent = 'slate' }: { icon: React.ReactNode; label: string; value: string; accent?: string }) {
+  const a = ACCENT_CLASSES[accent] ?? ACCENT_CLASSES.slate;
   return (
-    <div className="rounded-xl border border-slate-200 bg-white px-3 py-3 shadow-sm">
-      <div className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
+    <div className={`rounded-xl border ${a.border} ${a.bg} px-4 py-3.5 shadow-sm`}>
+      <div className={`inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-[0.12em] ${a.icon}`}>
         {icon}
         {label}
       </div>
-      <div className="mt-2 text-base font-semibold text-slate-900">{value}</div>
+      <div className="mt-2 text-lg font-bold text-slate-900 leading-tight">{value}</div>
+    </div>
+  );
+}
+
+function SpeedometerGauge({ speedKph, isTracking, paceText }: { speedKph: number; isTracking: boolean; paceText: string }) {
+  const cx = 100, cy = 105, r = 72;
+  const startAngle = 135, totalDeg = 270;
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const pt = (deg: number) => ({ x: cx + r * Math.cos(toRad(deg)), y: cy + r * Math.sin(toRad(deg)) });
+
+  const s = pt(startAngle);
+  const e = pt(startAngle + totalDeg);
+  const bgPath = `M ${s.x.toFixed(1)} ${s.y.toFixed(1)} A ${r} ${r} 0 1 1 ${e.x.toFixed(1)} ${e.y.toFixed(1)}`;
+
+  const maxKph = 120;
+  const pct = Math.min(1, Math.max(0, speedKph / maxKph));
+  const fillDeg = pct * totalDeg;
+  const fe = pt(startAngle + fillDeg);
+  const fillPath = fillDeg > 1
+    ? `M ${s.x.toFixed(1)} ${s.y.toFixed(1)} A ${r} ${r} 0 ${fillDeg > 180 ? 1 : 0} 1 ${fe.x.toFixed(1)} ${fe.y.toFixed(1)}`
+    : null;
+
+  const speedColor = speedKph < 40 ? '#10b981' : speedKph < 80 ? '#f59e0b' : '#ef4444';
+
+  return (
+    <div className="flex flex-col items-center">
+      <svg viewBox="0 0 200 200" className="w-52 h-52 sm:w-60 sm:h-60">
+        {/* Track */}
+        <path d={bgPath} fill="none" stroke="#e2e8f0" strokeWidth="13" strokeLinecap="round" />
+        {/* Fill */}
+        {fillPath && (
+          <path d={fillPath} fill="none" stroke={speedColor} strokeWidth="13" strokeLinecap="round"
+            style={{ transition: 'stroke 0.4s ease' }} />
+        )}
+        {/* Range labels */}
+        <text x={s.x.toFixed(1)} y={(s.y + 16).toFixed(1)} textAnchor="middle" fill="#94a3b8" style={{ fontSize: '11px', fontFamily: 'system-ui' }}>0</text>
+        <text x={e.x.toFixed(1)} y={(e.y + 16).toFixed(1)} textAnchor="middle" fill="#94a3b8" style={{ fontSize: '11px', fontFamily: 'system-ui' }}>{maxKph}</text>
+        {/* Speed number */}
+        <text x="100" y="98" textAnchor="middle" dominantBaseline="middle" fill="#0f172a"
+          style={{ fontSize: '42px', fontWeight: '800', fontFamily: 'system-ui', transition: 'fill 0.4s ease' }}>
+          {speedKph.toFixed(1)}
+        </text>
+        <text x="100" y="124" textAnchor="middle" fill="#64748b"
+          style={{ fontSize: '12px', fontWeight: '600', fontFamily: 'system-ui', letterSpacing: '0.1em' }}>
+          KM/H
+        </text>
+        {/* Live pulse */}
+        {isTracking && (
+          <circle cx="100" cy="148" r="5" fill={speedColor}>
+            <animate attributeName="r" values="4;6;4" dur="1.4s" repeatCount="indefinite" />
+            <animate attributeName="opacity" values="1;0.4;1" dur="1.4s" repeatCount="indefinite" />
+          </circle>
+        )}
+      </svg>
+      <p className="mt-1 text-xs text-slate-500 font-medium">
+        {paceText !== '--' ? `Pace ${paceText}` : isTracking ? 'Waiting for movement…' : 'Tap Start Tracking'}
+      </p>
     </div>
   );
 }
