@@ -238,6 +238,11 @@ export function RouteComparison() {
     let cancelled = false;
 
     async function loadAnalysis() {
+      if (!locationState) {
+        setIsLoading(false);
+        return;
+      }
+
       if (preloadedAnalysis) {
         setAnalysis(preloadedAnalysis);
         setErrorMessage(null);
@@ -367,6 +372,27 @@ export function RouteComparison() {
     fuelType: formData.fuelType.trim() || analysis.request.fuelType,
     fuelPrice: displayFuelPrice,
   };
+
+  if (!locationState && !analysis) {
+    return (
+      <div className="min-h-[calc(100vh-4rem)] bg-slate-50 flex items-center justify-center px-6">
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-10 text-center max-w-md w-full">
+          <Navigation className="w-10 h-10 text-teal-500 mx-auto mb-4" />
+          <h1 className="text-2xl font-bold text-slate-900 mb-2">No Route Started</h1>
+          <p className="text-slate-500 mb-6">
+            Enter your origin, destination, and vehicle details on the Dashboard to analyze routes.
+          </p>
+          <button
+            onClick={() => navigate('/dashboard')}
+            className="inline-flex items-center gap-2 px-5 py-2.5 bg-teal-600 hover:bg-teal-700 text-white text-sm font-medium rounded-xl transition"
+          >
+            <MapPin className="w-4 h-4" />
+            Go to Dashboard
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   if (isLoading) {
     return (
