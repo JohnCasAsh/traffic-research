@@ -192,6 +192,8 @@ const DEFAULT_ENVIRONMENT: Environment = 'auto';
 const LAST_ANALYSIS_STORAGE_KEY = 'smartroute:last-analysis';
 const TRIP_HISTORY_STORAGE_KEY = 'smartroute:trip-history';
 const BEFORE_TRIP_STORAGE_KEY = 'smartroute:before-trip';
+// Separate key that persists through crashes/refreshes until the trip is ended or reset
+const ACTIVE_ROUTE_CONTEXT_KEY = 'smartroute:active-route-context';
 
 const DEFAULT_FUEL_PRICE: Record<'gasoline' | 'diesel' | 'electric', number> = {
   gasoline: 62,
@@ -403,10 +405,10 @@ function readBeforeTripData(): {
     if (!raw) return null;
     const parsed = JSON.parse(raw);
     if (!parsed?.prediction) return null;
-    // Consume the key so a future direct visit does not reuse stale data
+    // Consume the one-shot key so a future direct visit does not reuse stale data
     window.localStorage.removeItem(BEFORE_TRIP_STORAGE_KEY);
     const ft = String(parsed.fuelType || 'gasoline').toLowerCase();
-    return {
+    const result = {
       prediction: parsed.prediction as PredictedTripSummary,
       vehicleType: String(parsed.vehicleType || 'sedan'),
       fuelType: ft === 'diesel' ? 'diesel' : ft === 'electric' ? 'electric' : 'gasoline',
@@ -414,10 +416,38 @@ function readBeforeTripData(): {
       origin: String(parsed.origin || ''),
       destination: String(parsed.destination || ''),
       routeDescription: String(parsed.routeDescription || ''),
+    } as const;
+    // Persist route context so it survives refreshes/crashes until trip ends or resets
+    window.localStorage.setItem(ACTIVE_ROUTE_CONTEXT_KEY, JSON.stringify({
+      origin: result.origin,
+      destination: result.destination,
+      routeDescription: result.routeDescription,
+      routeLabel: result.prediction.routeLabel,
+    }));
+    return result;
+  } catch {
+    return null;
+  }
+}
+
+function readActiveRouteContext(): { origin: string; destination: string; routeDescription: string; routeLabel: string } | null {
+  try {
+    const raw = window.localStorage.getItem(ACTIVE_ROUTE_CONTEXT_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return {
+      origin: String(parsed.origin || ''),
+      destination: String(parsed.destination || ''),
+      routeDescription: String(parsed.routeDescription || ''),
+      routeLabel: String(parsed.routeLabel || ''),
     };
   } catch {
     return null;
   }
+}
+
+function clearActiveRouteContext() {
+  window.localStorage.removeItem(ACTIVE_ROUTE_CONTEXT_KEY);
 }
 
 /**
@@ -576,6 +606,13 @@ export function SpeedMeterPrototypePage() {
       beforeTripFuelPriceRef.current = beforeTrip.fuelPrice;
       setVehicleType(beforeTrip.vehicleType);
     } else {
+      // Restore route context that survived a refresh or crash
+      const saved = readActiveRouteContext();
+      if (saved) {
+        setTripOrigin(saved.origin);
+        setTripDestination(saved.destination);
+        setTripRouteDescription(saved.routeDescription);
+      }
       setPredictedSummary(readPredictedSummary());
     }
   }, []);
@@ -924,6 +961,9 @@ export function SpeedMeterPrototypePage() {
     setLiveVspKwPerTon(0); setLiveFuelOrEnergyPerKm(0); setLiveCostPerKm(0);
     setRunningFuelOrEnergy(0); setRunningCostPhp(0);
     setLatestAccuracyMeters(null); setSkippedSamples(0); setSamples([]);
+    // Clear the persistent route context so the banner doesn't linger after reset
+    clearActiveRouteContext();
+    setTripOrigin(''); setTripDestination(''); setTripRouteDescription('');
   };
 
   useEffect(() => {
@@ -995,6 +1035,8 @@ export function SpeedMeterPrototypePage() {
     };
 
     setCompletedTrip(completed);
+    // Route context no longer needed once the trip is finalized
+    clearActiveRouteContext();
 
     const existing = JSON.parse(window.localStorage.getItem(TRIP_HISTORY_STORAGE_KEY) || '[]');
     const history = Array.isArray(existing) ? existing : [];
@@ -1160,6 +1202,38 @@ export function SpeedMeterPrototypePage() {
             )}
           </div>
 
+          {/* Route context — stays visible through refreshes and connection loss */}
+          {(tripOrigin || tripDestination) && (
+            <div className="mt-4 rounded-xl border border-teal-200 bg-gradient-to-r from-teal-50 to-blue-50 px-4 py-3">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-teal-600">
+                    Active Route
+                  </p>
+                  <p className="mt-0.5 text-sm font-bold text-slate-900">
+                    {predictedSummary?.routeLabel || ''}
+                    {tripRouteDescription ? (
+                      <span className="ml-2 text-sm font-normal text-slate-500">
+                        via {tripRouteDescription}
+                      </span>
+                    ) : null}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="inline-flex items-center gap-1.5 rounded-lg border border-teal-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700">
+                    <MapPin className="h-3.5 w-3.5 text-teal-500" />
+                    {tripOrigin || '—'}
+                  </span>
+                  <ArrowRight className="h-4 w-4 text-slate-400 flex-shrink-0" />
+                  <span className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700">
+                    <MapPin className="h-3.5 w-3.5 text-blue-500" />
+                    {tripDestination || '—'}
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
+
           <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
             <div className="font-medium text-slate-900">
               {isTracking ? 'Tracking is active' : 'Tracking is not active'}
@@ -1318,47 +1392,6 @@ export function SpeedMeterPrototypePage() {
             </div>
           </div>
         </motion.section>
-
-        {/* ── Route context banner ─────────────────────────────────────────────── */}
-        {(tripOrigin || tripDestination) && (
-          <motion.div
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="mt-4 rounded-2xl border border-teal-200 bg-gradient-to-r from-teal-50 to-blue-50 px-5 py-4 shadow-sm"
-          >
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-teal-600">
-                  Active Route
-                </p>
-                {predictedSummary?.routeLabel && (
-                  <p className="mt-0.5 text-base font-bold text-slate-900">
-                    {predictedSummary.routeLabel}
-                    {tripRouteDescription ? (
-                      <span className="ml-2 text-sm font-normal text-slate-500">
-                        via {tripRouteDescription}
-                      </span>
-                    ) : null}
-                  </p>
-                )}
-                {!predictedSummary?.routeLabel && tripRouteDescription && (
-                  <p className="mt-0.5 text-base font-bold text-slate-900">{tripRouteDescription}</p>
-                )}
-              </div>
-              <div className="flex items-center gap-2 text-sm text-slate-700 flex-wrap">
-                <span className="inline-flex items-center gap-1.5 rounded-lg border border-teal-200 bg-white px-3 py-1.5 font-medium">
-                  <MapPin className="h-3.5 w-3.5 text-teal-500" />
-                  {tripOrigin || '—'}
-                </span>
-                <ArrowRight className="h-4 w-4 text-slate-400 flex-shrink-0" />
-                <span className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-white px-3 py-1.5 font-medium">
-                  <MapPin className="h-3.5 w-3.5 text-blue-500" />
-                  {tripDestination || '—'}
-                </span>
-              </div>
-            </div>
-          </motion.div>
-        )}
 
         {/* ── Latest samples table ─────────────────────────────────────────────── */}
         <motion.section
