@@ -1,8 +1,20 @@
 const express = require('express');
 const db = require('./database');
 const { requireAuth } = require('./auth');
+const { decryptEmail } = require('./crypto');
+const { sendAccountSuspendedEmail, sendAccountDeletedEmail } = require('./brevoMailer');
 
 const adminRouter = express.Router();
+
+function tryDecryptUserEmail(user) {
+  try {
+    const key = process.env.EMAIL_ENCRYPTION_KEY;
+    if (!key || !user.email_encrypted || !user.email_iv || !user.email_auth_tag) return null;
+    return decryptEmail(user.email_encrypted, user.email_iv, user.email_auth_tag, key);
+  } catch (_) {
+    return null;
+  }
+}
 
 function requireAdmin(req, res, next) {
   if (req.authUser?.role !== 'admin') {
@@ -29,6 +41,10 @@ adminRouter.post('/users/:id/ban', requireAuth, requireAdmin, async (req, res) =
     if (!target) return res.status(404).json({ error: 'User not found.' });
     if (target.role === 'admin') return res.status(403).json({ error: 'Cannot ban an admin.' });
     await db.setBannedStatus(req.params.id, true);
+    const email = tryDecryptUserEmail(target);
+    if (email) {
+      sendAccountSuspendedEmail({ toEmail: email, firstName: target.first_name }).catch(() => {});
+    }
     res.json({ message: 'User banned.' });
   } catch (err) {
     console.error('Ban error:', err);
@@ -56,6 +72,10 @@ adminRouter.delete('/users/:id', requireAuth, requireAdmin, async (req, res) => 
     const target = await db.getUserById(req.params.id);
     if (!target) return res.status(404).json({ error: 'User not found.' });
     if (target.role === 'admin') return res.status(403).json({ error: 'Cannot delete an admin.' });
+    const email = tryDecryptUserEmail(target);
+    if (email) {
+      sendAccountDeletedEmail({ toEmail: email, firstName: target.first_name }).catch(() => {});
+    }
     await db.deleteUser(req.params.id);
     res.json({ message: 'User deleted.' });
   } catch (err) {
