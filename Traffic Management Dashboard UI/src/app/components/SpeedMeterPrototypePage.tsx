@@ -1394,33 +1394,52 @@ export function SpeedMeterPrototypePage() {
 
           <div className="mt-8 grid gap-5 lg:grid-cols-[1.2fr,1fr]">
             <div className="rounded-2xl border border-slate-200 bg-[linear-gradient(145deg,_rgba(13,148,136,0.08),_rgba(59,130,246,0.08)_60%,_rgba(248,250,252,0.95))] p-6">
-              <div className="inline-flex items-center gap-2 rounded-md bg-white/80 px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-700">
-                <Activity className="h-4 w-4" />
-                Instant vs Smoothed
-              </div>
-              <div className="mt-4 grid gap-4 md:grid-cols-2">
-                <div className="rounded-xl border border-slate-200 bg-white/70 px-4 py-3">
-                  <div className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
-                    Instant (Raw)
+              {isResearchRole ? (
+                <>
+                  <div className="inline-flex items-center gap-2 rounded-md bg-white/80 px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-700">
+                    <Activity className="h-4 w-4" />
+                    Instant vs Smoothed
                   </div>
-                  <div className="mt-1 flex items-end gap-1">
-                    <div className="text-3xl font-bold tracking-tight text-slate-900">{instantSpeedKph.toFixed(2)}</div>
-                    <div className="pb-1 text-sm font-semibold text-slate-700">km/h</div>
+                  <div className="mt-4 grid gap-4 md:grid-cols-2">
+                    <div className="rounded-xl border border-slate-200 bg-white/70 px-4 py-3">
+                      <div className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
+                        Instant (Raw)
+                      </div>
+                      <div className="mt-1 flex items-end gap-1">
+                        <div className="text-3xl font-bold tracking-tight text-slate-900">{instantSpeedKph.toFixed(2)}</div>
+                        <div className="pb-1 text-sm font-semibold text-slate-700">km/h</div>
+                      </div>
+                      <div className="text-xs text-slate-600">{instantSpeedMps.toFixed(3)} m/s</div>
+                    </div>
+                    <div className="rounded-xl border border-teal-200 bg-teal-50/70 px-4 py-3">
+                      <div className="text-xs font-semibold uppercase tracking-[0.12em] text-teal-700">
+                        Smoothed (Analysis)
+                      </div>
+                      <div className="mt-1 flex items-end gap-1">
+                        <div className="text-3xl font-bold tracking-tight text-slate-900">{currentSpeedKph.toFixed(2)}</div>
+                        <div className="pb-1 text-sm font-semibold text-slate-700">km/h</div>
+                      </div>
+                      <div className="text-xs text-slate-600">{currentSpeedMps.toFixed(3)} m/s · Pace {currentPaceText}</div>
+                    </div>
                   </div>
-                  <div className="text-xs text-slate-600">{instantSpeedMps.toFixed(3)} m/s</div>
-                </div>
-
-                <div className="rounded-xl border border-teal-200 bg-teal-50/70 px-4 py-3">
-                  <div className="text-xs font-semibold uppercase tracking-[0.12em] text-teal-700">
-                    Smoothed (Analysis)
+                </>
+              ) : (
+                <>
+                  <div className="inline-flex items-center gap-2 rounded-md bg-white/80 px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-700">
+                    <Gauge className="h-4 w-4" />
+                    Current Speed
                   </div>
-                  <div className="mt-1 flex items-end gap-1">
-                    <div className="text-3xl font-bold tracking-tight text-slate-900">{currentSpeedKph.toFixed(2)}</div>
-                    <div className="pb-1 text-sm font-semibold text-slate-700">km/h</div>
+                  <div className="mt-4">
+                    <div className="rounded-xl border border-teal-200 bg-teal-50/70 px-6 py-5">
+                      <div className="flex items-end gap-2">
+                        <div className="text-5xl font-bold tracking-tight text-slate-900">{currentSpeedKph.toFixed(1)}</div>
+                        <div className="pb-1.5 text-lg font-semibold text-slate-700">km/h</div>
+                      </div>
+                      <div className="mt-2 text-sm text-slate-600">{currentSpeedMps.toFixed(3)} m/s · Pace {currentPaceText}</div>
+                    </div>
                   </div>
-                  <div className="text-xs text-slate-600">{currentSpeedMps.toFixed(3)} m/s · Pace {currentPaceText}</div>
-                </div>
-              </div>
+                </>
+              )}
             </div>
 
             <div className="grid grid-cols-2 gap-3">
