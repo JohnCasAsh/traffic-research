@@ -775,6 +775,14 @@ export function SpeedMeterPrototypePage() {
         }
 
         const distanceDeltaMeters = rawDistanceMeters;
+
+        // Prefer Doppler speed from the chipset. If the device doesn't expose it
+        // (desktop browsers, some older Android devices), fall back to the
+        // position-delta computed speed so the display still responds to movement.
+        const effectiveSpeedMps = speedMps > 0 ? speedMps : computedSpeedMps;
+        const speedSource: SpeedSample['speedSource'] =
+          speedMps > 0 ? 'gps_doppler' : computedSpeedMps > 0 ? 'computed' : 'zero';
+
         const fuelPriceNumber = Number.parseFloat(fuelPrice) || DEFAULT_FUEL_PRICE[fuelType];
         const profile = pickVehicleProfile(vehicleType, fuelType);
 
@@ -784,7 +792,7 @@ export function SpeedMeterPrototypePage() {
         // process noise UP when accuracy is poor — meaning the filter leans harder
         // on its own prediction (more smoothing) when GPS is unreliable.
         const prevEstimate = kalmanRef.current.estimate;
-        const measurementDelta = Math.abs(speedMps - prevEstimate);
+        const measurementDelta = Math.abs(effectiveSpeedMps - prevEstimate);
         const modeConfig = modeConfigRef.current;
 
         // accuracyPenalty: 1.0 when GPS is perfect, up to 3× when very noisy.
@@ -803,7 +811,7 @@ export function SpeedMeterPrototypePage() {
         // measurement more and sticks closer to its prediction.
         processNoise = processNoise / accuracyPenalty;
 
-        kalmanRef.current = kalmanUpdate(kalmanRef.current, speedMps, processNoise);
+        kalmanRef.current = kalmanUpdate(kalmanRef.current, effectiveSpeedMps, processNoise);
         let smoothedSpeedMps = Math.max(0, kalmanRef.current.estimate);
         const previousSmoothedSpeedMps = lastSmoothedSpeedRef.current;
         const accelerationMps2 = (smoothedSpeedMps - previousSmoothedSpeedMps) / Math.max(deltaTimeSec, 0.1);
@@ -848,7 +856,7 @@ export function SpeedMeterPrototypePage() {
         runningCostPhpRef.current = runningFuelOrEnergyRef.current * fuelPriceNumber;
 
         // Snap to zero after a short hold of near-zero speed + small movement.
-        const nearStillBySpeed = speedMps <= modeConfig.stillSpeedThresholdMps;
+        const nearStillBySpeed = effectiveSpeedMps <= modeConfig.stillSpeedThresholdMps;
         const nearStillByDistance = rawDistanceMeters <= modeConfig.maxNoiseGateMeters * 0.5;
 
         if (nearStillBySpeed && nearStillByDistance) {
@@ -879,8 +887,8 @@ export function SpeedMeterPrototypePage() {
           elapsedSeconds: elapsedSec,
           latitude: lat, longitude: lng,
           accuracyMeters, positionReliable,
-          speedSource: speedMps > 0 ? 'gps_doppler' : 'zero',
-          instantSpeedMps: speedMps,
+          speedSource,
+          instantSpeedMps: effectiveSpeedMps,
           // FIX: store the actual raw value from the chip, not the sanitised speedMps
           rawSpeedMps: Number.isFinite(rawSpeedMps) ? rawSpeedMps : -1,
           computedSpeedMps, // position-delta for reference
@@ -900,7 +908,7 @@ export function SpeedMeterPrototypePage() {
         };
 
         setElapsedSeconds(elapsedSec);
-        setInstantSpeedMps(speedMps);
+        setInstantSpeedMps(effectiveSpeedMps);
         setTotalDistanceMeters(totalDistanceMetersRef.current);
         setCurrentSpeedMps(smoothedSpeedMps);
         setAverageSpeedMps(avgMps);
@@ -1276,12 +1284,7 @@ export function SpeedMeterPrototypePage() {
                     title={`Price per ${unitLabel}`}
                   />
                 </>
-              ) : (
-                <span className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
-                  <Fuel className="h-4 w-4 text-slate-400" />
-                  {profile.label} · {fuelType.charAt(0).toUpperCase() + fuelType.slice(1)} · ₱{fuelPrice}/{unitLabel}
-                </span>
-              )}
+              ) : null /* drivers: vehicle info shows inside Active Route banner when a route is active */}
               <button
                 type="button"
                 onClick={isTracking ? pauseTracking : startTracking}
