@@ -10,6 +10,39 @@ const vehicles = [
   { name: 'E-Motorcycle', type: 'BEV', model: 'Energy model + SoC', color: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
 ];
 
+const gpsFactors = [
+  {
+    title: 'GPS Speed (Chipset Native)',
+    color: 'bg-emerald-50 border-emerald-200',
+    body: "Your phone's GPS chip reports speed directly using Doppler shift of satellite signals. SmartRoute displays that reading with a Kalman filter to smooth out jitter, but doesn't reject or recompute anything — just uses what the GPS API provides.",
+  },
+  {
+    title: 'Kalman Filter (Smoothing Only)',
+    color: 'bg-blue-50 border-blue-200',
+    body: 'Every new GPS speed reading is blended with the previous estimate based on how different they are. Gradual acceleration ripples through cleanly; sudden spikes get dampened. No samples are ever skipped.',
+  },
+  {
+    title: 'Stationary Lock',
+    color: 'bg-violet-50 border-violet-200',
+    body: 'After a few seconds of near-zero speed and minimal movement, the display snaps to 0 to avoid residual jitter from GPS noise. Once you start moving clearly, the speed immediately rises from zero.',
+  },
+  {
+    title: 'Accuracy Circle',
+    color: 'bg-amber-50 border-amber-200',
+    body: 'Your location accuracy (the GPS uncertainty radius) is shown in the badge. Smaller is better. The accuracy threshold is different for indoors vs outdoors — use the Environment toggle to match your situation.',
+  },
+  {
+    title: 'Multipath (Near Buildings)',
+    color: 'bg-red-50 border-red-200',
+    body: 'Near buildings, GPS signals bounce off walls and arrive late — the chip interprets this as a sudden position jump and reports a falsely high speed. Switch to Outdoors mode and Stable filter to reject these spikes before they reach the display.',
+  },
+  {
+    title: 'Indoors Limitations',
+    color: 'bg-teal-50 border-teal-200',
+    body: 'Indoors, GPS rarely locks onto satellites and accuracy degrades to 30–50 m. The app relaxes its accuracy gate so you still get readings, but speed values will be noisier. For best results, walk near a window or step outside.',
+  },
+];
+
 const stack = [
   { icon: <Cpu className="w-5 h-5" />, label: 'Frontend', value: 'React + TypeScript', color: 'bg-blue-50 text-blue-600' },
   { icon: <GitBranch className="w-5 h-5" />, label: 'Backend', value: 'Node.js + Express', color: 'bg-green-50 text-green-600' },
@@ -206,6 +239,32 @@ export function AboutPage() {
                   <p className="text-xs text-slate-400 font-medium">{s.label}</p>
                   <p className="text-sm font-semibold text-slate-800">{s.value}</p>
                 </div>
+              </div>
+            ))}
+          </div>
+        </motion.section>
+
+        {/* GPS Accuracy Explainer */}
+        <motion.section
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.33 }}
+          className="bg-white rounded-2xl border border-slate-200 p-8"
+        >
+          <div className="flex items-center gap-3 mb-2">
+            <div className="w-9 h-9 rounded-lg bg-violet-50 flex items-center justify-center">
+              <Cpu className="w-5 h-5 text-violet-600" />
+            </div>
+            <h2 className="text-xl font-bold text-slate-900">Why is Speed Sometimes Inaccurate?</h2>
+          </div>
+          <p className="text-sm text-slate-500 mb-6">
+            Understanding these six factors helps you collect clean GPS data for thesis validation.
+          </p>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {gpsFactors.map(({ title, color, body }) => (
+              <div key={title} className={`rounded-xl border p-4 ${color}`}>
+                <div className="font-semibold text-sm text-slate-900 mb-1">{title}</div>
+                <div className="text-xs leading-relaxed text-slate-700">{body}</div>
               </div>
             ))}
           </div>

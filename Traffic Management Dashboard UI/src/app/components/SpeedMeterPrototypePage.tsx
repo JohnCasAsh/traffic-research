@@ -486,41 +486,6 @@ function triggerDownload(fileName: string, content: string, mimeType: string) {
   URL.revokeObjectURL(url);
 }
 
-// ─── Static explainer data ─────────────────────────────────────────────────────
-
-const ACCURACY_EXPLANATIONS = [
-  {
-    title: 'GPS Speed (Chipset Native)',
-    color: 'bg-emerald-50 border-emerald-200',
-    body: "Your phone's GPS chip reports speed directly using Doppler shift of satellite signals. This app displays that reading with a Kalman filter to smooth out jitter, but doesn't reject or recompute anything—just uses what the GPS API provides.",
-  },
-  {
-    title: 'Kalman Filter (Smoothing Only)',
-    color: 'bg-blue-50 border-blue-200',
-    body: 'Every new GPS speed reading is blended with the previous estimate based on how different they are. Gradual acceleration ripples through cleanly; sudden spikes get dampened. No samples are ever skipped.',
-  },
-  {
-    title: 'Stationary Lock',
-    color: 'bg-violet-50 border-violet-200',
-    body: 'After a few seconds of near-zero speed and minimal movement, the display snaps to 0 to avoid residual jitter from GPS noise. Once you start moving clearly, the speed immediately rises from zero.',
-  },
-  {
-    title: 'Accuracy Circle',
-    color: 'bg-amber-50 border-amber-200',
-    body: 'Your location accuracy (the GPS uncertainty radius) is shown in the badge. Smaller is better. The accuracy threshold is different for indoors vs outdoors — use the Environment toggle to match your situation.',
-  },
-  {
-    title: 'Multipath (Near Buildings)',
-    color: 'bg-red-50 border-red-200',
-    body: 'Near buildings, GPS signals bounce off walls and arrive late — the chip interprets this as a sudden position jump and reports a falsely high speed. Switch to Outdoors mode and Stable filter to reject these spikes before they reach the display.',
-  },
-  {
-    title: 'Indoors Limitations',
-    color: 'bg-teal-50 border-teal-200',
-    body: 'Indoors, GPS rarely locks onto satellites and accuracy degrades to 30–50 m. The app relaxes its accuracy gate so you still get readings, but speed values will be noisier. For best results, walk near a window or step outside.',
-  },
-];
-
 // ─── Component ─────────────────────────────────────────────────────────────────
 
 export function SpeedMeterPrototypePage() {
@@ -1487,26 +1452,6 @@ export function SpeedMeterPrototypePage() {
           )}
         </motion.section>
 
-        {/* ── Accuracy explainer ───────────────────────────────────────────────── */}
-        <motion.section
-          initial={{ opacity: 0, y: 16 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
-          className="mt-6 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm"
-        >
-          <h2 className="text-xl font-semibold text-slate-900">Why is Speed Sometimes Inaccurate?</h2>
-          <p className="mt-2 text-sm text-slate-600">
-            Understanding these six factors helps you collect clean data for your thesis.
-          </p>
-          <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {ACCURACY_EXPLANATIONS.map(({ title, color, body }) => (
-              <div key={title} className={`rounded-xl border p-4 ${color}`}>
-                <div className="mb-1 font-semibold text-slate-900">{title}</div>
-                <div className="text-xs leading-relaxed text-slate-700">{body}</div>
-              </div>
-            ))}
-          </div>
-        </motion.section>
 
       </div>
       </div>
