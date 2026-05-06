@@ -1433,7 +1433,7 @@ export function SpeedMeterPrototypePage() {
             </div>
 
             {/* ── Metric cards ──────────────────────────────────────────── */}
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-2 xl:grid-cols-3">
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
               <MetricCard
                 icon={<Timer className="h-4 w-4" />}
                 label="Elapsed"
@@ -1473,43 +1473,47 @@ export function SpeedMeterPrototypePage() {
             </div>
           </div>
 
-          <div className="mt-6 grid gap-4 lg:grid-cols-3">
-            <div className="rounded-xl border border-slate-200 bg-white p-4">
-              <div className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Live VSP</div>
-              <div className="mt-2 text-3xl font-bold text-slate-900">{liveVspKwPerTon.toFixed(2)}</div>
-              <div className="text-xs text-slate-600">kW/ton</div>
-              <div className="mt-3 h-3 w-full rounded-full bg-slate-100 overflow-hidden">
+          <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+            {/* VSP card spans 2 cols to give room for the bar */}
+            <div className="col-span-2 sm:col-span-1 lg:col-span-2 rounded-xl border border-slate-200 bg-white px-3 py-2.5 shadow-sm">
+              <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">Live VSP</div>
+              <div className="mt-1 text-xl font-bold text-slate-900">{liveVspKwPerTon.toFixed(2)} <span className="text-xs font-normal text-slate-500">kW/ton</span></div>
+              <div className="mt-2 h-2 w-full rounded-full bg-slate-100 overflow-hidden">
                 <div
-                  className={`h-full ${
+                  className={`h-full transition-all duration-300 ${
                     liveBand === 'eco' ? 'bg-emerald-500' : liveBand === 'moderate' ? 'bg-amber-500' : 'bg-red-500'
                   }`}
                   style={{ width: `${Math.min(100, Math.max(0, (liveVspKwPerTon / 18) * 100))}%` }}
                 />
               </div>
-              <div className="mt-2 text-xs text-slate-600">
-                {liveBand === 'eco' ? 'Eco Zone (0-4)' : liveBand === 'moderate' ? 'Moderate Zone (4-10)' : 'Wasting Zone (10+)'}
+              <div className="mt-1 text-[10px] text-slate-500">
+                {liveBand === 'eco' ? 'Eco (0–4)' : liveBand === 'moderate' ? 'Moderate (4–10)' : 'High (10+)'}
               </div>
             </div>
 
             <MetricCard
               icon={<Fuel className="h-4 w-4" />}
-              label={profile.fuelType === 'electric' ? 'Energy / km' : 'Fuel Burn / km'}
+              label={profile.fuelType === 'electric' ? 'Energy / km' : 'Fuel / km'}
               value={`${liveFuelOrEnergyPerKm.toFixed(3)} ${unitLabel}/km`}
+              accent="amber"
             />
             <MetricCard
               icon={<Download className="h-4 w-4" />}
               label="Cost / km"
-              value={`₱${liveCostPerKm.toFixed(2)}/km`}
+              value={`₱${liveCostPerKm.toFixed(2)}`}
+              accent="orange"
             />
             <MetricCard
               icon={<Activity className="h-4 w-4" />}
-              label={profile.fuelType === 'electric' ? 'Running Energy' : 'Running Fuel'}
+              label={profile.fuelType === 'electric' ? 'Running kWh' : 'Running Fuel'}
               value={`${runningFuelOrEnergy.toFixed(3)} ${unitLabel}`}
+              accent="teal"
             />
             <MetricCard
               icon={<Timer className="h-4 w-4" />}
-              label="Running Total Cost"
+              label="Total Cost"
               value={`₱${runningCostPhp.toFixed(2)}`}
+              accent="emerald"
             />
             <div className="rounded-xl border border-slate-200 bg-white px-3 py-3 shadow-sm">
               <div className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Before Trip Snapshot</div>
@@ -1717,12 +1721,12 @@ const ACCENT_CLASSES: Record<string, { border: string; icon: string; bg: string 
 function MetricCard({ icon, label, value, accent = 'slate' }: { icon: React.ReactNode; label: string; value: string; accent?: string }) {
   const a = ACCENT_CLASSES[accent] ?? ACCENT_CLASSES.slate;
   return (
-    <div className={`rounded-xl border ${a.border} ${a.bg} px-4 py-3.5 shadow-sm`}>
-      <div className={`inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-[0.12em] ${a.icon}`}>
+    <div className={`rounded-xl border ${a.border} ${a.bg} px-3 py-2.5 shadow-sm`}>
+      <div className={`inline-flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] ${a.icon}`}>
         {icon}
         {label}
       </div>
-      <div className="mt-2 text-lg font-bold text-slate-900 leading-tight">{value}</div>
+      <div className="mt-1 text-base font-bold text-slate-900 leading-tight">{value}</div>
     </div>
   );
 }
