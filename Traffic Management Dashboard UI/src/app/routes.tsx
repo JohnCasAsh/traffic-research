@@ -14,6 +14,7 @@ import { SignUpPage } from "./components/SignUpPage";
 import { SpeedMeterPrototypePage } from "./components/SpeedMeterPrototypePage";
 import { AdminPage } from "./components/AdminPage";
 import { NotFoundPage } from "./components/NotFoundPage";
+import { AboutPage } from "./components/AboutPage";
 
 export const router = createBrowserRouter([
   {
@@ -21,6 +22,7 @@ export const router = createBrowserRouter([
     Component: Layout,
     children: [
       { index: true, Component: LandingPage },
+      { path: "about", Component: AboutPage },
       { path: "speed-meter", Component: SpeedMeterPrototypePage },
       {
         Component: RequireAuth,
