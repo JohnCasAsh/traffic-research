@@ -2,7 +2,7 @@ const express = require('express');
 const db = require('./database');
 const { requireAuth } = require('./auth');
 const { decryptEmail } = require('./crypto');
-const { sendAccountSuspendedEmail, sendAccountDeletedEmail } = require('./brevoMailer');
+const { sendAccountSuspendedEmail, sendAccountDeletedEmail, sendAccountPromotedEmail } = require('./brevoMailer');
 
 const adminRouter = express.Router();
 
@@ -91,6 +91,10 @@ adminRouter.post('/users/:id/make-admin', requireAuth, requireAdmin, async (req,
     if (!target) return res.status(404).json({ error: 'User not found.' });
     if (target.role === 'admin') return res.status(400).json({ error: 'User is already an admin.' });
     await db.updateUserProfile(req.params.id, { role: 'admin' });
+    const email = tryDecryptUserEmail(target);
+    if (email) {
+      sendAccountPromotedEmail({ toEmail: email, firstName: target.first_name }).catch(() => {});
+    }
     res.json({ message: 'User promoted to admin.' });
   } catch (err) {
     console.error('Make admin error:', err);
