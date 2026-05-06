@@ -155,6 +155,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         headers: buildAuthHeaders(activeToken),
       });
 
+      if (response.status === 403) {
+        logout();
+        window.location.replace('/login?suspended=1');
+        return;
+      }
+
       if (!response.ok) {
         throw new Error('Unable to refresh session');
       }
@@ -183,6 +189,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     refreshProfile();
+  }, [token, refreshProfile]);
+
+  useEffect(() => {
+    if (!token) return;
+    const interval = setInterval(refreshProfile, 30_000);
+    return () => clearInterval(interval);
   }, [token, refreshProfile]);
 
   useEffect(() => {

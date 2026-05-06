@@ -18,6 +18,7 @@ export function LoginPage() {
   const oauthToken = searchParams.get('token');
   const verified = searchParams.get('verified');
   const checkEmail = searchParams.get('checkEmail');
+  const suspended = searchParams.get('suspended');
   const emailHint = searchParams.get('email');
   const redirectTo = searchParams.get('redirect') || '/dashboard';
   const verifyReason = searchParams.get('reason');
@@ -95,20 +96,22 @@ export function LoginPage() {
                 : `${oauthProviderLabel} sign-in failed. Please try again.`
     : null;
 
-  const notice = oauthErrorText
-    ? { type: 'error' as const, text: oauthErrorText }
-    : verified === '1'
-      ? { type: 'success' as const, text: 'Email verified. You can sign in now.' }
-      : checkEmail === '1'
-        ? {
-          type: 'info' as const,
-          text: `Check your inbox${emailHint ? ` (${emailHint})` : ''} for a verification link.`,
-        }
-        : verifyReason === 'expired_token'
-          ? { type: 'error' as const, text: 'Verification link expired. Please request a new verification email.' }
-          : verifyReason === 'invalid_token'
-            ? { type: 'error' as const, text: 'Verification link is invalid. Please request a new one.' }
-            : null;
+  const notice = suspended === '1'
+    ? { type: 'error' as const, text: 'Your account has been suspended. Please contact support.' }
+    : oauthErrorText
+      ? { type: 'error' as const, text: oauthErrorText }
+      : verified === '1'
+        ? { type: 'success' as const, text: 'Email verified. You can sign in now.' }
+        : checkEmail === '1'
+          ? {
+            type: 'info' as const,
+            text: `Check your inbox${emailHint ? ` (${emailHint})` : ''} for a verification link.`,
+          }
+          : verifyReason === 'expired_token'
+            ? { type: 'error' as const, text: 'Verification link expired. Please request a new verification email.' }
+            : verifyReason === 'invalid_token'
+              ? { type: 'error' as const, text: 'Verification link is invalid. Please request a new one.' }
+              : null;
 
   const startOAuth = async (provider: 'google' | 'github') => {
     setOauthLoadingProvider(provider);
