@@ -778,10 +778,13 @@ export function SpeedMeterPrototypePage() {
 
         // Prefer Doppler speed from the chipset. If the device doesn't expose it
         // (desktop browsers, some older Android devices), fall back to the
-        // position-delta computed speed so the display still responds to movement.
-        const effectiveSpeedMps = speedMps > 0 ? speedMps : computedSpeedMps;
+        // position-delta computed speed — but only when it is within physical limits.
+        // Bug fix: computedSpeedMps has no cap (distance gate allows 40 m / 0.3 s = 133 m/s).
+        // We reject computed speed above MAX_EXPECTED_SPEED_MPS to avoid spikes.
+        const safeComputedFallback = computedSpeedMps <= MAX_EXPECTED_SPEED_MPS ? computedSpeedMps : 0;
+        const effectiveSpeedMps = speedMps > 0 ? speedMps : safeComputedFallback;
         const speedSource: SpeedSample['speedSource'] =
-          speedMps > 0 ? 'gps_doppler' : computedSpeedMps > 0 ? 'computed' : 'zero';
+          speedMps > 0 ? 'gps_doppler' : safeComputedFallback > 0 ? 'computed' : 'zero';
 
         const fuelPriceNumber = Number.parseFloat(fuelPrice) || DEFAULT_FUEL_PRICE[fuelType];
         const profile = pickVehicleProfile(vehicleType, fuelType);
@@ -801,14 +804,20 @@ export function SpeedMeterPrototypePage() {
         // proportional even though indoors accuracy is inherently worse.
         const accuracyPenalty = clamp(accuracyMeters / accuracyThreshold, 1, 3);
 
-        let processNoise =
-          measurementDelta >= modeConfig.adaptiveQDeltaMps
-            ? modeConfig.fastKalmanQ
-            : modeConfig.baseKalmanQ;
+        // Bug fix: the old logic used fastKalmanQ whenever measurementDelta was large,
+        // which means spikes were TRUSTED more (higher Kalman gain). We now check the
+        // implied acceleration: if the speed jump is physically implausible (> 4 m/s²
+        // for a road vehicle), treat it as a spike and use baseKalmanQ to dampen it.
+        const MAX_PLAUSIBLE_ACCEL_MPS2 = 4;
+        const impliedAccelMps2 = measurementDelta / Math.max(deltaTimeSec, 0.1);
+        const isPlausibleChange =
+          measurementDelta >= modeConfig.adaptiveQDeltaMps &&
+          impliedAccelMps2 <= MAX_PLAUSIBLE_ACCEL_MPS2;
 
-        // When GPS is noisy, raise R (trust measurement less) by scaling Q down.
-        // Lower Q relative to R means Kalman gain falls → filter ignores the noisy
-        // measurement more and sticks closer to its prediction.
+        let processNoise = isPlausibleChange ? modeConfig.fastKalmanQ : modeConfig.baseKalmanQ;
+
+        // When GPS is noisy, scale Q down further so Kalman gain falls and the filter
+        // ignores the noisy measurement more, sticking closer to its own prediction.
         processNoise = processNoise / accuracyPenalty;
 
         kalmanRef.current = kalmanUpdate(kalmanRef.current, effectiveSpeedMps, processNoise);
