@@ -1,5 +1,5 @@
 import { Outlet, Link, useLocation } from 'react-router';
-import { Navigation, MapPin, BarChart3, Route, LogOut, UserRound, Gauge, Shield, Info } from 'lucide-react';
+import { Navigation, MapPin, BarChart3, Route, LogOut, UserRound, Gauge, Shield } from 'lucide-react';
 import { motion, useScroll } from 'motion/react';
 import { useState, useEffect } from 'react';
 import { useAuth, type AuthUser } from '../auth';
@@ -52,9 +52,6 @@ export function Layout() {
 
             {!isLanding && (
               <div className="hidden md:flex items-center space-x-1">
-                <NavLink to="/about" icon={<Info className="w-4 h-4" />}>
-                  About
-                </NavLink>
                 <NavLink to="/dashboard" icon={<MapPin className="w-4 h-4" />}>
                   Dashboard
                 </NavLink>
@@ -127,9 +124,6 @@ export function Layout() {
         {!isLanding && (
           <div className="md:hidden border-t border-slate-200 bg-white">
             <div className="flex justify-around py-2">
-              <MobileNavLink to="/about" icon={<Info className="w-5 h-5" />}>
-                About
-              </MobileNavLink>
               <MobileNavLink to="/dashboard" icon={<MapPin className="w-5 h-5" />}>
                 Dashboard
               </MobileNavLink>

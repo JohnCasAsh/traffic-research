@@ -4,6 +4,7 @@ import {
   Camera,
   House,
   ImagePlus,
+  Info,
   KeyRound,
   Mail,
   MapPinned,
@@ -13,6 +14,7 @@ import {
   UserRound,
   X,
 } from 'lucide-react';
+import { Link } from 'react-router';
 import { API_URL, buildAuthHeaders } from '../api';
 import { createEmptyAddress, useAuth, type UserAddress } from '../auth';
 import { AssistantPanel } from './AssistantPanel';
@@ -763,6 +765,25 @@ export function ProfilePage() {
                 </div>
               )}
             </motion.form>
+
+            <motion.div
+              initial={{ opacity: 0, y: 18 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.2 }}
+            >
+              <Link
+                to="/about"
+                className="flex items-center gap-4 rounded-[1.5rem] border border-slate-200 bg-white p-6 shadow-sm hover:border-teal-300 hover:shadow-md transition-all group"
+              >
+                <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-teal-50 text-teal-600 border border-teal-100 group-hover:bg-teal-100 transition">
+                  <Info className="h-5 w-5" />
+                </div>
+                <div>
+                  <h2 className="text-base font-semibold text-slate-900 group-hover:text-teal-700 transition">About SmartRoute</h2>
+                  <p className="text-sm text-slate-500">Research overview, algorithm, and tech stack</p>
+                </div>
+              </Link>
+            </motion.div>
           </div>
         </div>
       </div>
