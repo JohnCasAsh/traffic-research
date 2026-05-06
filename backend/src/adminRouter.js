@@ -84,6 +84,20 @@ adminRouter.delete('/users/:id', requireAuth, requireAdmin, async (req, res) => 
   }
 });
 
+// POST /api/admin/users/:id/make-admin
+adminRouter.post('/users/:id/make-admin', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const target = await db.getUserById(req.params.id);
+    if (!target) return res.status(404).json({ error: 'User not found.' });
+    if (target.role === 'admin') return res.status(400).json({ error: 'User is already an admin.' });
+    await db.updateUserProfile(req.params.id, { role: 'admin' });
+    res.json({ message: 'User promoted to admin.' });
+  } catch (err) {
+    console.error('Make admin error:', err);
+    res.status(500).json({ error: 'Failed to promote user.' });
+  }
+});
+
 // GET /api/admin/logins — recent login events
 adminRouter.get('/logins', requireAuth, requireAdmin, async (req, res) => {
   try {

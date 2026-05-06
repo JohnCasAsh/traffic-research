@@ -1,6 +1,6 @@
 import { Link, useNavigate } from 'react-router';
 import { motion } from 'motion/react';
-import { Navigation, Mail, Lock, User, ArrowRight, Car, FlaskConical, Building } from 'lucide-react';
+import { Navigation, Mail, Lock, User, ArrowRight, Car, FlaskConical } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { API_URL } from '../api';
 import { useAuth } from '../auth';
@@ -10,7 +10,7 @@ export function SignUpPage() {
   const { isAuthenticated } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
-  const [role, setRole] = useState<'driver' | 'researcher' | 'admin'>('driver');
+  const [role, setRole] = useState<'driver' | 'researcher'>('driver');
   const [form, setForm] = useState({ firstName: '', lastName: '', email: '', password: '' });
   const [confirmPassword, setConfirmPassword] = useState('');
 
@@ -139,13 +139,13 @@ export function SignUpPage() {
             {/* Role Selection */}
             <div className="space-y-3">
               <label className="block text-sm font-medium text-slate-700">I am a...</label>
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-2 gap-3">
                 <button
                   type="button"
                   onClick={() => setRole('driver')}
                   className={`flex flex-col items-center justify-center p-3 rounded-xl border-2 transition-all ${
-                    role === 'driver' 
-                      ? 'border-teal-500 bg-teal-50 text-teal-700' 
+                    role === 'driver'
+                      ? 'border-teal-500 bg-teal-50 text-teal-700'
                       : 'border-slate-200 hover:border-slate-300 text-slate-600'
                   }`}
                 >
@@ -156,25 +156,13 @@ export function SignUpPage() {
                   type="button"
                   onClick={() => setRole('researcher')}
                   className={`flex flex-col items-center justify-center p-3 rounded-xl border-2 transition-all ${
-                    role === 'researcher' 
-                      ? 'border-blue-500 bg-blue-50 text-blue-700' 
+                    role === 'researcher'
+                      ? 'border-blue-500 bg-blue-50 text-blue-700'
                       : 'border-slate-200 hover:border-slate-300 text-slate-600'
                   }`}
                 >
                   <FlaskConical className={`w-6 h-6 mb-2 ${role === 'researcher' ? 'text-blue-600' : 'text-slate-400'}`} />
                   <span className="text-xs font-semibold">Researcher</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setRole('admin')}
-                  className={`flex flex-col items-center justify-center p-3 rounded-xl border-2 transition-all ${
-                    role === 'admin' 
-                      ? 'border-purple-500 bg-purple-50 text-purple-700' 
-                      : 'border-slate-200 hover:border-slate-300 text-slate-600'
-                  }`}
-                >
-                  <Building className={`w-6 h-6 mb-2 ${role === 'admin' ? 'text-purple-600' : 'text-slate-400'}`} />
-                  <span className="text-xs font-semibold">Admin</span>
                 </button>
               </div>
             </div>

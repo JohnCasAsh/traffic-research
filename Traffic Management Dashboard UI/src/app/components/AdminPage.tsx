@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Shield, Users, LogIn, RefreshCw, Clock, Wifi, Ban, Trash2, CheckCircle } from 'lucide-react';
+import { Shield, Users, LogIn, RefreshCw, Clock, Wifi, Ban, Trash2, CheckCircle, ShieldCheck } from 'lucide-react';
 import { useAuth } from '../auth';
 import { API_URL, buildAuthHeaders } from '../api';
 
@@ -78,6 +78,20 @@ export function AdminPage() {
         headers: buildAuthHeaders(token),
       });
       if (res.ok) setUsers(prev => prev.map(x => x.id === u.id ? { ...x, banned: !u.banned } : x));
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleMakeAdmin = async (u: UserRow) => {
+    if (!token) return;
+    setActionLoading(`make-admin-${u.id}`);
+    try {
+      const res = await fetch(`${API_URL}/api/admin/users/${u.id}/make-admin`, {
+        method: 'POST',
+        headers: buildAuthHeaders(token),
+      });
+      if (res.ok) setUsers(prev => prev.map(x => x.id === u.id ? { ...x, role: 'admin' } : x));
     } finally {
       setActionLoading(null);
     }
@@ -267,6 +281,7 @@ export function AdminPage() {
                       const isAdmin = u.role === 'admin';
                       const banKey = `${u.banned ? 'unban' : 'ban'}-${u.id}`;
                       const deleteKey = `delete-${u.id}`;
+                      const makeAdminKey = `make-admin-${u.id}`;
                       return (
                         <tr key={u.id} className={`hover:bg-slate-50 transition ${u.banned ? 'opacity-60' : ''}`}>
                           <td className="px-6 py-3 font-medium text-slate-800">
@@ -315,6 +330,16 @@ export function AdminPage() {
                                   <Ban className="w-3 h-3" />
                                   {u.banned ? 'Unban' : 'Ban'}
                                 </button>
+                                {!u.banned && (
+                                  <button
+                                    onClick={() => handleMakeAdmin(u)}
+                                    disabled={actionLoading === makeAdminKey}
+                                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium bg-purple-50 text-purple-700 hover:bg-purple-100 transition disabled:opacity-50"
+                                  >
+                                    <ShieldCheck className="w-3 h-3" />
+                                    Make Admin
+                                  </button>
+                                )}
                                 <button
                                   onClick={() => setConfirmDelete(u)}
                                   disabled={actionLoading === deleteKey}
