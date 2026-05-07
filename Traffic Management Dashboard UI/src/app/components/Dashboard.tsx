@@ -17,6 +17,12 @@ const MAPS_API_KEY = (
     ?.VITE_GOOGLE_MAPS_API_KEY || ''
 ).trim();
 
+// Configure the loader once at module level — before any importLibrary call.
+// Calling setOptions after importLibrary has started throws and breaks the map.
+if (MAPS_API_KEY) {
+  setOptions({ apiKey: MAPS_API_KEY, version: 'beta' });
+}
+
 type Prediction = { id: string; main: string; secondary: string; description: string };
 
 function PlaceAutocompleteInput({
@@ -35,7 +41,6 @@ function PlaceAutocompleteInput({
 
   useEffect(() => {
     if (!MAPS_API_KEY) return;
-    setOptions({ apiKey: MAPS_API_KEY, version: 'beta' });
     importLibrary('places')
       .then((lib: any) => { serviceRef.current = new lib.AutocompleteService(); })
       .catch(() => {});
