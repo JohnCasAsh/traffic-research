@@ -209,6 +209,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => clearInterval(interval);
   }, [token, refreshProfile]);
 
+  // When the device comes back online (GPS users often drive with no data signal),
+  // immediately re-verify the session so the UI reflects the correct auth state
+  // without waiting up to 5 minutes for the next scheduled poll.
+  useEffect(() => {
+    if (!token) return;
+    const handleOnline = () => refreshProfile();
+    window.addEventListener('online', handleOnline);
+    return () => window.removeEventListener('online', handleOnline);
+  }, [token, refreshProfile]);
+
   useEffect(() => {
     const handleStorage = (event: StorageEvent) => {
       if (
