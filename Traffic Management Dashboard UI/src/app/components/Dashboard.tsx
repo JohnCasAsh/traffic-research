@@ -20,7 +20,7 @@ const MAPS_API_KEY = (
 // Configure the loader once at module level — before any importLibrary call.
 // Calling setOptions after importLibrary has started throws and breaks the map.
 if (MAPS_API_KEY) {
-  setOptions({ apiKey: MAPS_API_KEY, version: 'beta' });
+  setOptions({ key: MAPS_API_KEY, v: 'weekly' });
 }
 
 type Prediction = { id: string; main: string; secondary: string; description: string };
