@@ -520,7 +520,7 @@ export function DashboardMap({
   const currentLocationMarkerRef = useRef<any>(null);
   const lastAcceptedLocationRef = useRef<{ lat: number; lng: number; accuracy: number } | null>(null);
 
-  const [isMapActivated, setIsMapActivated] = useState(false);
+  const [isMapActivated, setIsMapActivated] = useState(true);
   const [mapReady, setMapReady] = useState(false);
   const [configurationError, setConfigurationError] = useState<string | null>(null);
   const [routeError, setRouteError] = useState<string | null>(null);

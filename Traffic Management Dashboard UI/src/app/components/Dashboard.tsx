@@ -1,13 +1,119 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router';
 import { motion } from 'motion/react';
 import { MapPin, Navigation, Fuel, DollarSign, Car, Zap, Settings, Info, X, AlertCircle, ArrowUpDown, Bookmark, Trash2, ChevronRight } from 'lucide-react';
+import { importLibrary, setOptions } from '@googlemaps/js-api-loader';
 import { DashboardMap } from './DashboardMap';
 import { AssistantPanel } from './AssistantPanel';
 import { useLocationConsent } from '../LocationConsentContext';
 import { formatLocationAccuracy } from '../location';
 import { useAuth } from '../auth';
 import { API_URL, buildAuthHeaders } from '../api';
+
+const SAVED_ROUTES_CACHE_KEY = 'smartroute:saved-routes-cache';
+
+const MAPS_API_KEY = (
+  (import.meta as ImportMeta & { env?: { VITE_GOOGLE_MAPS_API_KEY?: string } }).env
+    ?.VITE_GOOGLE_MAPS_API_KEY || ''
+).trim();
+
+type Prediction = { id: string; main: string; secondary: string; description: string };
+
+function PlaceAutocompleteInput({
+  value, onChange, placeholder, required,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  placeholder: string;
+  required?: boolean;
+}) {
+  const [predictions, setPredictions] = useState<Prediction[]>([]);
+  const [open, setOpen] = useState(false);
+  const serviceRef = useRef<any>(null);
+  const debounceRef = useRef<ReturnType<typeof setTimeout>>();
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!MAPS_API_KEY) return;
+    setOptions({ apiKey: MAPS_API_KEY, version: 'beta' });
+    importLibrary('places')
+      .then((lib: any) => { serviceRef.current = new lib.AutocompleteService(); })
+      .catch(() => {});
+  }, []);
+
+  const fetchPredictions = (input: string) => {
+    if (!serviceRef.current || input.length < 2) {
+      setPredictions([]); setOpen(false); return;
+    }
+    serviceRef.current.getPlacePredictions(
+      {
+        input,
+        componentRestrictions: { country: 'ph' },
+        locationBias: { center: { lat: 17.6132, lng: 121.7270 }, radius: 80000 },
+      },
+      (results: any[], status: string) => {
+        if (status === 'OK' && results) {
+          setPredictions(results.slice(0, 5).map(r => ({
+            id: r.place_id,
+            main: r.structured_formatting?.main_text || r.description,
+            secondary: r.structured_formatting?.secondary_text || '',
+            description: r.description,
+          })));
+          setOpen(true);
+        } else {
+          setPredictions([]); setOpen(false);
+        }
+      }
+    );
+  };
+
+  const handleInput = (text: string) => {
+    onChange(text);
+    clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => fetchPredictions(text), 300);
+  };
+
+  const handleSelect = (desc: string) => {
+    onChange(desc); setPredictions([]); setOpen(false);
+  };
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  return (
+    <div ref={containerRef} className="relative">
+      <input
+        type="text"
+        value={value}
+        onChange={e => handleInput(e.target.value)}
+        placeholder={placeholder}
+        required={required}
+        autoComplete="off"
+        className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-all"
+      />
+      {open && predictions.length > 0 && (
+        <div className="absolute z-50 left-0 right-0 top-full mt-1 bg-white border border-slate-200 rounded-xl shadow-xl overflow-hidden">
+          {predictions.map(p => (
+            <button
+              key={p.id}
+              type="button"
+              onMouseDown={() => handleSelect(p.description)}
+              className="w-full text-left px-4 py-2.5 hover:bg-teal-50 border-b border-slate-100 last:border-0 transition-colors"
+            >
+              <div className="text-sm font-medium text-slate-800 truncate">{p.main}</div>
+              {p.secondary && <div className="text-xs text-slate-400 mt-0.5 truncate">{p.secondary}</div>}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 const VEHICLE_DEFAULTS: Record<string, { fuelType: string; fuelPrice: string }> = {
   motorcycle:  { fuelType: 'gasoline', fuelPrice: '62.00' },
@@ -54,15 +160,24 @@ export function Dashboard() {
   }, [token]);
 
   type SavedRoute = { id: string; label: string; origin: string; destination: string; vehicle_type: string; fuel_type: string; fuel_price: string; saved_at: string };
-  const [savedRoutes, setSavedRoutes] = useState<SavedRoute[]>([]);
+  const [savedRoutes, setSavedRoutes] = useState<SavedRoute[]>(() => {
+    try {
+      const cached = localStorage.getItem(SAVED_ROUTES_CACHE_KEY);
+      return cached ? (JSON.parse(cached) as SavedRoute[]) : [];
+    } catch { return []; }
+  });
   const [deletingRouteId, setDeletingRouteId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!token) return;
     fetch(`${API_URL}/api/saved-routes`, { headers: buildAuthHeaders(token) })
       .then(r => r.ok ? r.json() : Promise.reject())
-      .then(data => setSavedRoutes(data.routes || []))
-      .catch(() => setSavedRoutes([]));
+      .then(data => {
+        const routes: SavedRoute[] = data.routes || [];
+        setSavedRoutes(routes);
+        localStorage.setItem(SAVED_ROUTES_CACHE_KEY, JSON.stringify(routes));
+      })
+      .catch(() => {});
   }, [token]);
 
   const handleLoadSavedRoute = (r: SavedRoute) => {
@@ -176,164 +291,132 @@ export function Dashboard() {
             transition={{ delay: 0.2 }}
             className="lg:col-span-1"
           >
-            <form onSubmit={handleSubmit} className="space-y-4">
-              {/* Origin */}
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.3 }}
-                whileHover={{ scale: 1.02 }}
-                className="bg-white rounded-xl p-6 shadow-sm border border-slate-200"
-              >
-                <div className="flex items-center justify-between mb-3">
-                  <label className="flex items-center space-x-2 text-sm font-medium text-slate-700">
-                    <MapPin className="w-4 h-4 text-teal-600" />
-                    <span>Origin Location</span>
-                  </label>
+            <form onSubmit={handleSubmit} className="space-y-3">
+              {/* Origin + Destination in one card */}
+              <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-visible">
+                {/* Origin */}
+                <div className="px-4 pt-4 pb-3">
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                      <MapPin className="w-3.5 h-3.5 text-teal-500" />
+                      From
+                    </label>
+                    <button
+                      type="button"
+                      onClick={handleUseCurrentLocation}
+                      className="text-xs text-teal-600 hover:text-teal-700 font-medium flex items-center gap-1"
+                    >
+                      <Navigation className="w-3 h-3" /> Use GPS
+                    </button>
+                  </div>
+                  <PlaceAutocompleteInput
+                    value={formData.origin}
+                    onChange={(v) => { setOriginLocationStatus(null); handleChange('origin', v); }}
+                    placeholder="Enter starting location"
+                    required
+                  />
+                  {originLocationStatus && (
+                    <p className="text-xs mt-1.5 text-slate-500">{originLocationStatus}</p>
+                  )}
+                </div>
+
+                {/* Swap divider */}
+                <div className="flex items-center gap-2 px-4 py-1 border-y border-slate-100">
+                  <div className="flex-1 h-px bg-slate-100" />
                   <button
                     type="button"
-                    onClick={handleUseCurrentLocation}
-                    className="text-xs text-teal-600 hover:text-teal-700 font-medium flex items-center"
+                    onClick={handleSwapLocations}
+                    className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-500 hover:bg-slate-50 hover:text-slate-700 transition-colors"
                   >
-                    <Navigation className="w-3 h-3 mr-1" /> Use from tracking
+                    <ArrowUpDown className="h-3 w-3" />
+                    Swap
                   </button>
+                  <div className="flex-1 h-px bg-slate-100" />
                 </div>
-                <input
-                  type="text"
-                  value={formData.origin}
-                  onChange={(e) => {
-                    setOriginLocationStatus(null);
-                    handleChange('origin', e.target.value);
-                  }}
-                  placeholder="Enter starting location"
-                  className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-all"
-                  required
-                />
-                {originLocationStatus && (
-                  <p className="text-xs mt-2 text-slate-600">{originLocationStatus}</p>
-                )}
-              </motion.div>
 
-              <div className="flex justify-center -my-1">
-                <button
-                  type="button"
-                  onClick={handleSwapLocations}
-                  className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50"
-                  title="Swap origin and destination"
-                >
-                  <ArrowUpDown className="h-3.5 w-3.5" />
-                  Swap A/B
-                </button>
+                {/* Destination */}
+                <div className="px-4 pt-3 pb-4">
+                  <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">
+                    <Navigation className="w-3.5 h-3.5 text-blue-500" />
+                    To
+                  </label>
+                  <PlaceAutocompleteInput
+                    value={formData.destination}
+                    onChange={(v) => handleChange('destination', v)}
+                    placeholder="Enter destination"
+                    required
+                  />
+                </div>
               </div>
 
-              {/* Destination */}
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.4 }}
-                whileHover={{ scale: 1.02 }}
-                className="bg-white rounded-xl p-6 shadow-sm border border-slate-200"
-              >
-                <label className="flex items-center space-x-2 text-sm font-medium text-slate-700 mb-3">
-                  <Navigation className="w-4 h-4 text-blue-600" />
-                  <span>Destination Location</span>
-                </label>
-                <input
-                  type="text"
-                  value={formData.destination}
-                  onChange={(e) => handleChange('destination', e.target.value)}
-                  placeholder="Enter destination"
-                  className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-all"
-                  required
-                />
-              </motion.div>
-
-              {/* Vehicle Type */}
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.5 }}
-                whileHover={{ scale: 1.02 }}
-                className="bg-white rounded-xl p-6 shadow-sm border border-slate-200"
-              >
-                <label className="flex items-center space-x-2 text-sm font-medium text-slate-700 mb-3">
-                  <Car className="w-4 h-4 text-slate-600" />
-                  <span>Vehicle Type</span>
-                </label>
-                <select
-                  value={formData.vehicleType}
-                  onChange={(e) => handleVehicleChange(e.target.value)}
-                  className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent bg-white transition-all"
-                >
-                  <optgroup label="ICE Vehicles">
-                    <option value="motorcycle">Motorcycle</option>
-                    <option value="tricycle">Tricycle</option>
-                    <option value="sedan">Sedan / Private Car</option>
-                    <option value="van">Van</option>
-                    <option value="bus">Bus</option>
-                  </optgroup>
-                  <optgroup label="HEV Vehicles">
-                    <option value="hybrid_car">Hybrid Car</option>
-                    <option value="hybrid_van">Hybrid Van</option>
-                  </optgroup>
-                  <optgroup label="BEV Vehicles">
-                    <option value="e_trike">E-Trike</option>
-                    <option value="e_motorcycle">E-Motorcycle</option>
-                  </optgroup>
-                </select>
-              </motion.div>
-
-              {/* Fuel Type */}
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.6 }}
-                whileHover={{ scale: 1.02 }}
-                className="bg-white rounded-xl p-6 shadow-sm border border-slate-200"
-              >
-                <label className="flex items-center space-x-2 text-sm font-medium text-slate-700 mb-3">
-                  <Fuel className="w-4 h-4 text-orange-600" />
-                  <span>Fuel Type</span>
-                </label>
-                <select
-                  value={formData.fuelType}
-                  onChange={(e) => handleChange('fuelType', e.target.value)}
-                  className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent bg-white transition-all"
-                >
-                  <option value="gasoline">Gasoline</option>
-                  <option value="diesel">Diesel</option>
-                  <option value="electric">Electric</option>
-                </select>
-              </motion.div>
+              {/* Vehicle + Fuel in one compact row */}
+              <div className="bg-white rounded-xl shadow-sm border border-slate-200 px-4 py-3 grid grid-cols-2 gap-3">
+                <div>
+                  <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">
+                    <Car className="w-3.5 h-3.5 text-slate-500" />
+                    Vehicle
+                  </label>
+                  <select
+                    value={formData.vehicleType}
+                    onChange={(e) => handleVehicleChange(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent bg-white"
+                  >
+                    <optgroup label="ICE">
+                      <option value="motorcycle">Motorcycle</option>
+                      <option value="tricycle">Tricycle</option>
+                      <option value="sedan">Sedan / Car</option>
+                      <option value="van">Van</option>
+                      <option value="bus">Bus</option>
+                    </optgroup>
+                    <optgroup label="Hybrid">
+                      <option value="hybrid_car">Hybrid Car</option>
+                      <option value="hybrid_van">Hybrid Van</option>
+                    </optgroup>
+                    <optgroup label="Electric">
+                      <option value="e_trike">E-Trike</option>
+                      <option value="e_motorcycle">E-Motorcycle</option>
+                    </optgroup>
+                  </select>
+                </div>
+                <div>
+                  <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">
+                    <Fuel className="w-3.5 h-3.5 text-orange-500" />
+                    Fuel
+                  </label>
+                  <select
+                    value={formData.fuelType}
+                    onChange={(e) => handleChange('fuelType', e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent bg-white"
+                  >
+                    <option value="gasoline">Gasoline</option>
+                    <option value="diesel">Diesel</option>
+                    <option value="electric">Electric</option>
+                  </select>
+                </div>
+              </div>
 
               {/* Fuel Price */}
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.7 }}
-                whileHover={{ scale: 1.02 }}
-                className="bg-white rounded-xl p-6 shadow-sm border border-slate-200"
-              >
-                <label className="flex items-center space-x-2 text-sm font-medium text-slate-700 mb-3">
-                  <DollarSign className="w-4 h-4 text-green-600" />
-                  <span>Fuel/Energy Price (per unit)</span>
+              <div className="bg-white rounded-xl shadow-sm border border-slate-200 px-4 py-3">
+                <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">
+                  <DollarSign className="w-3.5 h-3.5 text-green-500" />
+                  {formData.fuelType === 'electric' ? 'Energy Price / kWh' : 'Fuel Price / Liter'}
                 </label>
                 <div className="relative">
-                  <span className="absolute left-4 top-3 text-slate-500">₱</span>
+                  <span className="absolute left-3 top-2.5 text-slate-400 text-sm">₱</span>
                   <input
                     type="number"
                     step="0.01"
                     value={formData.fuelPrice}
                     onChange={(e) => handleChange('fuelPrice', e.target.value)}
                     placeholder="62.00"
-                    className="w-full pl-8 pr-4 py-3 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-all"
+                    className="w-full pl-7 pr-4 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
                     required
                   />
                 </div>
-                <p className="text-xs text-slate-500 mt-2">
-                  {formData.fuelType === 'electric' ? 'Price per kWh (local utility rate)' : 'Price per liter (DOE Region II)'}
+                <p className="text-xs text-slate-400 mt-1">
+                  {formData.fuelType === 'electric' ? 'Local utility rate' : 'DOE Region II reference price'}
                 </p>
-              </motion.div>
+              </div>
 
               {/* Analyze Button */}
               <motion.button
@@ -341,14 +424,11 @@ export function Dashboard() {
                 disabled={isAnalyzing}
                 whileHover={{ scale: isAnalyzing ? 1 : 1.02 }}
                 whileTap={{ scale: isAnalyzing ? 1 : 0.98 }}
-                className="w-full bg-gradient-to-r from-teal-500 to-blue-600 text-white py-4 rounded-xl font-medium hover:shadow-lg transition-all flex items-center justify-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full bg-gradient-to-r from-teal-500 to-blue-600 text-white py-3.5 rounded-xl font-semibold hover:shadow-lg transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isAnalyzing ? (
                   <>
-                    <motion.div
-                      animate={{ rotate: 360 }}
-                      transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
-                    >
+                    <motion.div animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}>
                       <Settings className="w-5 h-5" />
                     </motion.div>
                     <span>Analyzing Routes...</span>
@@ -360,28 +440,19 @@ export function Dashboard() {
                   </>
                 )}
               </motion.button>
-              
-              <div className="flex gap-3 pt-2">
-                <button 
-                  type="button" 
-                  title={consent.isConsented ? 'Stop sharing your live location' : 'Share your live location with the app'}
-                  onClick={() => {
-                    if (!consent.isConsented) {
-                      setShowPrivacyModal(true);
-                    } else {
-                      setConsent(false);
-                    }
-                  }}
-                  className={`flex-1 py-3 px-4 border rounded-xl text-sm font-medium flex items-center justify-center space-x-2 transition-colors ${
-                    consent.isConsented
-                      ? 'border-emerald-300 bg-emerald-50 text-emerald-700'
-                      : 'border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100'
-                  }`}
-                >
-                  <Navigation className="w-4 h-4" />
-                  <span>{consent.isConsented ? 'Tracking Live' : 'Enable Live Tracking'}</span>
-                </button>
-              </div>
+
+              <button
+                type="button"
+                onClick={() => consent.isConsented ? setConsent(false) : setShowPrivacyModal(true)}
+                className={`w-full py-2.5 px-4 border rounded-xl text-sm font-medium flex items-center justify-center gap-2 transition-colors ${
+                  consent.isConsented
+                    ? 'border-emerald-300 bg-emerald-50 text-emerald-700'
+                    : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                }`}
+              >
+                <Navigation className="w-4 h-4" />
+                {consent.isConsented ? 'Tracking Live' : 'Enable Live Tracking'}
+              </button>
             </form>
 
             {/* Saved Routes */}
