@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { importLibrary, setOptions } from '@googlemaps/js-api-loader';
+import { importLibrary } from '@googlemaps/js-api-loader';
 import { motion } from 'motion/react';
 import { MapPin } from 'lucide-react';
 import { useLocationConsent } from '../LocationConsentContext';
@@ -640,13 +640,6 @@ export function DashboardMap({
 
     async function setupMap() {
       try {
-        // Only configure the loader if the script hasn't started loading yet.
-        // If Dashboard.tsx already called setOptions at module level, skip it here
-        // to avoid the "setOptions called after importLibrary" error.
-        if (!(window as any).google?.maps && mapsApiKey) {
-          setOptions({ apiKey: mapsApiKey, version: 'beta' });
-        }
-
         await importLibrary('maps');
         await importLibrary('routes');
 
