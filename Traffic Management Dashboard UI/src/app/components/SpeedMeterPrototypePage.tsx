@@ -783,8 +783,20 @@ export function SpeedMeterPrototypePage() {
         // We reject computed speed above MAX_EXPECTED_SPEED_MPS to avoid spikes.
         const safeComputedFallback = computedSpeedMps <= MAX_EXPECTED_SPEED_MPS ? computedSpeedMps : 0;
         const effectiveSpeedMps = speedMps > 0 ? speedMps : safeComputedFallback;
+        const modeConfig = modeConfigRef.current;
+
+        // Jitter suppression: when the chipset doesn't expose Doppler speed, the
+        // position-delta computed speed is unreliable for tiny movements — the GPS
+        // coordinate wobbles even while perfectly stationary. If the position change
+        // is smaller than the GPS noise floor (scaled to current accuracy), feed zero
+        // to Kalman instead of propagating noise as velocity. This keeps the display
+        // at 0.0 km/h when the user isn't moving rather than showing phantom micro-speeds.
+        const jitterGateMeters = Math.max(modeConfig.maxNoiseGateMeters, accuracyMeters * 0.1);
+        const isPositionJitter = speedMps <= 0 && rawDistanceMeters < jitterGateMeters;
+        const kalmanInputMps = isPositionJitter ? 0 : effectiveSpeedMps;
+
         const speedSource: SpeedSample['speedSource'] =
-          speedMps > 0 ? 'gps_doppler' : safeComputedFallback > 0 ? 'computed' : 'zero';
+          speedMps > 0 ? 'gps_doppler' : (safeComputedFallback > 0 && !isPositionJitter) ? 'computed' : 'zero';
 
         const fuelPriceNumber = Number.parseFloat(fuelPrice) || DEFAULT_FUEL_PRICE[fuelType];
         const profile = pickVehicleProfile(vehicleType, fuelType);
@@ -795,8 +807,7 @@ export function SpeedMeterPrototypePage() {
         // process noise UP when accuracy is poor — meaning the filter leans harder
         // on its own prediction (more smoothing) when GPS is unreliable.
         const prevEstimate = kalmanRef.current.estimate;
-        const measurementDelta = Math.abs(effectiveSpeedMps - prevEstimate);
-        const modeConfig = modeConfigRef.current;
+        const measurementDelta = Math.abs(kalmanInputMps - prevEstimate);
 
         // accuracyPenalty: 1.0 when GPS is perfect, up to 3× when very noisy.
         // Dividing by threshold keeps it relative to what "acceptable" is for the
@@ -820,7 +831,7 @@ export function SpeedMeterPrototypePage() {
         // ignores the noisy measurement more, sticking closer to its own prediction.
         processNoise = processNoise / accuracyPenalty;
 
-        kalmanRef.current = kalmanUpdate(kalmanRef.current, effectiveSpeedMps, processNoise);
+        kalmanRef.current = kalmanUpdate(kalmanRef.current, kalmanInputMps, processNoise);
         let smoothedSpeedMps = Math.max(0, kalmanRef.current.estimate);
         const previousSmoothedSpeedMps = lastSmoothedSpeedRef.current;
         const accelerationMps2 = (smoothedSpeedMps - previousSmoothedSpeedMps) / Math.max(deltaTimeSec, 0.1);
@@ -865,8 +876,12 @@ export function SpeedMeterPrototypePage() {
         runningCostPhpRef.current = runningFuelOrEnergyRef.current * fuelPriceNumber;
 
         // Snap to zero after a short hold of near-zero speed + small movement.
-        const nearStillBySpeed = effectiveSpeedMps <= modeConfig.stillSpeedThresholdMps;
-        const nearStillByDistance = rawDistanceMeters <= modeConfig.maxNoiseGateMeters * 0.5;
+        // Use kalmanInputMps (jitter-suppressed) so phantom micro-speeds from GPS
+        // coordinate wobble don't prevent the lock from triggering at standstill.
+        // Distance threshold uses the full noise gate (not * 0.5) so jitter that
+        // slips past the gate still accumulates stop confidence correctly.
+        const nearStillBySpeed = kalmanInputMps <= modeConfig.stillSpeedThresholdMps;
+        const nearStillByDistance = rawDistanceMeters <= modeConfig.maxNoiseGateMeters;
 
         if (nearStillBySpeed && nearStillByDistance) {
           stopConfidenceRef.current += 1;
