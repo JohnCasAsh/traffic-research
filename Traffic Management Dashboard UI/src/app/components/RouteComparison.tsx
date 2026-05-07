@@ -54,6 +54,7 @@ const DEFAULT_FORM_DATA: RouteFormData = {
 
 const LAST_ANALYSIS_STORAGE_KEY = 'smartroute:last-analysis';
 const BEFORE_TRIP_STORAGE_KEY = 'smartroute:before-trip';
+const SAVED_ROUTES_CACHE_KEY = 'smartroute:saved-routes-cache';
 
 function formatFuelValue(route: RouteMetrics, fuelType: string) {
   if (fuelType === 'electric') {
@@ -184,13 +185,28 @@ export function RouteComparison() {
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error' | 'limit'>('idle');
 
   type SavedRoute = { id: string; label: string; origin: string; destination: string; vehicle_type: string; fuel_type: string; fuel_price: string };
-  const [savedRoutes, setSavedRoutes] = useState<SavedRoute[]>([]);
+  const [savedRoutes, setSavedRoutes] = useState<SavedRoute[]>(() => {
+    // Load from local cache immediately so saved routes appear even when offline.
+    try {
+      const cached = localStorage.getItem(SAVED_ROUTES_CACHE_KEY);
+      return cached ? (JSON.parse(cached) as SavedRoute[]) : [];
+    } catch {
+      return [];
+    }
+  });
   useEffect(() => {
     if (!token || locationState) return;
     fetch(`${API_URL}/api/saved-routes`, { headers: buildAuthHeaders(token) })
       .then(r => r.ok ? r.json() : Promise.reject())
-      .then(data => setSavedRoutes(data.routes || []))
-      .catch(() => {});
+      .then(data => {
+        const routes: SavedRoute[] = data.routes || [];
+        setSavedRoutes(routes);
+        // Keep cache fresh so the next offline session sees up-to-date routes.
+        localStorage.setItem(SAVED_ROUTES_CACHE_KEY, JSON.stringify(routes));
+      })
+      .catch(() => {
+        // Offline or server error — state already has the cached routes, do nothing.
+      });
   }, [token, locationState]);
 
   const handleLoadSaved = (r: SavedRoute) => {
