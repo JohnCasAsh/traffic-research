@@ -161,21 +161,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return;
       }
 
+      // Token is invalid or expired — must re-login.
+      if (response.status === 401) {
+        logout();
+        return;
+      }
+
+      // Any other server error (500, 502, network blip) — keep the user logged in.
+      // Logging out on a temporary backend hiccup would be a terrible UX.
       if (!response.ok) {
-        throw new Error('Unable to refresh session');
+        setIsInitializing(false);
+        return;
       }
 
       const payload = await response.json();
       const normalizedUser = normalizeUser(payload?.user);
       if (!normalizedUser) {
-        throw new Error('Invalid profile payload');
+        // Malformed response — treat as transient, don't logout.
+        setIsInitializing(false);
+        return;
       }
 
       localStorage.setItem(AUTH_USER_STORAGE_KEY, JSON.stringify(normalizedUser));
       setToken(activeToken);
       setUser(normalizedUser);
     } catch {
-      logout();
+      // Network error or timeout — keep the user logged in, try again next poll.
+      setIsInitializing(false);
       return;
     }
 
@@ -193,7 +205,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!token) return;
-    const interval = setInterval(refreshProfile, 30_000);
+    const interval = setInterval(refreshProfile, 5 * 60_000); // 5 min — was 30 s
     return () => clearInterval(interval);
   }, [token, refreshProfile]);
 
