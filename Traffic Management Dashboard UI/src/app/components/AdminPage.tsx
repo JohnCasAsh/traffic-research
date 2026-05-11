@@ -465,7 +465,7 @@ export function AdminPage() {
               </div>
               <div>
                 <p className="text-2xl font-bold text-slate-900">{parking.length}</p>
-                <p className="text-xs text-slate-500">Parking Spots</p>
+                <p className="text-xs text-slate-500">Map Pins</p>
               </div>
             </div>
           </div>
@@ -689,9 +689,9 @@ export function AdminPage() {
               <div className="px-6 py-4 border-b border-slate-100">
                 <h2 className="font-semibold text-slate-900 text-sm flex items-center gap-2">
                   <MapPin className="w-4 h-4 text-orange-500" />
-                  Pin a Parking Location
+                  Pin a Location
                 </h2>
-                <p className="text-xs text-slate-500 mt-1">Click anywhere on the map to drop a pin, then fill in the details below.</p>
+                <p className="text-xs text-slate-500 mt-1">Click anywhere on the map to drop a pin — parking, terminal, or gas station.</p>
               </div>
 
               {/* Map */}
@@ -705,7 +705,9 @@ export function AdminPage() {
                       {editTarget ? <Pencil className="w-4 h-4 text-blue-600" /> : <MapPin className="w-4 h-4 text-orange-600" />}
                     </div>
                     <div className="flex-1">
-                      <p className="text-xs font-semibold text-slate-700">{editTarget ? `Editing: ${editTarget.name}` : 'New pin'}</p>
+                      <p className="text-xs font-semibold text-slate-700">
+                        {editTarget ? `Editing: ${editTarget.name}` : parkingType === 'gas_station' ? 'New Gas Station' : 'New Parking / Terminal'}
+                      </p>
                       {pinLat !== null && <p className="text-xs text-slate-500 font-mono">{pinLat.toFixed(6)}, {pinLng!.toFixed(6)}</p>}
                     </div>
                     <button onClick={clearForm} className="text-slate-400 hover:text-slate-600 transition">
@@ -784,7 +786,7 @@ export function AdminPage() {
                     <button onClick={handleSaveParking} disabled={savingParking || photoCompressing}
                       className="flex items-center gap-2 px-4 py-2 rounded-lg bg-teal-600 text-white text-sm font-medium hover:bg-teal-700 transition disabled:opacity-50">
                       {editTarget ? <Pencil className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
-                      {savingParking ? 'Saving...' : editTarget ? 'Save Changes' : 'Save Spot'}
+                      {savingParking ? 'Saving...' : editTarget ? 'Save Changes' : parkingType === 'gas_station' ? 'Save Gas Station' : 'Save Parking Spot'}
                     </button>
                     <button onClick={clearForm} className="px-4 py-2 rounded-lg border border-slate-200 text-sm text-slate-600 hover:bg-white transition">
                       Cancel
@@ -800,24 +802,12 @@ export function AdminPage() {
               )}
             </div>
 
-            {/* Existing Parking List */}
-            <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
-              <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
-                <h2 className="font-semibold text-slate-900 text-sm flex items-center gap-2">
-                  <ParkingSquare className="w-4 h-4 text-teal-600" />
-                  Pinned Parking Spots ({parking.length})
-                </h2>
-                <button onClick={loadParking} disabled={parkingLoading} className="text-slate-400 hover:text-slate-600 transition">
-                  <RefreshCw className={`w-4 h-4 ${parkingLoading ? 'animate-spin' : ''}`} />
-                </button>
-              </div>
-              {parkingLoading ? (
-                <div className="p-8 text-center text-slate-400 text-sm">Loading...</div>
-              ) : parking.length === 0 ? (
-                <div className="p-8 text-center text-slate-400 text-sm">No parking spots pinned yet. Click on the map above to add one.</div>
-              ) : (
-                <div className="divide-y divide-slate-100">
-                  {parking.map((p) => (
+            {/* Pinned Locations List — split by category */}
+            {(() => {
+              const parkingSpots = parking.filter(p => p.type !== 'gas_station');
+              const gasStations = parking.filter(p => p.type === 'gas_station');
+
+              const renderItem = (p: ParkingRow) => (
                     <div key={p.id} className="flex items-start gap-3 px-6 py-4 hover:bg-slate-50 transition">
                       <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5 ${p.type === 'gas_station' ? 'bg-green-50' : 'bg-teal-50'}`}>
                         {p.type === 'gas_station'
@@ -865,10 +855,49 @@ export function AdminPage() {
                         <Trash2 className="w-4 h-4" />
                       </button>
                     </div>
-                  ))}
-                </div>
-              )}
-            </div>
+              );
+
+              return (
+                <>
+                  {/* Parking & Terminals */}
+                  <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+                    <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+                      <h2 className="font-semibold text-slate-900 text-sm flex items-center gap-2">
+                        <ParkingSquare className="w-4 h-4 text-teal-600" />
+                        Parking &amp; Terminals ({parkingSpots.length})
+                      </h2>
+                      <button onClick={loadParking} disabled={parkingLoading} className="text-slate-400 hover:text-slate-600 transition">
+                        <RefreshCw className={`w-4 h-4 ${parkingLoading ? 'animate-spin' : ''}`} />
+                      </button>
+                    </div>
+                    {parkingLoading ? (
+                      <div className="p-8 text-center text-slate-400 text-sm">Loading...</div>
+                    ) : parkingSpots.length === 0 ? (
+                      <div className="p-8 text-center text-slate-400 text-sm">No parking spots pinned yet. Click on the map to add one.</div>
+                    ) : (
+                      <div className="divide-y divide-slate-100">{parkingSpots.map(renderItem)}</div>
+                    )}
+                  </div>
+
+                  {/* Gas Stations — Drivers only */}
+                  <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+                    <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+                      <h2 className="font-semibold text-slate-900 text-sm flex items-center gap-2">
+                        <Fuel className="w-4 h-4 text-green-600" />
+                        Gas Stations — For Drivers ({gasStations.length})
+                      </h2>
+                    </div>
+                    {parkingLoading ? (
+                      <div className="p-8 text-center text-slate-400 text-sm">Loading...</div>
+                    ) : gasStations.length === 0 ? (
+                      <div className="p-8 text-center text-slate-400 text-sm">No gas stations pinned yet. Select "Gas Station" type and click the map.</div>
+                    ) : (
+                      <div className="divide-y divide-slate-100">{gasStations.map(renderItem)}</div>
+                    )}
+                  </div>
+                </>
+              );
+            })()}
           </div>
         )}
       </div>
