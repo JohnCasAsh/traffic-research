@@ -1,7 +1,10 @@
-import { useEffect, useState } from 'react';
-import { Shield, Users, LogIn, RefreshCw, Clock, Wifi, Ban, Trash2, CheckCircle, ShieldCheck, FlaskConical } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { Shield, Users, LogIn, RefreshCw, Clock, Wifi, Ban, Trash2, CheckCircle, ShieldCheck, FlaskConical, MapPin, ParkingSquare, Plus, X } from 'lucide-react';
 import { useAuth } from '../auth';
 import { API_URL, buildAuthHeaders } from '../api';
+
+const MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string;
+const TUGUEGARAO = { lat: 17.6128, lng: 121.7270 };
 
 type UserRow = {
   id: string;
@@ -21,6 +24,36 @@ type LoginRow = {
   ip_address: string | null;
   created_at: string | null;
   user: { firstName: string; lastName: string; role: string } | null;
+};
+
+type ParkingRow = {
+  id: string;
+  name: string;
+  type: string;
+  lat: number;
+  lng: number;
+  notes: string;
+  added_at: string | null;
+};
+
+const PARKING_TYPES: { value: string; label: string }[] = [
+  { value: 'mall', label: 'Mall Parking' },
+  { value: 'street', label: 'Street Parking' },
+  { value: 'terminal', label: 'Jeepney / Tricycle Terminal' },
+  { value: 'public', label: 'Public Parking' },
+  { value: 'church', label: 'Church Parking' },
+  { value: 'school', label: 'School Parking' },
+  { value: 'other', label: 'Other' },
+];
+
+const TYPE_COLORS: Record<string, string> = {
+  mall: 'bg-blue-100 text-blue-700',
+  street: 'bg-slate-100 text-slate-700',
+  terminal: 'bg-orange-100 text-orange-700',
+  public: 'bg-teal-100 text-teal-700',
+  church: 'bg-purple-100 text-purple-700',
+  school: 'bg-green-100 text-green-700',
+  other: 'bg-slate-100 text-slate-500',
 };
 
 function formatDate(iso: string | null) {
@@ -47,9 +80,27 @@ export function AdminPage() {
   const [users, setUsers] = useState<UserRow[]>([]);
   const [logins, setLogins] = useState<LoginRow[]>([]);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState<'users' | 'logins'>('logins');
+  const [tab, setTab] = useState<'users' | 'logins' | 'parking'>('logins');
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<UserRow | null>(null);
+
+  // Parking state
+  const [parking, setParking] = useState<ParkingRow[]>([]);
+  const [parkingLoading, setParkingLoading] = useState(false);
+  const [pinLat, setPinLat] = useState<number | null>(null);
+  const [pinLng, setPinLng] = useState<number | null>(null);
+  const [parkingName, setParkingName] = useState('');
+  const [parkingType, setParkingType] = useState('mall');
+  const [parkingNotes, setParkingNotes] = useState('');
+  const [savingParking, setSavingParking] = useState(false);
+  const [parkingError, setParkingError] = useState('');
+  const [confirmDeleteParking, setConfirmDeleteParking] = useState<ParkingRow | null>(null);
+
+  const mapContainerRef = useRef<HTMLDivElement>(null);
+  const mapRef = useRef<google.maps.Map | null>(null);
+  const pinMarkerRef = useRef<google.maps.Marker | null>(null);
+  const parkingMarkersRef = useRef<google.maps.Marker[]>([]);
+  const mapInitRef = useRef(false);
 
   const load = async () => {
     if (!token) return;
@@ -66,7 +117,152 @@ export function AdminPage() {
     }
   };
 
+  const loadParking = async () => {
+    if (!token) return;
+    setParkingLoading(true);
+    try {
+      const res = await fetch(`${API_URL}/api/admin/parking`, { headers: buildAuthHeaders(token) });
+      if (res.ok) setParking((await res.json()).locations);
+    } finally {
+      setParkingLoading(false);
+    }
+  };
+
   useEffect(() => { load(); }, [token]);
+
+  useEffect(() => {
+    if (tab === 'parking') loadParking();
+  }, [tab]);
+
+  // Render parking markers on map whenever parking list or map changes
+  useEffect(() => {
+    if (!mapRef.current || tab !== 'parking') return;
+    parkingMarkersRef.current.forEach(m => m.setMap(null));
+    parkingMarkersRef.current = parking.map(p => {
+      const m = new google.maps.Marker({
+        position: { lat: p.lat, lng: p.lng },
+        map: mapRef.current!,
+        title: p.name,
+        icon: {
+          path: google.maps.SymbolPath.CIRCLE,
+          scale: 9,
+          fillColor: '#0d9488',
+          fillOpacity: 1,
+          strokeColor: '#fff',
+          strokeWeight: 2,
+        },
+      });
+      const info = new google.maps.InfoWindow({
+        content: `<div style="font-size:13px;font-weight:600">${p.name}</div><div style="font-size:11px;color:#64748b">${PARKING_TYPES.find(t => t.value === p.type)?.label || p.type}</div>`,
+      });
+      m.addListener('click', () => info.open(mapRef.current!, m));
+      return m;
+    });
+  }, [parking, tab]);
+
+  // Initialize map when parking tab is active
+  useEffect(() => {
+    if (tab !== 'parking' || mapInitRef.current || !mapContainerRef.current) return;
+    if (!window.google?.maps) {
+      // Load maps if not yet loaded
+      const script = document.createElement('script');
+      script.src = `https://maps.googleapis.com/maps/api/js?key=${MAPS_API_KEY}&libraries=maps,marker`;
+      script.async = true;
+      script.onload = () => initMap();
+      document.head.appendChild(script);
+    } else {
+      initMap();
+    }
+  }, [tab]);
+
+  function initMap() {
+    if (!mapContainerRef.current || mapInitRef.current) return;
+    mapInitRef.current = true;
+    const map = new google.maps.Map(mapContainerRef.current, {
+      center: TUGUEGARAO,
+      zoom: 15,
+      mapTypeId: 'roadmap',
+      disableDefaultUI: false,
+      zoomControl: true,
+      streetViewControl: false,
+      mapTypeControl: false,
+    });
+    mapRef.current = map;
+
+    map.addListener('click', (e: google.maps.MapMouseEvent) => {
+      if (!e.latLng) return;
+      const lat = e.latLng.lat();
+      const lng = e.latLng.lng();
+      setPinLat(lat);
+      setPinLng(lng);
+      setParkingError('');
+
+      // Move or place the draft marker
+      if (pinMarkerRef.current) {
+        pinMarkerRef.current.setPosition(e.latLng);
+      } else {
+        pinMarkerRef.current = new google.maps.Marker({
+          position: e.latLng,
+          map,
+          icon: {
+            path: google.maps.SymbolPath.CIRCLE,
+            scale: 10,
+            fillColor: '#ea580c',
+            fillOpacity: 1,
+            strokeColor: '#fff',
+            strokeWeight: 2,
+          },
+          animation: google.maps.Animation.DROP,
+        });
+      }
+    });
+  }
+
+  function clearPin() {
+    pinMarkerRef.current?.setMap(null);
+    pinMarkerRef.current = null;
+    setPinLat(null);
+    setPinLng(null);
+    setParkingName('');
+    setParkingType('mall');
+    setParkingNotes('');
+    setParkingError('');
+  }
+
+  const handleSaveParking = async () => {
+    if (!token || pinLat === null || pinLng === null) return;
+    if (!parkingName.trim()) { setParkingError('Please enter a name for this parking spot.'); return; }
+    setSavingParking(true);
+    setParkingError('');
+    try {
+      const res = await fetch(`${API_URL}/api/admin/parking`, {
+        method: 'POST',
+        headers: { ...buildAuthHeaders(token), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: parkingName.trim(), type: parkingType, lat: pinLat, lng: pinLng, notes: parkingNotes.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setParkingError(data.error || 'Failed to save.'); return; }
+      await loadParking();
+      clearPin();
+    } finally {
+      setSavingParking(false);
+    }
+  };
+
+  const handleDeleteParking = async (p: ParkingRow) => {
+    if (!token) return;
+    setActionLoading(`del-parking-${p.id}`);
+    try {
+      await fetch(`${API_URL}/api/admin/parking/${p.id}`, {
+        method: 'DELETE',
+        headers: buildAuthHeaders(token),
+      });
+      setParking(prev => prev.filter(x => x.id !== p.id));
+    } finally {
+      setActionLoading(null);
+      setConfirmDeleteParking(null);
+    }
+  };
 
   const handleBan = async (u: UserRow) => {
     if (!token) return;
@@ -152,7 +348,7 @@ export function AdminPage() {
         </div>
 
         {/* Stats */}
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-3 gap-4">
           <div className="bg-white rounded-2xl border border-slate-200 p-5">
             <div className="flex items-center gap-3">
               <div className="w-9 h-9 rounded-lg bg-teal-50 flex items-center justify-center">
@@ -175,11 +371,22 @@ export function AdminPage() {
               </div>
             </div>
           </div>
+          <div className="bg-white rounded-2xl border border-slate-200 p-5">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-lg bg-orange-50 flex items-center justify-center">
+                <ParkingSquare className="w-4 h-4 text-orange-600" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold text-slate-900">{parking.length}</p>
+                <p className="text-xs text-slate-500">Parking Spots</p>
+              </div>
+            </div>
+          </div>
         </div>
 
         {/* Tabs */}
         <div className="flex gap-2">
-          {(['logins', 'users'] as const).map((t) => (
+          {(['logins', 'users', 'parking'] as const).map((t) => (
             <button
               key={t}
               onClick={() => setTab(t)}
@@ -189,7 +396,7 @@ export function AdminPage() {
                   : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
               }`}
             >
-              {t === 'logins' ? 'Login Activity' : 'All Users'}
+              {t === 'logins' ? 'Login Activity' : t === 'users' ? 'All Users' : 'Parking Manager'}
             </button>
           ))}
         </div>
@@ -386,9 +593,153 @@ export function AdminPage() {
             )}
           </div>
         )}
+
+        {/* Parking Manager Tab */}
+        {tab === 'parking' && (
+          <div className="space-y-4">
+            {/* Map + Pin Form */}
+            <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+              <div className="px-6 py-4 border-b border-slate-100">
+                <h2 className="font-semibold text-slate-900 text-sm flex items-center gap-2">
+                  <MapPin className="w-4 h-4 text-orange-500" />
+                  Pin a Parking Location
+                </h2>
+                <p className="text-xs text-slate-500 mt-1">Click anywhere on the map to drop a pin, then fill in the details below.</p>
+              </div>
+
+              {/* Map */}
+              <div ref={mapContainerRef} className="w-full h-80" />
+
+              {/* Pin form — shown only after clicking the map */}
+              {pinLat !== null && (
+                <div className="p-5 border-t border-slate-100 bg-slate-50">
+                  <div className="flex items-start gap-3 mb-4">
+                    <div className="w-8 h-8 rounded-full bg-orange-100 flex items-center justify-center flex-shrink-0 mt-0.5">
+                      <MapPin className="w-4 h-4 text-orange-600" />
+                    </div>
+                    <div className="flex-1">
+                      <p className="text-xs font-semibold text-slate-700">Pin dropped</p>
+                      <p className="text-xs text-slate-500 font-mono">{pinLat.toFixed(6)}, {pinLng!.toFixed(6)}</p>
+                    </div>
+                    <button onClick={clearPin} className="text-slate-400 hover:text-slate-600 transition">
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-medium text-slate-700 mb-1">Parking Name *</label>
+                      <input
+                        type="text"
+                        value={parkingName}
+                        onChange={e => setParkingName(e.target.value)}
+                        placeholder="e.g. SM Center Parking"
+                        maxLength={100}
+                        className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-slate-700 mb-1">Type</label>
+                      <select
+                        value={parkingType}
+                        onChange={e => setParkingType(e.target.value)}
+                        className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white"
+                      >
+                        {PARKING_TYPES.map(t => (
+                          <option key={t.value} value={t.value}>{t.label}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="sm:col-span-2">
+                      <label className="block text-xs font-medium text-slate-700 mb-1">Notes (optional)</label>
+                      <input
+                        type="text"
+                        value={parkingNotes}
+                        onChange={e => setParkingNotes(e.target.value)}
+                        placeholder="e.g. Open 24hrs, free parking"
+                        maxLength={300}
+                        className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white"
+                      />
+                    </div>
+                  </div>
+
+                  {parkingError && (
+                    <p className="mt-2 text-xs text-red-600">{parkingError}</p>
+                  )}
+
+                  <div className="mt-4 flex gap-3">
+                    <button
+                      onClick={handleSaveParking}
+                      disabled={savingParking}
+                      className="flex items-center gap-2 px-4 py-2 rounded-lg bg-teal-600 text-white text-sm font-medium hover:bg-teal-700 transition disabled:opacity-50"
+                    >
+                      <Plus className="w-4 h-4" />
+                      {savingParking ? 'Saving...' : 'Save Parking Spot'}
+                    </button>
+                    <button onClick={clearPin} className="px-4 py-2 rounded-lg border border-slate-200 text-sm text-slate-600 hover:bg-white transition">
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {pinLat === null && (
+                <div className="p-4 text-center text-slate-400 text-xs border-t border-slate-100">
+                  Click on the map above to place a parking pin
+                </div>
+              )}
+            </div>
+
+            {/* Existing Parking List */}
+            <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+              <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+                <h2 className="font-semibold text-slate-900 text-sm flex items-center gap-2">
+                  <ParkingSquare className="w-4 h-4 text-teal-600" />
+                  Pinned Parking Spots ({parking.length})
+                </h2>
+                <button onClick={loadParking} disabled={parkingLoading} className="text-slate-400 hover:text-slate-600 transition">
+                  <RefreshCw className={`w-4 h-4 ${parkingLoading ? 'animate-spin' : ''}`} />
+                </button>
+              </div>
+              {parkingLoading ? (
+                <div className="p-8 text-center text-slate-400 text-sm">Loading...</div>
+              ) : parking.length === 0 ? (
+                <div className="p-8 text-center text-slate-400 text-sm">No parking spots pinned yet. Click on the map above to add one.</div>
+              ) : (
+                <div className="divide-y divide-slate-100">
+                  {parking.map((p) => (
+                    <div key={p.id} className="flex items-center gap-4 px-6 py-3 hover:bg-slate-50 transition">
+                      <div className="w-8 h-8 rounded-full bg-teal-50 flex items-center justify-center flex-shrink-0">
+                        <ParkingSquare className="w-4 h-4 text-teal-600" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-slate-800 truncate">{p.name}</p>
+                        <div className="flex items-center gap-2 mt-0.5">
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${TYPE_COLORS[p.type] || TYPE_COLORS.other}`}>
+                            {PARKING_TYPES.find(t => t.value === p.type)?.label || p.type}
+                          </span>
+                          <span className="text-xs text-slate-400 font-mono">{p.lat.toFixed(5)}, {p.lng.toFixed(5)}</span>
+                          {p.notes && <span className="text-xs text-slate-500 truncate max-w-[160px]">{p.notes}</span>}
+                        </div>
+                      </div>
+                      <span className="text-xs text-slate-400 flex-shrink-0">{timeAgo(p.added_at)}</span>
+                      <button
+                        onClick={() => setConfirmDeleteParking(p)}
+                        disabled={actionLoading === `del-parking-${p.id}`}
+                        className="flex-shrink-0 p-1.5 rounded-lg text-red-400 hover:bg-red-50 hover:text-red-600 transition disabled:opacity-50"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* Delete Confirmation Modal */}
+      {/* Delete User Confirmation Modal */}
       {confirmDelete && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">
           <div className="bg-white rounded-2xl shadow-xl p-6 max-w-sm w-full space-y-4">
@@ -420,6 +771,41 @@ export function AdminPage() {
                 className="flex-1 px-4 py-2 rounded-lg bg-red-600 text-white text-sm font-medium hover:bg-red-700 transition disabled:opacity-50"
               >
                 {actionLoading === `delete-${confirmDelete.id}` ? 'Deleting...' : 'Yes, Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Parking Confirmation Modal */}
+      {confirmDeleteParking && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">
+          <div className="bg-white rounded-2xl shadow-xl p-6 max-w-sm w-full space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-red-100 flex items-center justify-center">
+                <MapPin className="w-5 h-5 text-red-600" />
+              </div>
+              <div>
+                <h3 className="font-bold text-slate-900">Remove Parking Spot</h3>
+                <p className="text-xs text-slate-500">It will disappear from the commuter map</p>
+              </div>
+            </div>
+            <p className="text-sm text-slate-600">
+              Remove <span className="font-semibold text-slate-900">{confirmDeleteParking.name}</span> from the map?
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setConfirmDeleteParking(null)}
+                className="flex-1 px-4 py-2 rounded-lg border border-slate-200 text-sm text-slate-600 hover:bg-slate-50 transition"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => handleDeleteParking(confirmDeleteParking)}
+                disabled={actionLoading === `del-parking-${confirmDeleteParking.id}`}
+                className="flex-1 px-4 py-2 rounded-lg bg-red-600 text-white text-sm font-medium hover:bg-red-700 transition disabled:opacity-50"
+              >
+                {actionLoading === `del-parking-${confirmDeleteParking.id}` ? 'Removing...' : 'Yes, Remove'}
               </button>
             </div>
           </div>

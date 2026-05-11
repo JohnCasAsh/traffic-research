@@ -160,6 +160,18 @@ app.use('/api/stats', statsRouter);
 app.use('/api/admin', adminRouter);
 app.use('/api/saved-routes', savedRoutesRouter);
 
+// Public parking locations — no auth needed, commuters fetch this for the map
+app.get('/api/parking', async (req, res) => {
+  try {
+    const db = require('./src/database');
+    const locations = await db.getAllParkingLocations();
+    res.json({ locations });
+  } catch (err) {
+    console.error('Public parking error:', err);
+    res.status(500).json({ error: 'Failed to fetch parking locations.' });
+  }
+});
+
 // Health check
 app.get('/api/health', (req, res) => {
   res.json({

@@ -18,6 +18,7 @@ const COLLECTIONS = {
   users: 'users',
   pepperVersions: 'pepper_versions',
   auditLog: 'audit_log',
+  parking: 'parking_locations',
 };
 
 function loadServiceAccountFromFile(serviceAccountPath) {
@@ -482,6 +483,42 @@ async function deleteSavedRoute(userId, routeId) {
   await db.collection(COLLECTIONS.users).doc(userId).collection('saved_routes').doc(routeId).delete();
 }
 
+// ── Parking Locations ──────────────────────────────────────────────────────────
+
+async function getAllParkingLocations() {
+  await ready();
+  const db = getFirestore();
+  const snapshot = await db.collection(COLLECTIONS.parking).orderBy('added_at', 'desc').get();
+  return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+}
+
+async function addParkingLocation({ name, type, lat, lng, notes, addedBy }) {
+  await ready();
+  const db = getFirestore();
+  const doc = await db.collection(COLLECTIONS.parking).add({
+    name,
+    type,
+    lat,
+    lng,
+    notes: notes || '',
+    added_by: addedBy,
+    added_at: new Date().toISOString(),
+  });
+  return doc.id;
+}
+
+async function updateParkingLocation(id, updates) {
+  await ready();
+  const db = getFirestore();
+  await db.collection(COLLECTIONS.parking).doc(id).update(updates);
+}
+
+async function deleteParkingLocation(id) {
+  await ready();
+  const db = getFirestore();
+  await db.collection(COLLECTIONS.parking).doc(id).delete();
+}
+
 module.exports = {
   ready,
   getUserById,
@@ -511,4 +548,8 @@ module.exports = {
   getSavedRoutes,
   saveRoute,
   deleteSavedRoute,
+  getAllParkingLocations,
+  addParkingLocation,
+  updateParkingLocation,
+  deleteParkingLocation,
 };

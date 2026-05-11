@@ -519,6 +519,10 @@ export function DashboardMap({
   const livePolylinesRef = useRef<Map<string, any[]>>(new Map());
   const currentLocationMarkerRef = useRef<any>(null);
   const lastAcceptedLocationRef = useRef<{ lat: number; lng: number; accuracy: number } | null>(null);
+  const parkingMarkersRef = useRef<any[]>([]);
+
+  const [showParking, setShowParking] = useState(true);
+  const [parkingLocations, setParkingLocations] = useState<{ id: string; name: string; type: string; lat: number; lng: number; notes: string }[]>([]);
 
   const [isMapActivated, setIsMapActivated] = useState(true);
   const [mapReady, setMapReady] = useState(false);
@@ -1565,6 +1569,48 @@ export function DashboardMap({
     };
   }, [apiBaseUrl, isMapActivated, liveTrackingEnabled, localVehicleId, setCurrentLocation]);
 
+  // Fetch parking locations once on mount
+  useEffect(() => {
+    fetch(`${apiBaseUrl}/api/parking`)
+      .then(r => r.ok ? r.json() : { locations: [] })
+      .then(data => setParkingLocations(data.locations || []))
+      .catch(() => {});
+  }, [apiBaseUrl]);
+
+  // Render/clear parking markers whenever toggle or map readiness changes
+  useEffect(() => {
+    const gmaps = (window as any).google?.maps;
+    if (!gmaps || !mapRef.current) return;
+
+    parkingMarkersRef.current.forEach(m => m.setMap(null));
+    parkingMarkersRef.current = [];
+
+    if (!showParking || parkingLocations.length === 0) return;
+
+    parkingMarkersRef.current = parkingLocations.map(p => {
+      const marker = new gmaps.Marker({
+        position: { lat: p.lat, lng: p.lng },
+        map: mapRef.current,
+        title: p.name,
+        zIndex: 900,
+        icon: {
+          path: 'M -1,-1 L 1,-1 L 1,1 L -1,1 Z',
+          scale: 9,
+          fillColor: '#1d4ed8',
+          fillOpacity: 1,
+          strokeColor: '#fff',
+          strokeWeight: 1.5,
+        },
+        label: { text: 'P', color: '#fff', fontSize: '9px', fontWeight: 'bold' },
+      });
+      const infoWindow = new gmaps.InfoWindow({
+        content: `<div style="font-size:13px;font-weight:700;color:#1e293b">${p.name}</div><div style="font-size:11px;color:#64748b;margin-top:2px">${p.type.charAt(0).toUpperCase() + p.type.slice(1)} Parking${p.notes ? ' · ' + p.notes : ''}</div>`,
+      });
+      marker.addListener('click', () => infoWindow.open(mapRef.current, marker));
+      return marker;
+    });
+  }, [showParking, parkingLocations, mapReady]);
+
   const changeZoom = (delta: number) => {
     const map = mapRef.current;
     if (!map) {
@@ -1772,6 +1818,19 @@ export function DashboardMap({
             >
               <span className="text-xl">−</span>
             </motion.button>
+            {parkingLocations.length > 0 && (
+              <motion.button
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={() => setShowParking(p => !p)}
+                className={`w-10 h-10 rounded-lg shadow-md flex items-center justify-center transition-colors font-bold text-sm ${showParking ? 'bg-blue-700 text-white' : 'bg-white text-slate-500 hover:bg-slate-50'}`}
+                aria-label="Toggle parking"
+                type="button"
+                title={showParking ? 'Hide parking spots' : 'Show parking spots'}
+              >
+                P
+              </motion.button>
+            )}
             </div>
           )}
 

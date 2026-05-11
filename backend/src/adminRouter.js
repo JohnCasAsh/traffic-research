@@ -1,4 +1,5 @@
 const express = require('express');
+const { body, validationResult } = require('express-validator');
 const db = require('./database');
 const { requireAuth } = require('./auth');
 const { decryptEmail } = require('./crypto');
@@ -156,6 +157,87 @@ adminRouter.get('/logins', requireAuth, requireAdmin, async (req, res) => {
   } catch (err) {
     console.error('Admin logins error:', err);
     res.status(500).json({ error: 'Failed to fetch login logs.' });
+  }
+});
+
+// ── Parking Location Management ──────────────────────────────────────────────
+
+// GET /api/admin/parking — list all
+adminRouter.get('/parking', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const locations = await db.getAllParkingLocations();
+    res.json({ locations });
+  } catch (err) {
+    console.error('Parking list error:', err);
+    res.status(500).json({ error: 'Failed to fetch parking locations.' });
+  }
+});
+
+// POST /api/admin/parking — add new
+adminRouter.post(
+  '/parking',
+  requireAuth,
+  requireAdmin,
+  [
+    body('name').trim().notEmpty().isLength({ max: 100 }),
+    body('type').isIn(['mall', 'street', 'terminal', 'public', 'church', 'school', 'other']),
+    body('lat').isFloat({ min: 15, max: 20 }),
+    body('lng').isFloat({ min: 119, max: 127 }),
+    body('notes').optional().trim().isLength({ max: 300 }),
+  ],
+  async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) return res.status(400).json({ error: errors.array()[0].msg });
+    try {
+      const { name, type, lat, lng, notes } = req.body;
+      const id = await db.addParkingLocation({
+        name, type, lat, lng, notes,
+        addedBy: req.authUser.id,
+      });
+      res.json({ id, message: 'Parking location added.' });
+    } catch (err) {
+      console.error('Add parking error:', err);
+      res.status(500).json({ error: 'Failed to add parking location.' });
+    }
+  }
+);
+
+// PATCH /api/admin/parking/:id — update name/type/notes
+adminRouter.patch(
+  '/parking/:id',
+  requireAuth,
+  requireAdmin,
+  [
+    body('name').optional().trim().notEmpty().isLength({ max: 100 }),
+    body('type').optional().isIn(['mall', 'street', 'terminal', 'public', 'church', 'school', 'other']),
+    body('notes').optional().trim().isLength({ max: 300 }),
+  ],
+  async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) return res.status(400).json({ error: errors.array()[0].msg });
+    try {
+      const { name, type, notes } = req.body;
+      const updates = {};
+      if (name !== undefined) updates.name = name;
+      if (type !== undefined) updates.type = type;
+      if (notes !== undefined) updates.notes = notes;
+      await db.updateParkingLocation(req.params.id, updates);
+      res.json({ message: 'Parking location updated.' });
+    } catch (err) {
+      console.error('Update parking error:', err);
+      res.status(500).json({ error: 'Failed to update parking location.' });
+    }
+  }
+);
+
+// DELETE /api/admin/parking/:id
+adminRouter.delete('/parking/:id', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    await db.deleteParkingLocation(req.params.id);
+    res.json({ message: 'Parking location deleted.' });
+  } catch (err) {
+    console.error('Delete parking error:', err);
+    res.status(500).json({ error: 'Failed to delete parking location.' });
   }
 });
 
