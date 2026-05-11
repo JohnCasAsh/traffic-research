@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Shield, Users, LogIn, RefreshCw, Clock, Wifi, Ban, Trash2, CheckCircle, ShieldCheck, FlaskConical, MapPin, ParkingSquare, Plus, X } from 'lucide-react';
+import { importLibrary, setOptions } from '@googlemaps/js-api-loader';
 import { useAuth } from '../auth';
 import { API_URL, buildAuthHeaders } from '../api';
 
@@ -163,16 +164,8 @@ export function AdminPage() {
   // Initialize map when parking tab is active
   useEffect(() => {
     if (tab !== 'parking' || mapInitRef.current || !mapContainerRef.current) return;
-    if (!window.google?.maps) {
-      // Load maps if not yet loaded
-      const script = document.createElement('script');
-      script.src = `https://maps.googleapis.com/maps/api/js?key=${MAPS_API_KEY}&libraries=maps,marker`;
-      script.async = true;
-      script.onload = () => initMap();
-      document.head.appendChild(script);
-    } else {
-      initMap();
-    }
+    setOptions({ key: MAPS_API_KEY, v: 'weekly' });
+    importLibrary('maps').then(() => initMap()).catch(console.error);
   }, [tab]);
 
   function initMap() {
