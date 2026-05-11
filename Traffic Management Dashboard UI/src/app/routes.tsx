@@ -15,6 +15,9 @@ import { SpeedMeterPrototypePage } from "./components/SpeedMeterPrototypePage";
 import { AdminPage } from "./components/AdminPage";
 import { NotFoundPage } from "./components/NotFoundPage";
 import { AboutPage } from "./components/AboutPage";
+import { ParkingWayPage } from "./components/ParkingWayPage";
+import { WalkwayPage } from "./components/WalkwayPage";
+import { FeedbackPage } from "./components/FeedbackPage";
 
 export const router = createBrowserRouter([
   {
@@ -29,6 +32,9 @@ export const router = createBrowserRouter([
         children: [
           { path: "dashboard", Component: Dashboard },
           { path: "routes", Component: RouteComparison },
+          { path: "parking-way", Component: ParkingWayPage },
+          { path: "walkway", Component: WalkwayPage },
+          { path: "feedback", Component: FeedbackPage },
           { path: "profile", Component: ProfilePage },
           {
             Component: RequireAnalytics,
