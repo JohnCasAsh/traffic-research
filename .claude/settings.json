@@ -6,7 +6,10 @@
       "Bash(powershell -File deploy.ps1)",
       "PowerShell(& \"c:\\\\Users\\\\John Asley\\\\OneDrive\\\\Desktop\\\\TRAFFIC _ MANAGEMENT\\\\deploy.ps1\")",
       "Bash(cd \"c:\\\\Users\\\\John Asley\\\\OneDrive\\\\Desktop\\\\TRAFFIC _ MANAGEMENT\" && git show 8088d50:\"Traffic Management Dashboard UI/src/app/components/Dashboard.tsx\" > \"Traffic Management Dashboard UI/src/app/components/Dashboard.tsx\")",
-      "PowerShell(Get-ChildItem \"c:\\\\Users\\\\John Asley\\\\OneDrive\\\\Desktop\\\\TRAFFIC _ MANAGEMENT\\\\backend\" -Recurse | Where-Object { $_.FullName -notmatch \"node_modules\" -and $_.Name -match \"\\\\.\\(js|ts|json\\)$\" -and $_.Name -ne \"package-lock.json\" } | Select-Object Name, DirectoryName)"
+      "PowerShell(Get-ChildItem \"c:\\\\Users\\\\John Asley\\\\OneDrive\\\\Desktop\\\\TRAFFIC _ MANAGEMENT\\\\backend\" -Recurse | Where-Object { $_.FullName -notmatch \"node_modules\" -and $_.Name -match \"\\\\.\\(js|ts|json\\)$\" -and $_.Name -ne \"package-lock.json\" } | Select-Object Name, DirectoryName)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" -X POST https://api.navocs.com/api/feedback)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" https://api.navocs.com/api/admin/feedback)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" https://api.navocs.com/api/health)"
     ],
     "additionalDirectories": [
       "c:\\Users\\John Asley\\OneDrive\\Desktop\\TRAFFIC _ MANAGEMENT\\Traffic Management Dashboard UI\\src\\app\\components"

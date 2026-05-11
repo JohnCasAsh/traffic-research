@@ -73,11 +73,12 @@ export function FeedbackPage() {
         photo: photo || null,
         submittedBy: user ? `${user.firstName} ${user.lastName}`.trim() : 'Anonymous',
       };
-      await fetch(`${API_URL}/api/feedback`, {
+      const res = await fetch(`${API_URL}/api/feedback`, {
         method: 'POST',
         headers: { ...buildAuthHeaders(token || ''), 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       });
+      if (!res.ok) throw new Error('Server error');
       setSubmitted(true);
     } catch {
       setError('Failed to submit. Please try again.');
