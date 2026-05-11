@@ -1,5 +1,5 @@
 import { Outlet, Link, useLocation } from 'react-router';
-import { Navigation, MapPin, BarChart3, LogOut, UserRound, Shield, ParkingSquare, PersonStanding, MessageSquare } from 'lucide-react';
+import { Navigation, MapPin, BarChart3, Route, LogOut, UserRound, Gauge, Shield } from 'lucide-react';
 import { motion, useScroll } from 'motion/react';
 import { useState, useEffect } from 'react';
 import { useAuth, type AuthUser } from '../auth';
@@ -55,20 +55,17 @@ export function Layout() {
                 <NavLink to="/dashboard" icon={<MapPin className="w-4 h-4" />}>
                   Dashboard
                 </NavLink>
-                <NavLink to="/parking-way" icon={<ParkingSquare className="w-4 h-4" />}>
-                  Parking Way
-                </NavLink>
-                <NavLink to="/walkway" icon={<PersonStanding className="w-4 h-4" />}>
-                  Walkway
-                </NavLink>
-                <NavLink to="/feedback" icon={<MessageSquare className="w-4 h-4" />}>
-                  Feedback
+                <NavLink to="/routes" icon={<Route className="w-4 h-4" />}>
+                  Routes
                 </NavLink>
                 {(user?.role === 'admin' || user?.role === 'researcher') && (
                   <NavLink to="/analytics" icon={<BarChart3 className="w-4 h-4" />}>
                     Analytics
                   </NavLink>
                 )}
+                <NavLink to="/speed-meter" icon={<Gauge className="w-4 h-4" />}>
+                  Speed Meter
+                </NavLink>
                 <NavLink to="/profile" icon={<UserRound className="w-4 h-4" />}>
                   Profile
                 </NavLink>
@@ -130,20 +127,17 @@ export function Layout() {
               <MobileNavLink to="/dashboard" icon={<MapPin className="w-5 h-5" />}>
                 Dashboard
               </MobileNavLink>
-              <MobileNavLink to="/parking-way" icon={<ParkingSquare className="w-5 h-5" />}>
-                Parking
-              </MobileNavLink>
-              <MobileNavLink to="/walkway" icon={<PersonStanding className="w-5 h-5" />}>
-                Walkway
-              </MobileNavLink>
-              <MobileNavLink to="/feedback" icon={<MessageSquare className="w-5 h-5" />}>
-                Feedback
+              <MobileNavLink to="/routes" icon={<Route className="w-5 h-5" />}>
+                Routes
               </MobileNavLink>
               {(user?.role === 'admin' || user?.role === 'researcher') && (
                 <MobileNavLink to="/analytics" icon={<BarChart3 className="w-5 h-5" />}>
                   Analytics
                 </MobileNavLink>
               )}
+              <MobileNavLink to="/speed-meter" icon={<Gauge className="w-5 h-5" />}>
+                Speed
+              </MobileNavLink>
               <MobileNavLink to="/profile" icon={<UserRound className="w-5 h-5" />}>
                 Profile
               </MobileNavLink>
@@ -182,10 +176,9 @@ export function Layout() {
               <h4 className="font-semibold text-white mb-3">Platform</h4>
               <ul className="space-y-2 text-sm">
                 <li><Link to="/dashboard" className="hover:text-teal-400 transition-colors">Dashboard</Link></li>
-                <li><Link to="/parking-way" className="hover:text-teal-400 transition-colors">Parking Way</Link></li>
-                <li><Link to="/walkway" className="hover:text-teal-400 transition-colors">Walkway</Link></li>
-                <li><Link to="/feedback" className="hover:text-teal-400 transition-colors">Feedback</Link></li>
+                <li><Link to="/routes" className="hover:text-teal-400 transition-colors">Route Comparison</Link></li>
                 <li><Link to="/analytics" className="hover:text-teal-400 transition-colors">Analytics</Link></li>
+                <li><Link to="/speed-meter" className="hover:text-teal-400 transition-colors">Speed Meter</Link></li>
               </ul>
             </div>
             <div>
@@ -204,7 +197,7 @@ export function Layout() {
       </footer>
 
       {/* Floating Chat Bubble — only on pages without a built-in assistant sidebar */}
-      {isAuthenticated && !['/dashboard', '/parking-way', '/walkway', '/feedback', '/analytics', '/profile', '/about'].some(p => location.pathname.startsWith(p)) && <ChatBubble />}
+      {isAuthenticated && !['/dashboard', '/routes', '/analytics', '/speed-meter', '/profile', '/about'].some(p => location.pathname.startsWith(p)) && <ChatBubble />}
     </div>
   );
 }
