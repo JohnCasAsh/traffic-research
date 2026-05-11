@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(cd \"c:\\\\Users\\\\John Asley\\\\OneDrive\\\\Desktop\\\\TRAFFIC _ MANAGEMENT\\\\Traffic Management Dashboard UI\" && npx swa deploy ./dist --env production --deployment-token \\(az staticwebapp secrets list --name navocs-frontend --resource-group traffic-management-rg --query \"properties.apiKey\" -o tsv\\) 2>&1)"
+    ]
+  }
+}

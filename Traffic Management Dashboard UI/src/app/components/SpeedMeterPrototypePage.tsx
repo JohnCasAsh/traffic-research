@@ -73,7 +73,7 @@ type VehicleLiveProfile = {
   powertrain: VehiclePowertrain;
   massKg: number;
   idleRateLitersPerMinute: number;
-  baseMovingFuelLitersPerMin?: number;
+  realWorldFactor?: number;
   engineEfficiency?: number;
   drivetrainEfficiency?: number;
   regenEfficiency?: number;
@@ -216,8 +216,8 @@ const LIVE_VEHICLE_PROFILES: Record<string, VehicleLiveProfile> = {
     powertrain: 'ICE',
     massKg: 150,
     idleRateLitersPerMinute: 0.003,
-    baseMovingFuelLitersPerMin: 0.012,
     engineEfficiency: 0.28,
+    realWorldFactor: 11,
   },
   tricycle: {
     key: 'tricycle',
@@ -226,8 +226,8 @@ const LIVE_VEHICLE_PROFILES: Record<string, VehicleLiveProfile> = {
     powertrain: 'ICE',
     massKg: 350,
     idleRateLitersPerMinute: 0.004,
-    baseMovingFuelLitersPerMin: 0.014,
     engineEfficiency: 0.24,
+    realWorldFactor: 6,
   },
   sedan: {
     key: 'sedan',
@@ -236,8 +236,8 @@ const LIVE_VEHICLE_PROFILES: Record<string, VehicleLiveProfile> = {
     powertrain: 'ICE',
     massKg: 1200,
     idleRateLitersPerMinute: 0.008,
-    baseMovingFuelLitersPerMin: 0.026,
     engineEfficiency: 0.26,
+    realWorldFactor: 4.5,
   },
   van: {
     key: 'van',
@@ -246,8 +246,8 @@ const LIVE_VEHICLE_PROFILES: Record<string, VehicleLiveProfile> = {
     powertrain: 'ICE',
     massKg: 2000,
     idleRateLitersPerMinute: 0.012,
-    baseMovingFuelLitersPerMin: 0.040,
     engineEfficiency: 0.28,
+    realWorldFactor: 5,
   },
   bus: {
     key: 'bus',
@@ -256,8 +256,8 @@ const LIVE_VEHICLE_PROFILES: Record<string, VehicleLiveProfile> = {
     powertrain: 'ICE',
     massKg: 8000,
     idleRateLitersPerMinute: 0.025,
-    baseMovingFuelLitersPerMin: 0.090,
     engineEfficiency: 0.36,
+    realWorldFactor: 2.75,
   },
   hybrid_car: {
     key: 'hybrid_car',
@@ -266,8 +266,8 @@ const LIVE_VEHICLE_PROFILES: Record<string, VehicleLiveProfile> = {
     powertrain: 'HEV',
     massKg: 1350,
     idleRateLitersPerMinute: 0.005,
-    baseMovingFuelLitersPerMin: 0.010,
     engineEfficiency: 0.38,
+    realWorldFactor: 3.5,
   },
   hybrid_van: {
     key: 'hybrid_van',
@@ -276,8 +276,8 @@ const LIVE_VEHICLE_PROFILES: Record<string, VehicleLiveProfile> = {
     powertrain: 'HEV',
     massKg: 2100,
     idleRateLitersPerMinute: 0.008,
-    baseMovingFuelLitersPerMin: 0.015,
     engineEfficiency: 0.36,
+    realWorldFactor: 4,
   },
   e_trike: {
     key: 'e_trike',
@@ -872,14 +872,10 @@ export function SpeedMeterPrototypePage() {
         } else {
           const engineEfficiency = Math.max(0.12, profile.engineEfficiency || 0.26);
           const movingFuelEnergyKwh = (wheelPowerKw * deltaTimeSec) / 3600 / engineEfficiency;
-          const movingFuelLiters = movingFuelEnergyKwh / energyDensityKwhPerLiter(profile.fuelType);
+          const rawFuelLiters = movingFuelEnergyKwh / energyDensityKwhPerLiter(profile.fuelType);
+          const movingFuelLiters = rawFuelLiters * (profile.realWorldFactor || 1);
           const idleFuelLiters = smoothedSpeedMps <= 0.5 ? profile.idleRateLitersPerMinute * (deltaTimeSec / 60) : 0;
-          // Base fuel floor during driving: accounts for part-throttle engine friction
-          // and accessory loads not captured by the VSP wheel-power model.
-          const baseMovingFuelLiters = smoothedSpeedMps > 0.5
-            ? (profile.baseMovingFuelLitersPerMin || 0) * (deltaTimeSec / 60)
-            : 0;
-          segmentUnits = Math.max(0, movingFuelLiters) + Math.max(0, idleFuelLiters) + baseMovingFuelLiters;
+          segmentUnits = Math.max(0, movingFuelLiters) + Math.max(0, idleFuelLiters);
         }
 
         const segmentFuelOrEnergyPerKm = distanceKm > 0.001 ? segmentUnits / distanceKm : 0;
