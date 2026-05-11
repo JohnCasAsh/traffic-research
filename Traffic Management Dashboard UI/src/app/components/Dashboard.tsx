@@ -164,7 +164,7 @@ export function Dashboard() {
   const { token, user } = useAuth();
 
   useEffect(() => {
-    if (user?.role === 'commuter') navigate('/parking-way', { replace: true });
+    if (user?.role === 'commuter') navigate('/commuter-dashboard', { replace: true });
   }, [user, navigate]);
   const { consent, setConsent, currentLocation } = useLocationConsent();
   const [isAnalyzing, setIsAnalyzing] = useState(false);

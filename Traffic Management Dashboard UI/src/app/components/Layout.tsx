@@ -54,6 +54,9 @@ export function Layout() {
               <div className="hidden md:flex items-center space-x-1">
                 {user?.role === 'commuter' ? (
                   <>
+                    <NavLink to="/commuter-dashboard" icon={<MapPin className="w-4 h-4" />}>
+                      Dashboard
+                    </NavLink>
                     <NavLink to="/parking-way" icon={<ParkingSquare className="w-4 h-4" />}>
                       Parking Way
                     </NavLink>
@@ -79,6 +82,9 @@ export function Layout() {
                     )}
                     <NavLink to="/speed-meter" icon={<Gauge className="w-4 h-4" />}>
                       Speed Meter
+                    </NavLink>
+                    <NavLink to="/feedback" icon={<MessageSquare className="w-4 h-4" />}>
+                      Feedback
                     </NavLink>
                     {user?.role === 'admin' && (
                       <NavLink to="/admin" icon={<Shield className="w-4 h-4" />}>
@@ -142,6 +148,9 @@ export function Layout() {
             <div className="flex justify-around py-2">
               {user?.role === 'commuter' ? (
                 <>
+                  <MobileNavLink to="/commuter-dashboard" icon={<MapPin className="w-5 h-5" />}>
+                    Home
+                  </MobileNavLink>
                   <MobileNavLink to="/parking-way" icon={<ParkingSquare className="w-5 h-5" />}>
                     Parking
                   </MobileNavLink>
@@ -167,6 +176,9 @@ export function Layout() {
                   )}
                   <MobileNavLink to="/speed-meter" icon={<Gauge className="w-5 h-5" />}>
                     Speed
+                  </MobileNavLink>
+                  <MobileNavLink to="/feedback" icon={<MessageSquare className="w-5 h-5" />}>
+                    Feedback
                   </MobileNavLink>
                   {user?.role === 'admin' && (
                     <MobileNavLink to="/admin" icon={<Shield className="w-5 h-5" />}>
@@ -229,7 +241,7 @@ export function Layout() {
       </footer>
 
       {/* Floating Chat Bubble — only on pages without a built-in assistant sidebar */}
-      {isAuthenticated && !['/dashboard', '/routes', '/analytics', '/speed-meter', '/profile', '/about'].some(p => location.pathname.startsWith(p)) && <ChatBubble />}
+      {isAuthenticated && !['/dashboard', '/commuter-dashboard', '/routes', '/analytics', '/speed-meter', '/profile', '/about', '/parking-way', '/walkway', '/feedback'].some(p => location.pathname.startsWith(p)) && <ChatBubble />}
     </div>
   );
 }

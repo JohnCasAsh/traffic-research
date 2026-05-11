@@ -291,4 +291,30 @@ adminRouter.delete('/parking/:id', requireAuth, requireAdmin, async (req, res) =
   }
 });
 
+// GET /api/admin/feedback — all feedback reports
+adminRouter.get('/feedback', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const reports = await db.getAllFeedback();
+    res.json({ reports });
+  } catch (err) {
+    console.error('Get feedback error:', err);
+    res.status(500).json({ error: 'Failed to fetch feedback.' });
+  }
+});
+
+// PATCH /api/admin/feedback/:id/respond — admin responds to a report
+adminRouter.patch('/feedback/:id/respond', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const { status, admin_response } = req.body;
+    if (!['pending', 'reviewed', 'resolved'].includes(status)) {
+      return res.status(400).json({ error: 'Invalid status.' });
+    }
+    await db.updateFeedbackResponse(req.params.id, { status, admin_response });
+    res.json({ message: 'Response saved.' });
+  } catch (err) {
+    console.error('Feedback respond error:', err);
+    res.status(500).json({ error: 'Failed to save response.' });
+  }
+});
+
 module.exports = { adminRouter };

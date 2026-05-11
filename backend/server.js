@@ -160,6 +160,30 @@ app.use('/api/stats', statsRouter);
 app.use('/api/admin', adminRouter);
 app.use('/api/saved-routes', savedRoutesRouter);
 
+// POST /api/feedback — authenticated users submit feedback
+const { requireAuth: _requireAuth } = require('./src/auth');
+app.post('/api/feedback', _requireAuth, async (req, res) => {
+  try {
+    const { category, location, message, photo, submittedBy } = req.body;
+    if (!message?.trim()) return res.status(400).json({ error: 'Message is required.' });
+    const db = require('./src/database');
+    const user = await db.getUserById(req.user.id);
+    await db.addFeedback({
+      category: category || 'other',
+      location: location || '',
+      message: message.trim(),
+      photo: photo || null,
+      submittedBy: submittedBy || `${user?.first_name || ''} ${user?.last_name || ''}`.trim() || 'Anonymous',
+      submitterRole: user?.role || 'driver',
+      userId: req.user.id,
+    });
+    res.json({ message: 'Feedback submitted.' });
+  } catch (err) {
+    console.error('Feedback submit error:', err);
+    res.status(500).json({ error: 'Failed to submit feedback.' });
+  }
+});
+
 // Public parking locations — no auth needed, commuters fetch this for the map
 app.get('/api/parking', async (req, res) => {
   try {

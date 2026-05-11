@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Shield, Users, LogIn, RefreshCw, Clock, Wifi, Ban, Trash2, CheckCircle, ShieldCheck, FlaskConical, MapPin, ParkingSquare, Plus, X, Pencil, Fuel, Image, Car } from 'lucide-react';
+import { Shield, Users, LogIn, RefreshCw, Clock, Wifi, Ban, Trash2, CheckCircle, ShieldCheck, FlaskConical, MapPin, ParkingSquare, Plus, X, Pencil, Fuel, Image, Car, MessageSquare } from 'lucide-react';
 import { importLibrary, setOptions } from '@googlemaps/js-api-loader';
 import { useAuth } from '../auth';
 import { API_URL, buildAuthHeaders } from '../api';
@@ -124,7 +124,7 @@ export function AdminPage() {
   const [users, setUsers] = useState<UserRow[]>([]);
   const [logins, setLogins] = useState<LoginRow[]>([]);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState<'users' | 'logins' | 'parking'>('logins');
+  const [tab, setTab] = useState<'users' | 'logins' | 'parking' | 'feedback'>('logins');
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<UserRow | null>(null);
 
@@ -147,6 +147,28 @@ export function AdminPage() {
   const [showForm, setShowForm] = useState(false);
   const [mapSubTab, setMapSubTab] = useState<'parking' | 'gas'>('parking');
   const [fuelPrices, setFuelPrices] = useState<FuelEntry[]>([{ name: '', price: '' }]);
+
+  // Feedback state
+  type FeedbackRow = {
+    id: string;
+    category: string;
+    location: string;
+    message: string;
+    photo: string | null;
+    submitted_by: string;
+    submitter_role: string;
+    submitted_at: string;
+    status: string;
+    admin_response: string | null;
+    responded_at: string | null;
+  };
+  const [feedbackList, setFeedbackList] = useState<FeedbackRow[]>([]);
+  const [feedbackLoading, setFeedbackLoading] = useState(false);
+  const [expandedFeedback, setExpandedFeedback] = useState<string | null>(null);
+  const [respondingTo, setRespondingTo] = useState<string | null>(null);
+  const [responseText, setResponseText] = useState('');
+  const [responseStatus, setResponseStatus] = useState('reviewed');
+  const [savingResponse, setSavingResponse] = useState(false);
 
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<google.maps.Map | null>(null);
@@ -180,10 +202,41 @@ export function AdminPage() {
     }
   };
 
+  const loadFeedback = async () => {
+    if (!token) return;
+    setFeedbackLoading(true);
+    try {
+      const res = await fetch(`${API_URL}/api/admin/feedback`, { headers: buildAuthHeaders(token) });
+      if (res.ok) setFeedbackList((await res.json()).reports);
+    } finally {
+      setFeedbackLoading(false);
+    }
+  };
+
+  const handleSaveResponse = async (id: string) => {
+    if (!token) return;
+    setSavingResponse(true);
+    try {
+      const res = await fetch(`${API_URL}/api/admin/feedback/${id}/respond`, {
+        method: 'PATCH',
+        headers: { ...buildAuthHeaders(token), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: responseStatus, admin_response: responseText.trim() }),
+      });
+      if (res.ok) {
+        setFeedbackList(prev => prev.map(f => f.id === id ? { ...f, status: responseStatus, admin_response: responseText.trim(), responded_at: new Date().toISOString() } : f));
+        setRespondingTo(null);
+        setResponseText('');
+      }
+    } finally {
+      setSavingResponse(false);
+    }
+  };
+
   useEffect(() => { load(); }, [token]);
 
   useEffect(() => {
     if (tab === 'parking') loadParking();
+    if (tab === 'feedback') loadFeedback();
   }, [tab]);
 
   // Render parking markers on map whenever parking list or map changes
@@ -542,7 +595,7 @@ export function AdminPage() {
 
         {/* Tabs */}
         <div className="flex gap-2">
-          {(['logins', 'users', 'parking'] as const).map((t) => (
+          {(['logins', 'users', 'parking', 'feedback'] as const).map((t) => (
             <button
               key={t}
               onClick={() => setTab(t)}
@@ -552,7 +605,7 @@ export function AdminPage() {
                   : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
               }`}
             >
-              {t === 'logins' ? 'Login Activity' : t === 'users' ? 'All Users' : 'Parking Manager'}
+              {t === 'logins' ? 'Login Activity' : t === 'users' ? 'All Users' : t === 'parking' ? 'Parking Manager' : 'Feedback Reports'}
             </button>
           ))}
         </div>
@@ -1143,6 +1196,133 @@ export function AdminPage() {
                 {actionLoading === `del-parking-${confirmDeleteParking.id}` ? 'Removing...' : 'Yes, Remove'}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Feedback Reports Tab */}
+      {tab === 'feedback' && (
+        <div className="space-y-4">
+          <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+            <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+              <h2 className="font-semibold text-slate-900 text-sm flex items-center gap-2">
+                <MessageSquare className="w-4 h-4 text-teal-600" />
+                Feedback Reports
+                <span className="text-xs font-normal text-slate-400">({feedbackList.length})</span>
+              </h2>
+              <button onClick={loadFeedback} className="text-xs text-slate-500 hover:text-teal-600 flex items-center gap-1 transition">
+                <RefreshCw className="w-3 h-3" /> Refresh
+              </button>
+            </div>
+
+            {feedbackLoading ? (
+              <div className="px-6 py-10 text-center text-sm text-slate-400">Loading feedback…</div>
+            ) : feedbackList.length === 0 ? (
+              <div className="px-6 py-10 text-center text-sm text-slate-400">No feedback submitted yet.</div>
+            ) : (
+              <div className="divide-y divide-slate-100">
+                {feedbackList.map((fb) => {
+                  const isExpanded = expandedFeedback === fb.id;
+                  const isResponding = respondingTo === fb.id;
+                  const statusColor = fb.status === 'resolved' ? 'bg-green-100 text-green-700' : fb.status === 'reviewed' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700';
+                  const roleColor = fb.submitter_role === 'commuter' ? 'bg-teal-100 text-teal-700' : 'bg-orange-100 text-orange-700';
+                  return (
+                    <div key={fb.id} className="px-6 py-4">
+                      {/* Row header */}
+                      <div className="flex items-start gap-3">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex flex-wrap items-center gap-2 mb-1">
+                            <span className="font-semibold text-slate-800 text-sm">{fb.submitted_by}</span>
+                            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${roleColor}`}>
+                              {fb.submitter_role}
+                            </span>
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-600 capitalize">
+                              {fb.category}
+                            </span>
+                            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${statusColor}`}>
+                              {fb.status}
+                            </span>
+                          </div>
+                          {fb.location && <p className="text-xs text-slate-500 mb-1">📍 {fb.location}</p>}
+                          <p className="text-sm text-slate-700 line-clamp-2">{fb.message}</p>
+                          <p className="text-xs text-slate-400 mt-1">{new Date(fb.submitted_at).toLocaleString()}</p>
+                          {fb.admin_response && (
+                            <div className="mt-2 p-2.5 rounded-lg bg-blue-50 border border-blue-100">
+                              <p className="text-xs font-semibold text-blue-700 mb-0.5">Admin Response:</p>
+                              <p className="text-xs text-blue-800">{fb.admin_response}</p>
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex flex-col gap-1 flex-shrink-0">
+                          <button
+                            onClick={() => setExpandedFeedback(isExpanded ? null : fb.id)}
+                            className="px-2.5 py-1 rounded-lg text-xs font-medium bg-slate-50 text-slate-600 hover:bg-slate-100 transition"
+                          >
+                            {isExpanded ? 'Collapse' : 'View'}
+                          </button>
+                          <button
+                            onClick={() => { setRespondingTo(isResponding ? null : fb.id); setResponseText(fb.admin_response || ''); setResponseStatus(fb.status === 'pending' ? 'reviewed' : fb.status); }}
+                            className="px-2.5 py-1 rounded-lg text-xs font-medium bg-teal-50 text-teal-700 hover:bg-teal-100 transition"
+                          >
+                            Respond
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Expanded: full message + photo */}
+                      {isExpanded && (
+                        <div className="mt-3 space-y-2">
+                          <p className="text-sm text-slate-800 whitespace-pre-wrap bg-slate-50 rounded-lg p-3">{fb.message}</p>
+                          {fb.photo && (
+                            <img src={fb.photo} alt="proof" className="max-h-64 rounded-xl border border-slate-200 object-cover" />
+                          )}
+                        </div>
+                      )}
+
+                      {/* Response form */}
+                      {isResponding && (
+                        <div className="mt-3 space-y-2 bg-slate-50 rounded-xl p-3">
+                          <div className="flex gap-2">
+                            {(['reviewed', 'resolved', 'pending'] as const).map(s => (
+                              <button
+                                key={s}
+                                type="button"
+                                onClick={() => setResponseStatus(s)}
+                                className={`px-2.5 py-1 rounded-lg text-xs font-medium transition capitalize ${responseStatus === s ? (s === 'resolved' ? 'bg-green-600 text-white' : s === 'reviewed' ? 'bg-blue-600 text-white' : 'bg-amber-500 text-white') : 'bg-white border border-slate-200 text-slate-600'}`}
+                              >
+                                {s}
+                              </button>
+                            ))}
+                          </div>
+                          <textarea
+                            value={responseText}
+                            onChange={e => setResponseText(e.target.value)}
+                            placeholder="Type your response to this report…"
+                            rows={3}
+                            className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white resize-none"
+                          />
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => setRespondingTo(null)}
+                              className="px-3 py-1.5 rounded-lg text-xs font-medium border border-slate-200 text-slate-600 hover:bg-slate-100 transition"
+                            >
+                              Cancel
+                            </button>
+                            <button
+                              onClick={() => handleSaveResponse(fb.id)}
+                              disabled={savingResponse}
+                              className="px-3 py-1.5 rounded-lg text-xs font-medium bg-teal-600 text-white hover:bg-teal-700 transition disabled:opacity-50"
+                            >
+                              {savingResponse ? 'Saving…' : 'Save Response'}
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </div>
       )}

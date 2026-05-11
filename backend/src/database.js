@@ -19,6 +19,7 @@ const COLLECTIONS = {
   pepperVersions: 'pepper_versions',
   auditLog: 'audit_log',
   parking: 'parking_locations',
+  feedback: 'feedback',
 };
 
 function loadServiceAccountFromFile(serviceAccountPath) {
@@ -523,6 +524,41 @@ async function deleteParkingLocation(id) {
   await db.collection(COLLECTIONS.parking).doc(id).delete();
 }
 
+async function addFeedback({ category, location, message, photo, submittedBy, submitterRole, userId }) {
+  await ready();
+  const db = getFirestore();
+  await db.collection(COLLECTIONS.feedback).add({
+    category: category || 'other',
+    location: location || '',
+    message,
+    photo: photo || null,
+    submitted_by: submittedBy || 'Anonymous',
+    submitter_role: submitterRole || 'driver',
+    user_id: userId || null,
+    submitted_at: new Date().toISOString(),
+    status: 'pending',
+    admin_response: null,
+    responded_at: null,
+  });
+}
+
+async function getAllFeedback() {
+  await ready();
+  const db = getFirestore();
+  const snapshot = await db.collection(COLLECTIONS.feedback).orderBy('submitted_at', 'desc').get();
+  return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+}
+
+async function updateFeedbackResponse(id, { status, admin_response }) {
+  await ready();
+  const db = getFirestore();
+  await db.collection(COLLECTIONS.feedback).doc(id).update({
+    status: status || 'pending',
+    admin_response: admin_response || null,
+    responded_at: admin_response ? new Date().toISOString() : null,
+  });
+}
+
 module.exports = {
   ready,
   getUserById,
@@ -556,4 +592,7 @@ module.exports = {
   addParkingLocation,
   updateParkingLocation,
   deleteParkingLocation,
+  addFeedback,
+  getAllFeedback,
+  updateFeedbackResponse,
 };

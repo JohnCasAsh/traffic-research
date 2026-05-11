@@ -18,6 +18,7 @@ import { AboutPage } from "./components/AboutPage";
 import { ParkingWayPage } from "./components/ParkingWayPage";
 import { WalkwayPage } from "./components/WalkwayPage";
 import { FeedbackPage } from "./components/FeedbackPage";
+import { CommutterDashboardPage } from "./components/CommutterDashboardPage";
 
 export const router = createBrowserRouter([
   {
@@ -32,6 +33,7 @@ export const router = createBrowserRouter([
         children: [
           { path: "dashboard", Component: Dashboard },
           { path: "routes", Component: RouteComparison },
+          { path: "commuter-dashboard", Component: CommutterDashboardPage },
           { path: "parking-way", Component: ParkingWayPage },
           { path: "walkway", Component: WalkwayPage },
           { path: "feedback", Component: FeedbackPage },
