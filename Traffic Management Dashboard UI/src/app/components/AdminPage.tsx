@@ -181,14 +181,14 @@ export function AdminPage() {
         map: mapRef.current!,
         title: p.name,
         icon: {
-          path: 'M -1,-1 L 1,-1 L 1,1 L -1,1 Z',
-          scale: 9,
+          path: google.maps.SymbolPath.CIRCLE,
+          scale: 12,
           fillColor: isGas ? '#16a34a' : '#0d9488',
           fillOpacity: 1,
           strokeColor: '#fff',
-          strokeWeight: 1.5,
+          strokeWeight: 2,
         },
-        label: { text: isGas ? 'G' : 'P', color: '#fff', fontSize: '9px', fontWeight: 'bold' },
+        label: { text: isGas ? 'G' : 'P', color: '#fff', fontSize: '10px', fontWeight: 'bold' },
       });
       const typeLabel = PARKING_TYPES.find(t => t.value === p.type)?.label || p.type;
       const priceHtml = isGas

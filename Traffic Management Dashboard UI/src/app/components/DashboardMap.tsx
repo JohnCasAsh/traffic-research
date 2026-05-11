@@ -1601,14 +1601,14 @@ export function DashboardMap({
         title: p.name,
         zIndex: 900,
         icon: {
-          path: 'M -1,-1 L 1,-1 L 1,1 L -1,1 Z',
-          scale: 9,
+          path: gmaps.SymbolPath.CIRCLE,
+          scale: 12,
           fillColor: isGas ? '#16a34a' : '#1d4ed8',
           fillOpacity: 1,
           strokeColor: '#fff',
-          strokeWeight: 1.5,
+          strokeWeight: 2,
         },
-        label: { text: isGas ? 'G' : 'P', color: '#fff', fontSize: '9px', fontWeight: 'bold' },
+        label: { text: isGas ? 'G' : 'P', color: '#fff', fontSize: '10px', fontWeight: 'bold' },
       });
       const typeLabel = PTYPE_LABELS[p.type] || p.type;
       const isGasStation = p.type === 'gas_station';
