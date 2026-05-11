@@ -32,7 +32,9 @@ export function LoginPage() {
   const [resendMessage, setResendMessage] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
   const [form, setForm] = useState({ email: emailHint || '', password: '' });
   const [showRolePicker, setShowRolePicker] = useState(false);
-  const [pickedRole, setPickedRole] = useState<'commuter' | 'driver'>('commuter');
+  const [pickedRole, setPickedRole] = useState<'commuter' | 'driver'>(
+    (oauthRole === 'driver' || oauthRole === 'commuter') ? oauthRole : 'commuter'
+  );
   const [roleSubmitting, setRoleSubmitting] = useState(false);
 
   const completeOAuthLogin = (role: string) => {
@@ -67,11 +69,7 @@ export function LoginPage() {
 
   useEffect(() => {
     if (oauth === 'success' && oauthToken && oauthUserId) {
-      if (oauthIsNew) {
-        setShowRolePicker(true);
-        return;
-      }
-      completeOAuthLogin(oauthRole || 'driver');
+      setShowRolePicker(true);
       return;
     }
 
@@ -84,7 +82,6 @@ export function LoginPage() {
     navigate,
     oauth,
     oauthFirstName,
-    oauthIsNew,
     oauthLastName,
     oauthProvider,
     oauthRole,
