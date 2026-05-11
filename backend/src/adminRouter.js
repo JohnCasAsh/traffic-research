@@ -126,6 +126,36 @@ adminRouter.post('/users/:id/make-admin', requireAuth, requireAdmin, async (req,
   }
 });
 
+// POST /api/admin/users/:id/make-commuter
+adminRouter.post('/users/:id/make-commuter', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const target = await db.getUserById(req.params.id);
+    if (!target) return res.status(404).json({ error: 'User not found.' });
+    if (target.role === 'admin') return res.status(403).json({ error: 'Cannot change role of an admin.' });
+    if (target.role === 'commuter') return res.status(400).json({ error: 'User is already a commuter.' });
+    await db.updateUserProfile(req.params.id, { role: 'commuter' });
+    res.json({ message: 'User set to commuter.' });
+  } catch (err) {
+    console.error('Make commuter error:', err);
+    res.status(500).json({ error: 'Failed to update role.' });
+  }
+});
+
+// POST /api/admin/users/:id/make-driver
+adminRouter.post('/users/:id/make-driver', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const target = await db.getUserById(req.params.id);
+    if (!target) return res.status(404).json({ error: 'User not found.' });
+    if (target.role === 'admin') return res.status(403).json({ error: 'Cannot change role of an admin.' });
+    if (target.role === 'driver') return res.status(400).json({ error: 'User is already a driver.' });
+    await db.updateUserProfile(req.params.id, { role: 'driver' });
+    res.json({ message: 'User set to driver.' });
+  } catch (err) {
+    console.error('Make driver error:', err);
+    res.status(500).json({ error: 'Failed to update role.' });
+  }
+});
+
 // GET /api/admin/logins — recent login events
 adminRouter.get('/logins', requireAuth, requireAdmin, async (req, res) => {
   try {

@@ -161,7 +161,11 @@ type RouteFormData = {
 
 export function Dashboard() {
   const navigate = useNavigate();
-  const { token } = useAuth();
+  const { token, user } = useAuth();
+
+  useEffect(() => {
+    if (user?.role === 'commuter') navigate('/parking-way', { replace: true });
+  }, [user, navigate]);
   const { consent, setConsent, currentLocation } = useLocationConsent();
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [chatUrl, setChatUrl] = useState<string | null>(null);

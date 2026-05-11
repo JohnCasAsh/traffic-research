@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Shield, Users, LogIn, RefreshCw, Clock, Wifi, Ban, Trash2, CheckCircle, ShieldCheck, FlaskConical, MapPin, ParkingSquare, Plus, X, Pencil, Fuel, Image } from 'lucide-react';
+import { Shield, Users, LogIn, RefreshCw, Clock, Wifi, Ban, Trash2, CheckCircle, ShieldCheck, FlaskConical, MapPin, ParkingSquare, Plus, X, Pencil, Fuel, Image, Car } from 'lucide-react';
 import { importLibrary, setOptions } from '@googlemaps/js-api-loader';
 import { useAuth } from '../auth';
 import { API_URL, buildAuthHeaders } from '../api';
@@ -421,6 +421,34 @@ export function AdminPage() {
     }
   };
 
+  const handleMakeCommuter = async (u: UserRow) => {
+    if (!token) return;
+    setActionLoading(`make-commuter-${u.id}`);
+    try {
+      const res = await fetch(`${API_URL}/api/admin/users/${u.id}/make-commuter`, {
+        method: 'POST',
+        headers: buildAuthHeaders(token),
+      });
+      if (res.ok) setUsers(prev => prev.map(x => x.id === u.id ? { ...x, role: 'commuter' } : x));
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleMakeDriver = async (u: UserRow) => {
+    if (!token) return;
+    setActionLoading(`make-driver-${u.id}`);
+    try {
+      const res = await fetch(`${API_URL}/api/admin/users/${u.id}/make-driver`, {
+        method: 'POST',
+        headers: buildAuthHeaders(token),
+      });
+      if (res.ok) setUsers(prev => prev.map(x => x.id === u.id ? { ...x, role: 'driver' } : x));
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
   const handleMakeResearcher = async (u: UserRow) => {
     if (!token) return;
     setActionLoading(`make-researcher-${u.id}`);
@@ -629,10 +657,14 @@ export function AdminPage() {
                       const isMe = u.id === me?.id;
                       const isAdmin = u.role === 'admin';
                       const isResearcher = u.role === 'researcher';
+                      const isCommuter = u.role === 'commuter';
+                      const isDriver = u.role === 'driver';
                       const banKey = `${u.banned ? 'unban' : 'ban'}-${u.id}`;
                       const deleteKey = `delete-${u.id}`;
                       const makeAdminKey = `make-admin-${u.id}`;
                       const makeResearcherKey = `make-researcher-${u.id}`;
+                      const makeCommuterKey = `make-commuter-${u.id}`;
+                      const makeDriverKey = `make-driver-${u.id}`;
                       return (
                         <tr key={u.id} className={`hover:bg-slate-50 transition ${u.banned ? 'opacity-60' : ''}`}>
                           <td className="px-6 py-3 font-medium text-slate-800">
@@ -641,7 +673,10 @@ export function AdminPage() {
                           </td>
                           <td className="px-6 py-3">
                             <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
-                              isAdmin ? 'bg-red-100 text-red-700' : isResearcher ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-600'
+                              isAdmin ? 'bg-red-100 text-red-700'
+                              : isResearcher ? 'bg-blue-100 text-blue-700'
+                              : isCommuter ? 'bg-teal-100 text-teal-700'
+                              : 'bg-slate-100 text-slate-600'
                             }`}>
                               {u.role}
                             </span>
@@ -681,6 +716,26 @@ export function AdminPage() {
                                   <Ban className="w-3 h-3" />
                                   {u.banned ? 'Unban' : 'Ban'}
                                 </button>
+                                {!u.banned && !isCommuter && (
+                                  <button
+                                    onClick={() => handleMakeCommuter(u)}
+                                    disabled={actionLoading === makeCommuterKey}
+                                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium bg-teal-50 text-teal-700 hover:bg-teal-100 transition disabled:opacity-50"
+                                  >
+                                    <Users className="w-3 h-3" />
+                                    Make Commuter
+                                  </button>
+                                )}
+                                {!u.banned && !isDriver && !isAdmin && (
+                                  <button
+                                    onClick={() => handleMakeDriver(u)}
+                                    disabled={actionLoading === makeDriverKey}
+                                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium bg-orange-50 text-orange-700 hover:bg-orange-100 transition disabled:opacity-50"
+                                  >
+                                    <Car className="w-3 h-3" />
+                                    Make Driver
+                                  </button>
+                                )}
                                 {!u.banned && !isResearcher && (
                                   <button
                                     onClick={() => handleMakeResearcher(u)}

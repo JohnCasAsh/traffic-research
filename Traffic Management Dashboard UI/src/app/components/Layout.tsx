@@ -1,5 +1,5 @@
 import { Outlet, Link, useLocation } from 'react-router';
-import { Navigation, MapPin, BarChart3, Route, LogOut, UserRound, Gauge, Shield } from 'lucide-react';
+import { Navigation, MapPin, BarChart3, Route, LogOut, UserRound, Gauge, Shield, ParkingSquare, PersonStanding, MessageSquare } from 'lucide-react';
 import { motion, useScroll } from 'motion/react';
 import { useState, useEffect } from 'react';
 import { useAuth, type AuthUser } from '../auth';
@@ -52,28 +52,44 @@ export function Layout() {
 
             {!isLanding && (
               <div className="hidden md:flex items-center space-x-1">
-                <NavLink to="/dashboard" icon={<MapPin className="w-4 h-4" />}>
-                  Dashboard
-                </NavLink>
-                <NavLink to="/routes" icon={<Route className="w-4 h-4" />}>
-                  Routes
-                </NavLink>
-                {(user?.role === 'admin' || user?.role === 'researcher') && (
-                  <NavLink to="/analytics" icon={<BarChart3 className="w-4 h-4" />}>
-                    Analytics
-                  </NavLink>
+                {user?.role === 'commuter' ? (
+                  <>
+                    <NavLink to="/parking-way" icon={<ParkingSquare className="w-4 h-4" />}>
+                      Parking Way
+                    </NavLink>
+                    <NavLink to="/walkway" icon={<PersonStanding className="w-4 h-4" />}>
+                      Walkway
+                    </NavLink>
+                    <NavLink to="/feedback" icon={<MessageSquare className="w-4 h-4" />}>
+                      Feedback
+                    </NavLink>
+                  </>
+                ) : (
+                  <>
+                    <NavLink to="/dashboard" icon={<MapPin className="w-4 h-4" />}>
+                      Dashboard
+                    </NavLink>
+                    <NavLink to="/routes" icon={<Route className="w-4 h-4" />}>
+                      Routes
+                    </NavLink>
+                    {(user?.role === 'admin' || user?.role === 'researcher') && (
+                      <NavLink to="/analytics" icon={<BarChart3 className="w-4 h-4" />}>
+                        Analytics
+                      </NavLink>
+                    )}
+                    <NavLink to="/speed-meter" icon={<Gauge className="w-4 h-4" />}>
+                      Speed Meter
+                    </NavLink>
+                    {user?.role === 'admin' && (
+                      <NavLink to="/admin" icon={<Shield className="w-4 h-4" />}>
+                        Admin
+                      </NavLink>
+                    )}
+                  </>
                 )}
-                <NavLink to="/speed-meter" icon={<Gauge className="w-4 h-4" />}>
-                  Speed Meter
-                </NavLink>
                 <NavLink to="/profile" icon={<UserRound className="w-4 h-4" />}>
                   Profile
                 </NavLink>
-                {user?.role === 'admin' && (
-                  <NavLink to="/admin" icon={<Shield className="w-4 h-4" />}>
-                    Admin
-                  </NavLink>
-                )}
               </div>
             )}
 
@@ -124,28 +140,44 @@ export function Layout() {
         {!isLanding && (
           <div className="md:hidden border-t border-slate-200 bg-white">
             <div className="flex justify-around py-2">
-              <MobileNavLink to="/dashboard" icon={<MapPin className="w-5 h-5" />}>
-                Dashboard
-              </MobileNavLink>
-              <MobileNavLink to="/routes" icon={<Route className="w-5 h-5" />}>
-                Routes
-              </MobileNavLink>
-              {(user?.role === 'admin' || user?.role === 'researcher') && (
-                <MobileNavLink to="/analytics" icon={<BarChart3 className="w-5 h-5" />}>
-                  Analytics
-                </MobileNavLink>
+              {user?.role === 'commuter' ? (
+                <>
+                  <MobileNavLink to="/parking-way" icon={<ParkingSquare className="w-5 h-5" />}>
+                    Parking
+                  </MobileNavLink>
+                  <MobileNavLink to="/walkway" icon={<PersonStanding className="w-5 h-5" />}>
+                    Walkway
+                  </MobileNavLink>
+                  <MobileNavLink to="/feedback" icon={<MessageSquare className="w-5 h-5" />}>
+                    Feedback
+                  </MobileNavLink>
+                </>
+              ) : (
+                <>
+                  <MobileNavLink to="/dashboard" icon={<MapPin className="w-5 h-5" />}>
+                    Dashboard
+                  </MobileNavLink>
+                  <MobileNavLink to="/routes" icon={<Route className="w-5 h-5" />}>
+                    Routes
+                  </MobileNavLink>
+                  {(user?.role === 'admin' || user?.role === 'researcher') && (
+                    <MobileNavLink to="/analytics" icon={<BarChart3 className="w-5 h-5" />}>
+                      Analytics
+                    </MobileNavLink>
+                  )}
+                  <MobileNavLink to="/speed-meter" icon={<Gauge className="w-5 h-5" />}>
+                    Speed
+                  </MobileNavLink>
+                  {user?.role === 'admin' && (
+                    <MobileNavLink to="/admin" icon={<Shield className="w-5 h-5" />}>
+                      Admin
+                    </MobileNavLink>
+                  )}
+                </>
               )}
-              <MobileNavLink to="/speed-meter" icon={<Gauge className="w-5 h-5" />}>
-                Speed
-              </MobileNavLink>
               <MobileNavLink to="/profile" icon={<UserRound className="w-5 h-5" />}>
                 Profile
               </MobileNavLink>
-              {user?.role === 'admin' && (
-                <MobileNavLink to="/admin" icon={<Shield className="w-5 h-5" />}>
-                  Admin
-                </MobileNavLink>
-              )}
             </div>
           </div>
         )}
