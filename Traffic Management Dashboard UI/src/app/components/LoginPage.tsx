@@ -69,7 +69,11 @@ export function LoginPage() {
 
   useEffect(() => {
     if (oauth === 'success' && oauthToken && oauthUserId) {
-      setShowRolePicker(true);
+      if (oauthIsNew) {
+        setShowRolePicker(true);
+        return;
+      }
+      completeOAuthLogin(oauthRole || 'driver');
       return;
     }
 
@@ -82,6 +86,7 @@ export function LoginPage() {
     navigate,
     oauth,
     oauthFirstName,
+    oauthIsNew,
     oauthLastName,
     oauthProvider,
     oauthRole,
