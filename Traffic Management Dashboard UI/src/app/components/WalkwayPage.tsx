@@ -65,9 +65,7 @@ export function WalkwayPage() {
     setRouteError('');
 
     const service = new google.maps.DirectionsService();
-    const originLatLng = origin
-      ? { lat: origin.lat, lng: origin.lng }
-      : TUGUEGARAO;
+    const originLatLng = origin ?? TUGUEGARAO;
 
     service.route(
       {
@@ -99,17 +97,24 @@ export function WalkwayPage() {
     );
   };
 
-  // Calculate once map is ready
+  // When map is ready: if GPS is consented but not yet available, wait for it.
+  // If not consented OR GPS already available, calculate immediately.
   useEffect(() => {
     if (!mapReady || !hasDestination) return;
-    calculateRoute(currentLocation);
+    if (!consent.isConsented) {
+      calculateRoute(null); // No GPS consent — use city center
+    } else if (currentLocation) {
+      calculateRoute(currentLocation); // GPS already ready
+    }
+    // else: consented but GPS not yet ready — the next effect handles it
   }, [mapReady]);
 
-  // Recalculate when GPS becomes available
+  // GPS just became available — always recalculate with real location
   useEffect(() => {
-    if (!mapReady || !hasDestination || !currentLocation || routeInfo) return;
+    if (!mapReady || !hasDestination || !currentLocation) return;
+    routeCalcRef.current = false; // Allow fresh calculation
     calculateRoute(currentLocation);
-  }, [currentLocation, mapReady]);
+  }, [currentLocation]);
 
   // No destination — show picker state
   if (!hasDestination) {

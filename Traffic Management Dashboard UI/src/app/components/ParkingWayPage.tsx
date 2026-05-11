@@ -250,7 +250,7 @@ export function ParkingWayPage() {
                 Walk There
               </button>
               <button
-                onClick={() => openNavigation(selected, 'driving', currentLocation)}
+                onClick={() => window.open(`https://www.google.com/maps/dir/?api=1&destination=${selected.lat},${selected.lng}&travelmode=driving`, '_blank')}
                 className="flex items-center justify-center gap-2 py-3 rounded-xl bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 transition"
               >
                 <Car className="w-4 h-4" />

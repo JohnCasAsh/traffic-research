@@ -45,9 +45,9 @@ function formatDist(m: number) {
   return m < 1000 ? `${Math.round(m)}m` : `${(m / 1000).toFixed(1)}km`;
 }
 
-function openNavigation(loc: ParkingLocation, mode: 'walking' | 'driving', currentLocation: { lat: number; lng: number } | null) {
-  const origin = currentLocation ? `${currentLocation.lat},${currentLocation.lng}` : `${TUGUEGARAO.lat},${TUGUEGARAO.lng}`;
-  window.open(`https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${loc.lat},${loc.lng}&travelmode=${mode}`, '_blank');
+function openDriving(loc: ParkingLocation) {
+  // No explicit origin — Google Maps uses the device's own GPS
+  window.open(`https://www.google.com/maps/dir/?api=1&destination=${loc.lat},${loc.lng}&travelmode=driving`, '_blank');
 }
 
 export function CommutterDashboardPage() {
@@ -310,7 +310,7 @@ export function CommutterDashboardPage() {
                 Walk There
               </button>
               <button
-                onClick={() => openNavigation(selected, 'driving', currentLocation)}
+                onClick={() => openDriving(selected)}
                 className="flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-blue-600 text-white text-xs font-bold hover:bg-blue-700 transition"
               >
                 <Car className="w-4 h-4" />
