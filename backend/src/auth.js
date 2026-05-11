@@ -628,7 +628,7 @@ async function findOrCreateOAuthUser({ provider, email, firstName, lastName, ipA
       details: JSON.stringify({ provider }),
     });
 
-    return existingUser;
+    return { user: existingUser, isNew: false };
   }
 
   const { encrypted, iv, authTag } = encryptEmail(email, encKey);
@@ -674,11 +674,14 @@ async function findOrCreateOAuthUser({ provider, email, firstName, lastName, ipA
   });
 
   return {
-    id: userId,
-    first_name: firstName || 'User',
-    last_name: lastName || '',
-    role: 'driver',
-    email_verified: true,
+    user: {
+      id: userId,
+      first_name: firstName || 'User',
+      last_name: lastName || '',
+      role: 'driver',
+      email_verified: true,
+    },
+    isNew: true,
   };
 }
 
@@ -687,9 +690,19 @@ function redirectOAuthError(res, provider, reason, frontendBaseUrl = FRONTEND_UR
   return res.redirect(302, buildOauthErrorRedirectUrl(provider, reason, frontendBaseUrl));
 }
 
-function redirectOAuthSuccess(res, provider, user, frontendBaseUrl = FRONTEND_URL) {
+function redirectOAuthSuccess(res, provider, user, frontendBaseUrl = FRONTEND_URL, isNew = false) {
   relaxOAuthRedirectHeaders(res);
-  return res.redirect(302, buildOauthSuccessRedirectUrl(provider, user, frontendBaseUrl));
+  const params = {
+    oauth: 'success',
+    provider,
+    token: issueAuthToken(user),
+    userId: user.id,
+    firstName: user.first_name || '',
+    lastName: user.last_name || '',
+    role: user.role || 'driver',
+  };
+  if (isNew) params.newUser = '1';
+  return res.redirect(302, buildLoginRedirectUrl(frontendBaseUrl, params));
 }
 
 function sendVerifyResponse(req, res, statusCode, payload) {
@@ -721,7 +734,7 @@ router.post(
       .isLength({ min: 8, max: 128 })
       .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/)
       .withMessage('Password must have uppercase, lowercase, and number'),
-    body('role').isIn(['driver']),
+    body('role').isIn(['driver', 'commuter']),
   ],
   async (req, res) => {
     try {
@@ -1164,6 +1177,7 @@ router.patch(
   [
     body('firstName').optional().isString().trim().isLength({ min: 1, max: 100 }),
     body('lastName').optional().isString().trim().isLength({ max: 100 }),
+    body('role').optional().isIn(['driver', 'commuter']),
     body('profilePictureUrl')
       .optional({ nullable: true })
       .custom((value) => isProfilePictureValueValid(value)),
@@ -1193,6 +1207,10 @@ router.patch(
 
       if (Object.prototype.hasOwnProperty.call(req.body, 'lastName')) {
         updates.last_name = normalizeTextField(req.body.lastName, 100);
+      }
+
+      if (Object.prototype.hasOwnProperty.call(req.body, 'role')) {
+        updates.role = req.body.role;
       }
 
       if (Object.prototype.hasOwnProperty.call(req.body, 'profilePictureUrl')) {
@@ -1341,7 +1359,7 @@ router.get('/oauth/google/callback', async (req, res) => {
 
   try {
     const profile = await fetchGoogleProfile(code);
-    const user = await findOrCreateOAuthUser({
+    const { user, isNew } = await findOrCreateOAuthUser({
       provider: 'google',
       email: profile.email,
       firstName: profile.firstName,
@@ -1356,7 +1374,7 @@ router.get('/oauth/google/callback', async (req, res) => {
     sendMakeEvent('auth_oauth_login_success', successPayload).catch(() => {});
     logToNotionAsync('auth_oauth_login_success', successPayload);
 
-    return redirectOAuthSuccess(res, 'google', user, frontendBaseUrl);
+    return redirectOAuthSuccess(res, 'google', user, frontendBaseUrl, isNew);
   } catch (error) {
     console.error('Google OAuth callback error:', error);
     const errorPayload = {
@@ -1432,7 +1450,7 @@ router.get('/oauth/github/callback', async (req, res) => {
 
   try {
     const profile = await fetchGitHubProfile(code);
-    const user = await findOrCreateOAuthUser({
+    const { user, isNew } = await findOrCreateOAuthUser({
       provider: 'github',
       email: profile.email,
       firstName: profile.firstName,
@@ -1447,7 +1465,7 @@ router.get('/oauth/github/callback', async (req, res) => {
     sendMakeEvent('auth_oauth_login_success', successPayload).catch(() => {});
     logToNotionAsync('auth_oauth_login_success', successPayload);
 
-    return redirectOAuthSuccess(res, 'github', user, frontendBaseUrl);
+    return redirectOAuthSuccess(res, 'github', user, frontendBaseUrl, isNew);
   } catch (error) {
     console.error('GitHub OAuth callback error:', error);
     const errorPayload = {
