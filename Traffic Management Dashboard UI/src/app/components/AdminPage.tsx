@@ -131,6 +131,7 @@ export function AdminPage() {
   const [parkingError, setParkingError] = useState('');
   const [confirmDeleteParking, setConfirmDeleteParking] = useState<ParkingRow | null>(null);
   const [showForm, setShowForm] = useState(false);
+  const [mapSubTab, setMapSubTab] = useState<'parking' | 'gas'>('parking');
 
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<google.maps.Map | null>(null);
@@ -174,7 +175,10 @@ export function AdminPage() {
   useEffect(() => {
     if (!mapRef.current || tab !== 'parking') return;
     parkingMarkersRef.current.forEach(m => m.setMap(null));
-    parkingMarkersRef.current = parking.map(p => {
+    const filtered = parking.filter(p =>
+      mapSubTab === 'gas' ? p.type === 'gas_station' : p.type !== 'gas_station'
+    );
+    parkingMarkersRef.current = filtered.map(p => {
       const isGas = p.type === 'gas_station';
       const m = new google.maps.Marker({
         position: { lat: p.lat, lng: p.lng },
@@ -200,7 +204,7 @@ export function AdminPage() {
       m.addListener('click', () => info.open(mapRef.current!, m));
       return m;
     });
-  }, [parking, tab]);
+  }, [parking, tab, mapSubTab]);
 
   // Initialize map when parking tab is active
   useEffect(() => {
@@ -260,7 +264,6 @@ export function AdminPage() {
     setPinLat(null);
     setPinLng(null);
     setParkingName('');
-    setParkingType('mall');
     setParkingNotes('');
     setFareNormal('');
     setFareDiscounted('');
@@ -268,6 +271,12 @@ export function AdminPage() {
     setParkingError('');
     setEditTarget(null);
     setShowForm(false);
+  }
+
+  function switchMapSubTab(next: 'parking' | 'gas') {
+    clearForm();
+    setMapSubTab(next);
+    setParkingType(next === 'gas' ? 'gas_station' : 'mall');
   }
 
   function handleEditParking(p: ParkingRow) {
@@ -687,12 +696,31 @@ export function AdminPage() {
           <div className="space-y-4">
             {/* Map + Pin Form */}
             <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
-              <div className="px-6 py-4 border-b border-slate-100">
-                <h2 className="font-semibold text-slate-900 text-sm flex items-center gap-2">
-                  <MapPin className="w-4 h-4 text-orange-500" />
-                  Pin a Location
-                </h2>
-                <p className="text-xs text-slate-500 mt-1">Click anywhere on the map to drop a pin — parking, terminal, or gas station.</p>
+              <div className="border-b border-slate-100">
+                <div className="px-6 pt-4 pb-3">
+                  <h2 className="font-semibold text-slate-900 text-sm flex items-center gap-2">
+                    <MapPin className="w-4 h-4 text-orange-500" />
+                    Pin a Location
+                  </h2>
+                  <p className="text-xs text-slate-500 mt-1">Click the map to drop a pin, then fill in the details below.</p>
+                </div>
+                {/* Sub-tabs */}
+                <div className="flex">
+                  <button
+                    onClick={() => switchMapSubTab('parking')}
+                    className={`flex-1 py-2.5 text-xs font-semibold flex items-center justify-center gap-1.5 border-b-2 transition ${mapSubTab === 'parking' ? 'border-teal-600 text-teal-700 bg-teal-50' : 'border-transparent text-slate-500 hover:text-slate-700 hover:bg-slate-50'}`}
+                  >
+                    <ParkingSquare className="w-3.5 h-3.5" />
+                    Parking &amp; Terminals
+                  </button>
+                  <button
+                    onClick={() => switchMapSubTab('gas')}
+                    className={`flex-1 py-2.5 text-xs font-semibold flex items-center justify-center gap-1.5 border-b-2 transition ${mapSubTab === 'gas' ? 'border-green-600 text-green-700 bg-green-50' : 'border-transparent text-slate-500 hover:text-slate-700 hover:bg-slate-50'}`}
+                  >
+                    <Fuel className="w-3.5 h-3.5" />
+                    Gas Stations
+                  </button>
+                </div>
               </div>
 
               {/* Map */}
@@ -727,13 +755,22 @@ export function AdminPage() {
                         placeholder="e.g. SM Center Parking" maxLength={100}
                         className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white" />
                     </div>
-                    <div>
-                      <label className="block text-xs font-medium text-slate-700 mb-1">Type</label>
-                      <select value={parkingType} onChange={e => setParkingType(e.target.value)}
-                        className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white">
-                        {PARKING_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
-                      </select>
-                    </div>
+                    {mapSubTab === 'gas' ? (
+                      <div>
+                        <label className="block text-xs font-medium text-slate-700 mb-1">Type</label>
+                        <div className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 bg-green-50 text-green-700 font-medium flex items-center gap-2">
+                          <Fuel className="w-3.5 h-3.5" /> Gas Station
+                        </div>
+                      </div>
+                    ) : (
+                      <div>
+                        <label className="block text-xs font-medium text-slate-700 mb-1">Type</label>
+                        <select value={parkingType} onChange={e => setParkingType(e.target.value)}
+                          className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white">
+                          {PARKING_TYPES.filter(t => t.value !== 'gas_station').map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+                        </select>
+                      </div>
+                    )}
 
                     {/* Fare / Price fields — labels change based on type */}
                     <div>
@@ -862,45 +899,44 @@ export function AdminPage() {
                     </div>
               );
 
-              return (
-                <>
-                  {/* Parking & Terminals */}
-                  <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
-                    <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
-                      <h2 className="font-semibold text-slate-900 text-sm flex items-center gap-2">
-                        <ParkingSquare className="w-4 h-4 text-teal-600" />
-                        Parking &amp; Terminals ({parkingSpots.length})
-                      </h2>
-                      <button onClick={loadParking} disabled={parkingLoading} className="text-slate-400 hover:text-slate-600 transition">
-                        <RefreshCw className={`w-4 h-4 ${parkingLoading ? 'animate-spin' : ''}`} />
-                      </button>
-                    </div>
-                    {parkingLoading ? (
-                      <div className="p-8 text-center text-slate-400 text-sm">Loading...</div>
-                    ) : parkingSpots.length === 0 ? (
-                      <div className="p-8 text-center text-slate-400 text-sm">No parking spots pinned yet. Click on the map to add one.</div>
-                    ) : (
-                      <div className="divide-y divide-slate-100">{parkingSpots.map(renderItem)}</div>
-                    )}
+              return mapSubTab === 'parking' ? (
+                <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+                  <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+                    <h2 className="font-semibold text-slate-900 text-sm flex items-center gap-2">
+                      <ParkingSquare className="w-4 h-4 text-teal-600" />
+                      Parking &amp; Terminals ({parkingSpots.length})
+                    </h2>
+                    <button onClick={loadParking} disabled={parkingLoading} className="text-slate-400 hover:text-slate-600 transition">
+                      <RefreshCw className={`w-4 h-4 ${parkingLoading ? 'animate-spin' : ''}`} />
+                    </button>
                   </div>
-
-                  {/* Gas Stations — Drivers only */}
-                  <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
-                    <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
-                      <h2 className="font-semibold text-slate-900 text-sm flex items-center gap-2">
-                        <Fuel className="w-4 h-4 text-green-600" />
-                        Gas Stations — For Drivers ({gasStations.length})
-                      </h2>
-                    </div>
-                    {parkingLoading ? (
-                      <div className="p-8 text-center text-slate-400 text-sm">Loading...</div>
-                    ) : gasStations.length === 0 ? (
-                      <div className="p-8 text-center text-slate-400 text-sm">No gas stations pinned yet. Select "Gas Station" type and click the map.</div>
-                    ) : (
-                      <div className="divide-y divide-slate-100">{gasStations.map(renderItem)}</div>
-                    )}
+                  {parkingLoading ? (
+                    <div className="p-8 text-center text-slate-400 text-sm">Loading...</div>
+                  ) : parkingSpots.length === 0 ? (
+                    <div className="p-8 text-center text-slate-400 text-sm">No parking spots pinned yet. Click on the map to add one.</div>
+                  ) : (
+                    <div className="divide-y divide-slate-100">{parkingSpots.map(renderItem)}</div>
+                  )}
+                </div>
+              ) : (
+                <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+                  <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+                    <h2 className="font-semibold text-slate-900 text-sm flex items-center gap-2">
+                      <Fuel className="w-4 h-4 text-green-600" />
+                      Gas Stations — For Drivers ({gasStations.length})
+                    </h2>
+                    <button onClick={loadParking} disabled={parkingLoading} className="text-slate-400 hover:text-slate-600 transition">
+                      <RefreshCw className={`w-4 h-4 ${parkingLoading ? 'animate-spin' : ''}`} />
+                    </button>
                   </div>
-                </>
+                  {parkingLoading ? (
+                    <div className="p-8 text-center text-slate-400 text-sm">Loading...</div>
+                  ) : gasStations.length === 0 ? (
+                    <div className="p-8 text-center text-slate-400 text-sm">No gas stations pinned yet. Click the map above to add one.</div>
+                  ) : (
+                    <div className="divide-y divide-slate-100">{gasStations.map(renderItem)}</div>
+                  )}
+                </div>
               );
             })()}
           </div>
