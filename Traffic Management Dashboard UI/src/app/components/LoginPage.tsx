@@ -1,6 +1,6 @@
 import { Link, useNavigate, useSearchParams } from 'react-router';
 import { motion } from 'motion/react';
-import { Navigation, Mail, Lock, ArrowRight, Github, Chrome } from 'lucide-react';
+import { Navigation, Mail, Lock, ArrowRight, Github, Chrome, Car, Users } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { API_URL } from '../api';
 import { useAuth } from '../auth';
@@ -16,6 +16,7 @@ export function LoginPage() {
   const oauthLastName = searchParams.get('lastName');
   const oauthRole = searchParams.get('role');
   const oauthToken = searchParams.get('token');
+  const oauthIsNew = searchParams.get('newUser') === '1';
   const verified = searchParams.get('verified');
   const checkEmail = searchParams.get('checkEmail');
   const suspended = searchParams.get('suspended');
@@ -30,30 +31,47 @@ export function LoginPage() {
   const [error, setError] = useState('');
   const [resendMessage, setResendMessage] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
   const [form, setForm] = useState({ email: emailHint || '', password: '' });
+  const [showRolePicker, setShowRolePicker] = useState(false);
+  const [pickedRole, setPickedRole] = useState<'commuter' | 'driver'>('commuter');
+  const [roleSubmitting, setRoleSubmitting] = useState(false);
+
+  const completeOAuthLogin = (role: string) => {
+    login(oauthToken!, {
+      id: oauthUserId!,
+      email: '',
+      firstName: oauthFirstName || 'User',
+      lastName: oauthLastName || '',
+      role,
+      profilePictureUrl: '',
+      address: { country: '', province: '', city: '', barangay: '', street: '', houseNumber: '', postalCode: '' },
+      authProviders: oauthProvider ? [oauthProvider] : [],
+      hasPassword: false,
+      emailVerified: true,
+    });
+    navigate(redirectTo, { replace: true });
+  };
+
+  const handleRoleConfirm = async () => {
+    setRoleSubmitting(true);
+    try {
+      await fetch(`${API_URL}/api/auth/me`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${oauthToken}` },
+        body: JSON.stringify({ role: pickedRole }),
+      });
+    } catch {
+      // non-critical — proceed anyway
+    }
+    completeOAuthLogin(pickedRole);
+  };
 
   useEffect(() => {
     if (oauth === 'success' && oauthToken && oauthUserId) {
-      login(oauthToken, {
-        id: oauthUserId,
-        email: '',
-        firstName: oauthFirstName || 'User',
-        lastName: oauthLastName || '',
-        role: oauthRole || 'driver',
-        profilePictureUrl: '',
-        address: {
-          country: '',
-          province: '',
-          city: '',
-          barangay: '',
-          street: '',
-          houseNumber: '',
-          postalCode: '',
-        },
-        authProviders: oauthProvider ? [oauthProvider] : [],
-        hasPassword: false,
-        emailVerified: true,
-      });
-      navigate(redirectTo, { replace: true });
+      if (oauthIsNew) {
+        setShowRolePicker(true);
+        return;
+      }
+      completeOAuthLogin(oauthRole || 'driver');
       return;
     }
 
@@ -66,6 +84,7 @@ export function LoginPage() {
     navigate,
     oauth,
     oauthFirstName,
+    oauthIsNew,
     oauthLastName,
     oauthProvider,
     oauthRole,
@@ -438,6 +457,73 @@ export function LoginPage() {
           </p>
         </motion.div>
       </div>
+      {showRolePicker && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm px-4">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-sm"
+          >
+            <div className="text-center mb-6">
+              <div className="w-12 h-12 bg-gradient-to-br from-teal-500 to-blue-600 rounded-xl flex items-center justify-center mx-auto mb-4">
+                <Navigation className="w-6 h-6 text-white" />
+              </div>
+              <h2 className="text-2xl font-bold text-slate-900 mb-1">One more step</h2>
+              <p className="text-slate-500 text-sm">How will you use Navocs?</p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 mb-6">
+              <button
+                type="button"
+                onClick={() => setPickedRole('commuter')}
+                className={`flex flex-col items-center gap-2 py-5 px-3 rounded-xl border-2 transition-all ${
+                  pickedRole === 'commuter'
+                    ? 'border-blue-500 bg-blue-50 text-blue-700'
+                    : 'border-slate-200 bg-slate-50 text-slate-500 hover:border-slate-300'
+                }`}
+              >
+                <Users className={`w-7 h-7 ${pickedRole === 'commuter' ? 'text-blue-600' : 'text-slate-400'}`} />
+                <div>
+                  <div className="text-sm font-semibold">Commuter</div>
+                  <div className="text-xs opacity-70">Jeep, bus, e-trike</div>
+                </div>
+              </button>
+              <button
+                type="button"
+                onClick={() => setPickedRole('driver')}
+                className={`flex flex-col items-center gap-2 py-5 px-3 rounded-xl border-2 transition-all ${
+                  pickedRole === 'driver'
+                    ? 'border-teal-500 bg-teal-50 text-teal-700'
+                    : 'border-slate-200 bg-slate-50 text-slate-500 hover:border-slate-300'
+                }`}
+              >
+                <Car className={`w-7 h-7 ${pickedRole === 'driver' ? 'text-teal-600' : 'text-slate-400'}`} />
+                <div>
+                  <div className="text-sm font-semibold">Driver</div>
+                  <div className="text-xs opacity-70">Tricycle, car, motorcycle</div>
+                </div>
+              </button>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleRoleConfirm}
+              disabled={roleSubmitting}
+              className="w-full flex justify-center items-center py-3 px-4 rounded-xl text-sm font-medium text-white bg-gradient-to-r from-teal-600 to-blue-600 hover:from-teal-700 hover:to-blue-700 transition-all disabled:opacity-70"
+            >
+              {roleSubmitting ? (
+                <motion.div
+                  animate={{ rotate: 360 }}
+                  transition={{ repeat: Infinity, duration: 1, ease: 'linear' }}
+                  className="w-5 h-5 border-2 border-white border-t-transparent rounded-full"
+                />
+              ) : (
+                <>Continue <ArrowRight className="ml-2 w-4 h-4" /></>
+              )}
+            </button>
+          </motion.div>
+        </div>
+      )}
     </div>
   );
 }
