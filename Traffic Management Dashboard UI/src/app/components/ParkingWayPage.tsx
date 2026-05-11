@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { ParkingSquare, Fuel, MapPin, RefreshCw, Search, Navigation, PersonStanding, Car, CheckCircle } from 'lucide-react';
+import { useNavigate } from 'react-router';
 import { API_URL } from '../api';
 import { useLocationConsent } from '../LocationConsentContext';
 import { formatLocationAccuracy } from '../location';
@@ -68,6 +69,7 @@ function openNavigation(loc: Location, mode: 'walking' | 'driving', currentLocat
 }
 
 export function ParkingWayPage() {
+  const navigate = useNavigate();
   const { consent, setConsent, currentLocation } = useLocationConsent();
   const [locations, setLocations] = useState<Location[]>([]);
   const [loading, setLoading] = useState(true);
@@ -241,7 +243,7 @@ export function ParkingWayPage() {
             )}
             <div className="grid grid-cols-2 gap-2">
               <button
-                onClick={() => openNavigation(selected, 'walking', currentLocation)}
+                onClick={() => navigate(`/walkway?dest_lat=${selected.lat}&dest_lng=${selected.lng}&dest_name=${encodeURIComponent(selected.name)}`)}
                 className="flex items-center justify-center gap-2 py-3 rounded-xl bg-teal-600 text-white text-sm font-semibold hover:bg-teal-700 transition"
               >
                 <PersonStanding className="w-4 h-4" />

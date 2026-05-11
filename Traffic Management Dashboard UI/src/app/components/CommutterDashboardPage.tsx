@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
+import { useNavigate } from 'react-router';
 import { ParkingSquare, Fuel, MapPin, Search, Navigation, PersonStanding, Car, X, RefreshCw } from 'lucide-react';
 import { importLibrary, setOptions } from '@googlemaps/js-api-loader';
 import { API_URL } from '../api';
@@ -50,6 +51,7 @@ function openNavigation(loc: ParkingLocation, mode: 'walking' | 'driving', curre
 }
 
 export function CommutterDashboardPage() {
+  const navigate = useNavigate();
   const { consent, setConsent, currentLocation } = useLocationConsent();
   const [locations, setLocations] = useState<ParkingLocation[]>([]);
   const [loading, setLoading] = useState(true);
@@ -301,7 +303,7 @@ export function CommutterDashboardPage() {
 
             <div className="grid grid-cols-2 gap-2">
               <button
-                onClick={() => openNavigation(selected, 'walking', currentLocation)}
+                onClick={() => navigate(`/walkway?dest_lat=${selected.lat}&dest_lng=${selected.lng}&dest_name=${encodeURIComponent(selected.name)}`)}
                 className="flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-teal-600 text-white text-xs font-bold hover:bg-teal-700 transition"
               >
                 <PersonStanding className="w-4 h-4" />
