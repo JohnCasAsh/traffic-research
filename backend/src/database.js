@@ -492,7 +492,7 @@ async function getAllParkingLocations() {
   return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
 }
 
-async function addParkingLocation({ name, type, lat, lng, notes, fare_normal, fare_discounted, photo, addedBy }) {
+async function addParkingLocation({ name, type, lat, lng, notes, fare_normal, fare_discounted, photo, fuel_prices, addedBy }) {
   await ready();
   const db = getFirestore();
   const doc = await db.collection(COLLECTIONS.parking).add({
@@ -504,6 +504,7 @@ async function addParkingLocation({ name, type, lat, lng, notes, fare_normal, fa
     fare_normal: fare_normal ?? null,
     fare_discounted: fare_discounted ?? null,
     photo: photo || null,
+    fuel_prices: fuel_prices ?? null,
     added_by: addedBy,
     added_at: new Date().toISOString(),
   });

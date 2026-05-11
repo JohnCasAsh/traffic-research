@@ -522,7 +522,7 @@ export function DashboardMap({
   const parkingMarkersRef = useRef<any[]>([]);
 
   const [showParking, setShowParking] = useState(true);
-  const [parkingLocations, setParkingLocations] = useState<{ id: string; name: string; type: string; lat: number; lng: number; notes: string; fare_normal: number | null; fare_discounted: number | null; photo: string | null }[]>([]);
+  const [parkingLocations, setParkingLocations] = useState<{ id: string; name: string; type: string; lat: number; lng: number; notes: string; fare_normal: number | null; fare_discounted: number | null; fuel_prices?: { name: string; price: string }[] | null; photo: string | null }[]>([]);
 
   const [isMapActivated, setIsMapActivated] = useState(true);
   const [mapReady, setMapReady] = useState(false);
@@ -1591,7 +1591,7 @@ export function DashboardMap({
     const PTYPE_LABELS: Record<string, string> = {
       mall: 'Mall Parking', street: 'Street Parking', jeepney_terminal: 'Jeepney Terminal',
       tricycle_terminal: 'Tricycle Terminal', public: 'Public Parking', church: 'Church Parking',
-      school: 'School Parking', gas_station: 'Gas Station', other: 'Other',
+      school: 'School Parking', gas_station: 'Gas Station', ev_charging: 'EV Charging Station', other: 'Other',
     };
     parkingMarkersRef.current = parkingLocations.map(p => {
       const isGas = ['gas_station', 'gasoline_station', 'diesel_station', 'ev_charging'].includes(p.type);
@@ -1611,20 +1611,23 @@ export function DashboardMap({
         label: { text: isGas ? 'G' : 'P', color: '#fff', fontSize: '10px', fontWeight: 'bold' },
       });
       const typeLabel = PTYPE_LABELS[p.type] || p.type;
-      const isGasStation = ['gas_station', 'gasoline_station', 'diesel_station', 'ev_charging'].includes(p.type);
-      const gasLabel1 = p.type === 'ev_charging' ? '/kWh' : p.type === 'diesel_station' ? '/L Diesel' : p.type === 'gasoline_station' ? '/L Gasoline' : '/L Gas';
-      const gasLabel2 = p.type === 'ev_charging' ? '/kWh Off-peak' : '/kWh EV';
-      const fareHtml = (p.fare_normal != null || p.fare_discounted != null)
+      const fuelEntries = isGas && p.fuel_prices?.length
+        ? p.fuel_prices.filter(f => f.name.trim())
+        : [];
+      const fuelHtml = fuelEntries.length
+        ? `<div style="margin-top:5px;font-size:11px;display:flex;gap:6px;flex-wrap:wrap;">${fuelEntries.map(f => `<span style="background:#dcfce7;color:#15803d;padding:1px 6px;border-radius:99px;font-weight:600;">₱${esc(f.price)} ${esc(f.name)}</span>`).join('')}</div>`
+        : '';
+      const fareHtml = !isGas && (p.fare_normal != null || p.fare_discounted != null)
         ? `<div style="margin-top:5px;font-size:11px;display:flex;gap:6px;flex-wrap:wrap;">
-            ${p.fare_normal != null ? `<span style="background:#ccfbf1;color:#0f766e;padding:1px 6px;border-radius:99px;font-weight:600;">${isGasStation ? `₱${p.fare_normal}${gasLabel1}` : `₱${p.fare_normal} Normal`}</span>` : ''}
-            ${p.fare_discounted != null ? `<span style="background:#dbeafe;color:#1d4ed8;padding:1px 6px;border-radius:99px;font-weight:600;">${isGasStation ? `₱${p.fare_discounted}${gasLabel2}` : `₱${p.fare_discounted} Student/PWD/Senior`}</span>` : ''}
+            ${p.fare_normal != null ? `<span style="background:#ccfbf1;color:#0f766e;padding:1px 6px;border-radius:99px;font-weight:600;">₱${p.fare_normal} Normal</span>` : ''}
+            ${p.fare_discounted != null ? `<span style="background:#dbeafe;color:#1d4ed8;padding:1px 6px;border-radius:99px;font-weight:600;">₱${p.fare_discounted} Student/PWD/Senior</span>` : ''}
           </div>`
         : '';
       const photoHtml = p.photo
         ? `<img src="${p.photo}" alt="" style="width:100%;max-width:200px;height:90px;object-fit:cover;border-radius:6px;margin-bottom:6px;display:block;" />`
         : '';
       const infoWindow = new gmaps.InfoWindow({
-        content: `<div style="max-width:210px;font-family:sans-serif;">${photoHtml}<div style="font-size:13px;font-weight:700;color:#1e293b">${esc(p.name)}</div><div style="font-size:11px;color:#64748b;margin-top:2px">${esc(typeLabel)}${p.notes ? ' · ' + esc(p.notes) : ''}</div>${fareHtml}</div>`,
+        content: `<div style="max-width:210px;font-family:sans-serif;">${photoHtml}<div style="font-size:13px;font-weight:700;color:#1e293b">${esc(p.name)}</div><div style="font-size:11px;color:#64748b;margin-top:2px">${esc(typeLabel)}${p.notes ? ' · ' + esc(p.notes) : ''}</div>${fuelHtml}${fareHtml}</div>`,
       });
       marker.addListener('click', () => infoWindow.open(mapRef.current, marker));
       return marker;

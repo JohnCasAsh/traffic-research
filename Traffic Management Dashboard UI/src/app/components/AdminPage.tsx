@@ -27,6 +27,8 @@ type LoginRow = {
   user: { firstName: string; lastName: string; role: string } | null;
 };
 
+type FuelEntry = { name: string; price: string };
+
 type ParkingRow = {
   id: string;
   name: string;
@@ -36,6 +38,7 @@ type ParkingRow = {
   notes: string;
   fare_normal: number | null;
   fare_discounted: number | null;
+  fuel_prices?: FuelEntry[];
   photo: string | null;
   added_at: string | null;
 };
@@ -74,35 +77,12 @@ const PARKING_TYPES: { value: string; label: string }[] = [
 ];
 
 const GAS_TYPES: { value: string; label: string }[] = [
-  { value: 'gasoline_station', label: 'Gasoline Station' },
-  { value: 'diesel_station', label: 'Diesel Station' },
-  { value: 'gas_station', label: 'Gas & Diesel Station' },
+  { value: 'gas_station', label: 'Gas Station' },
   { value: 'ev_charging', label: 'EV Charging Station' },
 ];
 
-const ALL_TYPES = [...PARKING_TYPES, ...GAS_TYPES];
-
 function isGasType(type: string) {
   return ['gas_station', 'gasoline_station', 'diesel_station', 'ev_charging'].includes(type);
-}
-
-function getGasPriceConfig(type: string) {
-  if (type === 'ev_charging') return {
-    label1: 'Charging Rate (₱/kWh)', placeholder1: 'e.g. 10',
-    label2: 'Off-peak Rate (₱/kWh)', placeholder2: 'e.g. 8',
-  };
-  if (type === 'gasoline_station') return {
-    label1: 'Gasoline Price (₱/L)', placeholder1: 'e.g. 62',
-    label2: 'EV Charging Rate (₱/kWh)', placeholder2: 'e.g. 10',
-  };
-  if (type === 'diesel_station') return {
-    label1: 'Diesel Price (₱/L)', placeholder1: 'e.g. 58',
-    label2: 'EV Charging Rate (₱/kWh)', placeholder2: 'e.g. 10',
-  };
-  return {
-    label1: 'Gas / Diesel Price (₱/L)', placeholder1: 'e.g. 62',
-    label2: 'EV Charging Rate (₱/kWh)', placeholder2: 'e.g. 10',
-  };
 }
 
 const TYPE_COLORS: Record<string, string> = {
@@ -114,8 +94,8 @@ const TYPE_COLORS: Record<string, string> = {
   church: 'bg-purple-100 text-purple-700',
   school: 'bg-green-100 text-green-700',
   gas_station: 'bg-green-100 text-green-700',
-  gasoline_station: 'bg-yellow-100 text-yellow-700',
-  diesel_station: 'bg-orange-100 text-orange-700',
+  gasoline_station: 'bg-green-100 text-green-700',
+  diesel_station: 'bg-green-100 text-green-700',
   ev_charging: 'bg-emerald-100 text-emerald-700',
   other: 'bg-slate-100 text-slate-500',
 };
@@ -166,6 +146,7 @@ export function AdminPage() {
   const [confirmDeleteParking, setConfirmDeleteParking] = useState<ParkingRow | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [mapSubTab, setMapSubTab] = useState<'parking' | 'gas'>('parking');
+  const [fuelPrices, setFuelPrices] = useState<FuelEntry[]>([{ name: '', price: '' }]);
 
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<google.maps.Map | null>(null);
@@ -228,10 +209,12 @@ export function AdminPage() {
         },
         label: { text: isGas ? 'G' : 'P', color: '#fff', fontSize: '10px', fontWeight: 'bold' },
       });
-      const typeLabel = PARKING_TYPES.find(t => t.value === p.type)?.label || p.type;
-      const gasCfg = getGasPriceConfig(p.type);
+      const typeLabel = PARKING_TYPES.find(t => t.value === p.type)?.label || GAS_TYPES.find(t => t.value === p.type)?.label || p.type;
+      const fuelHtml = isGas && p.fuel_prices?.length
+        ? p.fuel_prices.filter(f => f.name.trim()).map(f => `<span style="color:#15803d;font-weight:600">₱${f.price} ${f.name}</span>`).join(' · ')
+        : '';
       const priceHtml = isGas
-        ? `${p.fare_normal != null ? `<span style="color:#15803d;font-weight:600">₱${p.fare_normal} ${gasCfg.label1}</span>` : ''}${p.fare_normal != null && p.fare_discounted != null ? ' · ' : ''}${p.fare_discounted != null ? `<span style="color:#1d4ed8;font-weight:600">₱${p.fare_discounted} ${gasCfg.label2}</span>` : ''}`
+        ? fuelHtml
         : `${p.fare_normal != null ? `<span style="color:#0f766e;font-weight:600">₱${p.fare_normal} Normal</span>` : ''}${p.fare_normal != null && p.fare_discounted != null ? ' · ' : ''}${p.fare_discounted != null ? `<span style="color:#1d4ed8;font-weight:600">₱${p.fare_discounted} Student/PWD/Senior</span>` : ''}`;
       const info = new google.maps.InfoWindow({
         content: `<div style="font-size:13px;font-weight:600;color:#1e293b">${p.name}</div><div style="font-size:11px;color:#64748b;margin-top:2px">${typeLabel}</div>${priceHtml ? `<div style="font-size:11px;margin-top:4px">${priceHtml}</div>` : ''}`,
@@ -303,6 +286,7 @@ export function AdminPage() {
     setFareNormal('');
     setFareDiscounted('');
     setPhoto(null);
+    setFuelPrices([{ name: '', price: '' }]);
     setParkingError('');
     setEditTarget(null);
     setShowForm(false);
@@ -311,7 +295,7 @@ export function AdminPage() {
   function switchMapSubTab(next: 'parking' | 'gas') {
     clearForm();
     setMapSubTab(next);
-    setParkingType(next === 'gas' ? 'gasoline_station' : 'mall');
+    setParkingType(next === 'gas' ? 'gas_station' : 'mall');
   }
 
   function handleEditParking(p: ParkingRow) {
@@ -325,6 +309,15 @@ export function AdminPage() {
     setPinLat(p.lat);
     setPinLng(p.lng);
     setParkingError('');
+    if (isGasType(p.type)) {
+      setFuelPrices(
+        p.fuel_prices?.length ? p.fuel_prices : [{ name: '', price: '' }]
+      );
+      setMapSubTab('gas');
+    } else {
+      setFuelPrices([{ name: '', price: '' }]);
+      setMapSubTab('parking');
+    }
     setShowForm(true);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
@@ -340,10 +333,13 @@ export function AdminPage() {
         name: parkingName.trim(),
         type: parkingType,
         notes: parkingNotes.trim(),
-        fare_normal: fareNormal !== '' ? parseFloat(fareNormal) : null,
-        fare_discounted: fareDiscounted !== '' ? parseFloat(fareDiscounted) : null,
+        fare_normal: !isGasType(parkingType) && fareNormal !== '' ? parseFloat(fareNormal) : null,
+        fare_discounted: !isGasType(parkingType) && fareDiscounted !== '' ? parseFloat(fareDiscounted) : null,
         photo: photo || null,
       };
+      if (isGasType(parkingType)) {
+        payload.fuel_prices = fuelPrices.filter(f => f.name.trim());
+      }
       if (!editTarget) {
         payload.lat = pinLat;
         payload.lng = pinLng;
@@ -798,41 +794,69 @@ export function AdminPage() {
                       </select>
                     </div>
 
-                    {/* Price fields — adapt to type */}
-                    {(() => {
-                      const cfg = isGasType(parkingType) ? getGasPriceConfig(parkingType) : null;
-                      return cfg ? (
-                        <>
-                          <div>
-                            <label className="block text-xs font-medium text-slate-700 mb-1">{cfg.label1}</label>
-                            <input type="number" min="0" max="9999" step="0.50" value={fareNormal}
-                              onChange={e => setFareNormal(e.target.value)} placeholder={cfg.placeholder1}
-                              className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white" />
-                          </div>
-                          <div>
-                            <label className="block text-xs font-medium text-slate-700 mb-1">{cfg.label2} <span className="text-slate-400">(optional)</span></label>
-                            <input type="number" min="0" max="9999" step="0.50" value={fareDiscounted}
-                              onChange={e => setFareDiscounted(e.target.value)} placeholder={cfg.placeholder2}
-                              className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white" />
-                          </div>
-                        </>
-                      ) : (
-                        <>
-                          <div>
-                            <label className="block text-xs font-medium text-slate-700 mb-1">Normal Fare (₱)</label>
-                            <input type="number" min="0" max="9999" step="0.50" value={fareNormal}
-                              onChange={e => setFareNormal(e.target.value)} placeholder="e.g. 14"
-                              className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white" />
-                          </div>
-                          <div>
-                            <label className="block text-xs font-medium text-slate-700 mb-1">Student / PWD & Senior Fare (₱)</label>
-                            <input type="number" min="0" max="9999" step="0.50" value={fareDiscounted}
-                              onChange={e => setFareDiscounted(e.target.value)} placeholder="e.g. 11"
-                              className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white" />
-                          </div>
-                        </>
-                      );
-                    })()}
+                    {/* Price fields — fuel entries for gas, fare fields for parking */}
+                    {isGasType(parkingType) ? (
+                      <div className="sm:col-span-2">
+                        <label className="block text-xs font-medium text-slate-700 mb-2">Fuel Prices</label>
+                        <div className="space-y-2">
+                          {fuelPrices.map((entry, i) => (
+                            <div key={i} className="flex items-center gap-2">
+                              <input
+                                type="text"
+                                value={entry.name}
+                                onChange={e => setFuelPrices(prev => prev.map((f, j) => j === i ? { ...f, name: e.target.value } : f))}
+                                placeholder="e.g. Gasoline, Diesel, Kerosene"
+                                maxLength={50}
+                                className="flex-1 px-3 py-2 text-sm rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white"
+                              />
+                              <span className="text-sm text-slate-500 font-medium flex-shrink-0">₱</span>
+                              <input
+                                type="number"
+                                min="0"
+                                max="9999"
+                                step="0.01"
+                                value={entry.price}
+                                onChange={e => setFuelPrices(prev => prev.map((f, j) => j === i ? { ...f, price: e.target.value } : f))}
+                                placeholder="Price/L"
+                                className="w-28 px-3 py-2 text-sm rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white"
+                              />
+                              {fuelPrices.length > 1 && (
+                                <button
+                                  type="button"
+                                  onClick={() => setFuelPrices(prev => prev.filter((_, j) => j !== i))}
+                                  className="flex-shrink-0 p-1.5 text-slate-400 hover:text-red-500 transition"
+                                >
+                                  <X className="w-4 h-4" />
+                                </button>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setFuelPrices(prev => [...prev, { name: '', price: '' }])}
+                          className="mt-2 flex items-center gap-1.5 text-xs text-teal-700 font-medium hover:text-teal-900 transition"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                          Add Fuel Type
+                        </button>
+                      </div>
+                    ) : (
+                      <>
+                        <div>
+                          <label className="block text-xs font-medium text-slate-700 mb-1">Normal Fare (₱)</label>
+                          <input type="number" min="0" max="9999" step="0.50" value={fareNormal}
+                            onChange={e => setFareNormal(e.target.value)} placeholder="e.g. 14"
+                            className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white" />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-slate-700 mb-1">Student / PWD &amp; Senior Fare (₱)</label>
+                          <input type="number" min="0" max="9999" step="0.50" value={fareDiscounted}
+                            onChange={e => setFareDiscounted(e.target.value)} placeholder="e.g. 11"
+                            className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white" />
+                        </div>
+                      </>
+                    )}
 
                     <div className="sm:col-span-2">
                       <label className="block text-xs font-medium text-slate-700 mb-1">Notes (optional)</label>
@@ -907,22 +931,26 @@ export function AdminPage() {
                           <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${TYPE_COLORS[p.type] || TYPE_COLORS.other}`}>
                             {PARKING_TYPES.find(t => t.value === p.type)?.label || p.type}
                           </span>
-                          {p.fare_normal != null && (() => {
-                            const cfg = isGasType(p.type) ? getGasPriceConfig(p.type) : null;
-                            return (
-                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-teal-50 text-teal-700">
-                                {cfg ? `₱${p.fare_normal} ${cfg.label1}` : `₱${p.fare_normal} Normal`}
+                          {isGasType(p.type) ? (
+                            p.fuel_prices?.filter(f => f.name.trim()).map((f, i) => (
+                              <span key={i} className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-50 text-green-700">
+                                {f.name}: ₱{f.price}
                               </span>
-                            );
-                          })()}
-                          {p.fare_discounted != null && (() => {
-                            const cfg = isGasType(p.type) ? getGasPriceConfig(p.type) : null;
-                            return (
-                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700">
-                                {cfg ? `₱${p.fare_discounted} ${cfg.label2}` : `₱${p.fare_discounted} Student/PWD/Senior`}
-                              </span>
-                            );
-                          })()}
+                            ))
+                          ) : (
+                            <>
+                              {p.fare_normal != null && (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-teal-50 text-teal-700">
+                                  ₱{p.fare_normal} Normal
+                                </span>
+                              )}
+                              {p.fare_discounted != null && (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700">
+                                  ₱{p.fare_discounted} Student/PWD/Senior
+                                </span>
+                              )}
+                            </>
+                          )}
                         </div>
                         <div className="flex items-center gap-2 mt-0.5">
                           <span className="text-xs text-slate-400 font-mono">{p.lat.toFixed(5)}, {p.lng.toFixed(5)}</span>

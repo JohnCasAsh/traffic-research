@@ -187,17 +187,21 @@ adminRouter.post(
     body('fare_normal').optional({ nullable: true }).isFloat({ min: 0, max: 9999 }),
     body('fare_discounted').optional({ nullable: true }).isFloat({ min: 0, max: 9999 }),
     body('photo').optional({ nullable: true }).isString().isLength({ max: 500000 }),
+    body('fuel_prices').optional({ nullable: true }).isArray(),
+    body('fuel_prices.*.name').optional().isString().isLength({ max: 50 }),
+    body('fuel_prices.*.price').optional().isString().isLength({ max: 20 }),
   ],
   async (req, res) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) return res.status(400).json({ error: errors.array()[0].msg });
     try {
-      const { name, type, lat, lng, notes, fare_normal, fare_discounted, photo } = req.body;
+      const { name, type, lat, lng, notes, fare_normal, fare_discounted, photo, fuel_prices } = req.body;
       const id = await db.addParkingLocation({
         name, type, lat, lng, notes,
         fare_normal: fare_normal ?? null,
         fare_discounted: fare_discounted ?? null,
         photo: photo || null,
+        fuel_prices: fuel_prices ?? null,
         addedBy: req.authUser.id,
       });
       res.json({ id, message: 'Parking location added.' });
@@ -220,12 +224,15 @@ adminRouter.patch(
     body('fare_normal').optional({ nullable: true }).isFloat({ min: 0, max: 9999 }),
     body('fare_discounted').optional({ nullable: true }).isFloat({ min: 0, max: 9999 }),
     body('photo').optional({ nullable: true }).isString().isLength({ max: 500000 }),
+    body('fuel_prices').optional({ nullable: true }).isArray(),
+    body('fuel_prices.*.name').optional().isString().isLength({ max: 50 }),
+    body('fuel_prices.*.price').optional().isString().isLength({ max: 20 }),
   ],
   async (req, res) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) return res.status(400).json({ error: errors.array()[0].msg });
     try {
-      const { name, type, notes, fare_normal, fare_discounted, photo } = req.body;
+      const { name, type, notes, fare_normal, fare_discounted, photo, fuel_prices } = req.body;
       const updates = {};
       if (name !== undefined) updates.name = name;
       if (type !== undefined) updates.type = type;
@@ -233,6 +240,7 @@ adminRouter.patch(
       if (fare_normal !== undefined) updates.fare_normal = fare_normal;
       if (fare_discounted !== undefined) updates.fare_discounted = fare_discounted;
       if (photo !== undefined) updates.photo = photo;
+      if (fuel_prices !== undefined) updates.fuel_prices = fuel_prices;
       await db.updateParkingLocation(req.params.id, updates);
       res.json({ message: 'Parking location updated.' });
     } catch (err) {
