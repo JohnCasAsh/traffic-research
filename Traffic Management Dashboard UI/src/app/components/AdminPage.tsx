@@ -175,21 +175,27 @@ export function AdminPage() {
     if (!mapRef.current || tab !== 'parking') return;
     parkingMarkersRef.current.forEach(m => m.setMap(null));
     parkingMarkersRef.current = parking.map(p => {
+      const isGas = p.type === 'gas_station';
       const m = new google.maps.Marker({
         position: { lat: p.lat, lng: p.lng },
         map: mapRef.current!,
         title: p.name,
         icon: {
-          path: google.maps.SymbolPath.CIRCLE,
+          path: 'M -1,-1 L 1,-1 L 1,1 L -1,1 Z',
           scale: 9,
-          fillColor: '#0d9488',
+          fillColor: isGas ? '#16a34a' : '#0d9488',
           fillOpacity: 1,
           strokeColor: '#fff',
-          strokeWeight: 2,
+          strokeWeight: 1.5,
         },
+        label: { text: isGas ? 'G' : 'P', color: '#fff', fontSize: '9px', fontWeight: 'bold' },
       });
+      const typeLabel = PARKING_TYPES.find(t => t.value === p.type)?.label || p.type;
+      const priceHtml = isGas
+        ? `${p.fare_normal != null ? `<span style="color:#15803d;font-weight:600">₱${p.fare_normal}/L Gas</span>` : ''}${p.fare_normal != null && p.fare_discounted != null ? ' · ' : ''}${p.fare_discounted != null ? `<span style="color:#1d4ed8;font-weight:600">₱${p.fare_discounted}/kWh EV</span>` : ''}`
+        : `${p.fare_normal != null ? `<span style="color:#0f766e;font-weight:600">₱${p.fare_normal} Normal</span>` : ''}${p.fare_normal != null && p.fare_discounted != null ? ' · ' : ''}${p.fare_discounted != null ? `<span style="color:#1d4ed8;font-weight:600">₱${p.fare_discounted} Student/PWD/Senior</span>` : ''}`;
       const info = new google.maps.InfoWindow({
-        content: `<div style="font-size:13px;font-weight:600">${p.name}</div><div style="font-size:11px;color:#64748b">${PARKING_TYPES.find(t => t.value === p.type)?.label || p.type}</div>`,
+        content: `<div style="font-size:13px;font-weight:600;color:#1e293b">${p.name}</div><div style="font-size:11px;color:#64748b;margin-top:2px">${typeLabel}</div>${priceHtml ? `<div style="font-size:11px;margin-top:4px">${priceHtml}</div>` : ''}`,
       });
       m.addListener('click', () => info.open(mapRef.current!, m));
       return m;
@@ -722,17 +728,23 @@ export function AdminPage() {
                       </select>
                     </div>
 
-                    {/* Fare fields */}
+                    {/* Fare / Price fields — labels change based on type */}
                     <div>
-                      <label className="block text-xs font-medium text-slate-700 mb-1">Normal Fare (₱)</label>
+                      <label className="block text-xs font-medium text-slate-700 mb-1">
+                        {parkingType === 'gas_station' ? 'Gasoline / Diesel Price (₱/L)' : 'Normal Fare (₱)'}
+                      </label>
                       <input type="number" min="0" max="9999" step="0.50" value={fareNormal}
-                        onChange={e => setFareNormal(e.target.value)} placeholder="e.g. 14"
+                        onChange={e => setFareNormal(e.target.value)}
+                        placeholder={parkingType === 'gas_station' ? 'e.g. 62' : 'e.g. 14'}
                         className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white" />
                     </div>
                     <div>
-                      <label className="block text-xs font-medium text-slate-700 mb-1">Student / PWD & Senior Fare (₱)</label>
+                      <label className="block text-xs font-medium text-slate-700 mb-1">
+                        {parkingType === 'gas_station' ? 'EV Charging Rate (₱/kWh)' : 'Student / PWD & Senior Fare (₱)'}
+                      </label>
                       <input type="number" min="0" max="9999" step="0.50" value={fareDiscounted}
-                        onChange={e => setFareDiscounted(e.target.value)} placeholder="e.g. 11"
+                        onChange={e => setFareDiscounted(e.target.value)}
+                        placeholder={parkingType === 'gas_station' ? 'e.g. 10' : 'e.g. 11'}
                         className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white" />
                     </div>
 
@@ -823,12 +835,12 @@ export function AdminPage() {
                           </span>
                           {p.fare_normal != null && (
                             <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-teal-50 text-teal-700">
-                              ₱{p.fare_normal} Normal
+                              {p.type === 'gas_station' ? `₱${p.fare_normal}/L Gas` : `₱${p.fare_normal} Normal`}
                             </span>
                           )}
                           {p.fare_discounted != null && (
                             <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700">
-                              ₱{p.fare_discounted} Student/PWD/Senior
+                              {p.type === 'gas_station' ? `₱${p.fare_discounted}/kWh EV` : `₱${p.fare_discounted} Student/PWD/Senior`}
                             </span>
                           )}
                         </div>

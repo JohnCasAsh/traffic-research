@@ -1611,10 +1611,11 @@ export function DashboardMap({
         label: { text: isGas ? 'G' : 'P', color: '#fff', fontSize: '9px', fontWeight: 'bold' },
       });
       const typeLabel = PTYPE_LABELS[p.type] || p.type;
+      const isGasStation = p.type === 'gas_station';
       const fareHtml = (p.fare_normal != null || p.fare_discounted != null)
         ? `<div style="margin-top:5px;font-size:11px;display:flex;gap:6px;flex-wrap:wrap;">
-            ${p.fare_normal != null ? `<span style="background:#ccfbf1;color:#0f766e;padding:1px 6px;border-radius:99px;font-weight:600;">₱${p.fare_normal} Normal</span>` : ''}
-            ${p.fare_discounted != null ? `<span style="background:#dbeafe;color:#1d4ed8;padding:1px 6px;border-radius:99px;font-weight:600;">₱${p.fare_discounted} Student/PWD/Senior</span>` : ''}
+            ${p.fare_normal != null ? `<span style="background:#ccfbf1;color:#0f766e;padding:1px 6px;border-radius:99px;font-weight:600;">${isGasStation ? `₱${p.fare_normal}/L Gas` : `₱${p.fare_normal} Normal`}</span>` : ''}
+            ${p.fare_discounted != null ? `<span style="background:#dbeafe;color:#1d4ed8;padding:1px 6px;border-radius:99px;font-weight:600;">${isGasStation ? `₱${p.fare_discounted}/kWh EV` : `₱${p.fare_discounted} Student/PWD/Senior`}</span>` : ''}
           </div>`
         : '';
       const photoHtml = p.photo
