@@ -1,6 +1,6 @@
 import { Link, useNavigate } from 'react-router';
 import { motion } from 'motion/react';
-import { Navigation, Mail, Lock, User, ArrowRight, Car } from 'lucide-react';
+import { Navigation, Mail, Lock, User, ArrowRight, Car, Users } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { API_URL } from '../api';
 import { useAuth } from '../auth';
@@ -10,7 +10,7 @@ export function SignUpPage() {
   const { isAuthenticated } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
-  const role = 'driver';
+  const [role, setRole] = useState<'driver' | 'commuter'>('driver');
   const [form, setForm] = useState({ firstName: '', lastName: '', email: '', password: '' });
   const [confirmPassword, setConfirmPassword] = useState('');
 
@@ -164,6 +164,42 @@ export function SignUpPage() {
                   className="block w-full px-3 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-teal-500 bg-slate-50 text-slate-900"
                   placeholder="Doe"
                 />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-2">I am a</label>
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={() => setRole('driver')}
+                  className={`flex flex-col items-center gap-2 py-4 px-3 rounded-xl border-2 transition-all ${
+                    role === 'driver'
+                      ? 'border-teal-500 bg-teal-50 text-teal-700'
+                      : 'border-slate-200 bg-slate-50 text-slate-500 hover:border-slate-300'
+                  }`}
+                >
+                  <Car className={`w-6 h-6 ${role === 'driver' ? 'text-teal-600' : 'text-slate-400'}`} />
+                  <div>
+                    <div className="text-sm font-semibold">Driver</div>
+                    <div className="text-xs opacity-70">Tricycle, car, motorcycle</div>
+                  </div>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setRole('commuter')}
+                  className={`flex flex-col items-center gap-2 py-4 px-3 rounded-xl border-2 transition-all ${
+                    role === 'commuter'
+                      ? 'border-blue-500 bg-blue-50 text-blue-700'
+                      : 'border-slate-200 bg-slate-50 text-slate-500 hover:border-slate-300'
+                  }`}
+                >
+                  <Users className={`w-6 h-6 ${role === 'commuter' ? 'text-blue-600' : 'text-slate-400'}`} />
+                  <div>
+                    <div className="text-sm font-semibold">Commuter</div>
+                    <div className="text-xs opacity-70">Riding jeep, bus, e-trike</div>
+                  </div>
+                </button>
               </div>
             </div>
 
