@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Shield, Users, LogIn, RefreshCw, Clock, Wifi, Ban, Trash2, CheckCircle, ShieldCheck, FlaskConical, MapPin, ParkingSquare, Plus, X } from 'lucide-react';
+import { Shield, Users, LogIn, RefreshCw, Clock, Wifi, Ban, Trash2, CheckCircle, ShieldCheck, FlaskConical, MapPin, ParkingSquare, Plus, X, Pencil, Fuel, Image } from 'lucide-react';
 import { importLibrary, setOptions } from '@googlemaps/js-api-loader';
 import { useAuth } from '../auth';
 import { API_URL, buildAuthHeaders } from '../api';
@@ -34,8 +34,33 @@ type ParkingRow = {
   lat: number;
   lng: number;
   notes: string;
+  fare_normal: number | null;
+  fare_discounted: number | null;
+  photo: string | null;
   added_at: string | null;
 };
+
+async function compressImage(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new window.Image();
+      img.onload = () => {
+        const MAX = 640;
+        const ratio = Math.min(MAX / img.width, MAX / img.height, 1);
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.round(img.width * ratio);
+        canvas.height = Math.round(img.height * ratio);
+        canvas.getContext('2d')!.drawImage(img, 0, 0, canvas.width, canvas.height);
+        resolve(canvas.toDataURL('image/jpeg', 0.7));
+      };
+      img.onerror = reject;
+      img.src = e.target!.result as string;
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
 
 const PARKING_TYPES: { value: string; label: string }[] = [
   { value: 'mall', label: 'Mall Parking' },
@@ -45,6 +70,7 @@ const PARKING_TYPES: { value: string; label: string }[] = [
   { value: 'public', label: 'Public Parking' },
   { value: 'church', label: 'Church Parking' },
   { value: 'school', label: 'School Parking' },
+  { value: 'gas_station', label: 'Gas Station' },
   { value: 'other', label: 'Other' },
 ];
 
@@ -56,6 +82,7 @@ const TYPE_COLORS: Record<string, string> = {
   public: 'bg-teal-100 text-teal-700',
   church: 'bg-purple-100 text-purple-700',
   school: 'bg-green-100 text-green-700',
+  gas_station: 'bg-green-100 text-green-700',
   other: 'bg-slate-100 text-slate-500',
 };
 
@@ -95,9 +122,15 @@ export function AdminPage() {
   const [parkingName, setParkingName] = useState('');
   const [parkingType, setParkingType] = useState('mall');
   const [parkingNotes, setParkingNotes] = useState('');
+  const [fareNormal, setFareNormal] = useState('');
+  const [fareDiscounted, setFareDiscounted] = useState('');
+  const [photo, setPhoto] = useState<string | null>(null);
+  const [photoCompressing, setPhotoCompressing] = useState(false);
+  const [editTarget, setEditTarget] = useState<ParkingRow | null>(null);
   const [savingParking, setSavingParking] = useState(false);
   const [parkingError, setParkingError] = useState('');
   const [confirmDeleteParking, setConfirmDeleteParking] = useState<ParkingRow | null>(null);
+  const [showForm, setShowForm] = useState(false);
 
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<google.maps.Map | null>(null);
@@ -186,13 +219,14 @@ export function AdminPage() {
 
     map.addListener('click', (e: google.maps.MapMouseEvent) => {
       if (!e.latLng) return;
+      setEditTarget(null);
       const lat = e.latLng.lat();
       const lng = e.latLng.lng();
       setPinLat(lat);
       setPinLng(lng);
       setParkingError('');
+      setShowForm(true);
 
-      // Move or place the draft marker
       if (pinMarkerRef.current) {
         pinMarkerRef.current.setPosition(e.latLng);
       } else {
@@ -213,7 +247,7 @@ export function AdminPage() {
     });
   }
 
-  function clearPin() {
+  function clearForm() {
     pinMarkerRef.current?.setMap(null);
     pinMarkerRef.current = null;
     setPinLat(null);
@@ -221,26 +255,78 @@ export function AdminPage() {
     setParkingName('');
     setParkingType('mall');
     setParkingNotes('');
+    setFareNormal('');
+    setFareDiscounted('');
+    setPhoto(null);
     setParkingError('');
+    setEditTarget(null);
+    setShowForm(false);
+  }
+
+  function handleEditParking(p: ParkingRow) {
+    setEditTarget(p);
+    setParkingName(p.name);
+    setParkingType(p.type);
+    setParkingNotes(p.notes || '');
+    setFareNormal(p.fare_normal != null ? String(p.fare_normal) : '');
+    setFareDiscounted(p.fare_discounted != null ? String(p.fare_discounted) : '');
+    setPhoto(p.photo || null);
+    setPinLat(p.lat);
+    setPinLng(p.lng);
+    setParkingError('');
+    setShowForm(true);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
   const handleSaveParking = async () => {
-    if (!token || pinLat === null || pinLng === null) return;
-    if (!parkingName.trim()) { setParkingError('Please enter a name for this parking spot.'); return; }
+    if (!token) return;
+    if (!parkingName.trim()) { setParkingError('Please enter a name.'); return; }
+    if (!editTarget && (pinLat === null || pinLng === null)) { setParkingError('Drop a pin on the map first.'); return; }
     setSavingParking(true);
     setParkingError('');
     try {
-      const res = await fetch(`${API_URL}/api/admin/parking`, {
-        method: 'POST',
+      const payload: Record<string, any> = {
+        name: parkingName.trim(),
+        type: parkingType,
+        notes: parkingNotes.trim(),
+        fare_normal: fareNormal !== '' ? parseFloat(fareNormal) : null,
+        fare_discounted: fareDiscounted !== '' ? parseFloat(fareDiscounted) : null,
+        photo: photo || null,
+      };
+      if (!editTarget) {
+        payload.lat = pinLat;
+        payload.lng = pinLng;
+      }
+      const url = editTarget
+        ? `${API_URL}/api/admin/parking/${editTarget.id}`
+        : `${API_URL}/api/admin/parking`;
+      const res = await fetch(url, {
+        method: editTarget ? 'PATCH' : 'POST',
         headers: { ...buildAuthHeaders(token), 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: parkingName.trim(), type: parkingType, lat: pinLat, lng: pinLng, notes: parkingNotes.trim() }),
+        body: JSON.stringify(payload),
       });
       const data = await res.json();
       if (!res.ok) { setParkingError(data.error || 'Failed to save.'); return; }
       await loadParking();
-      clearPin();
+      clearForm();
     } finally {
       setSavingParking(false);
+    }
+  };
+
+  const handlePhotoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) { setParkingError('Please select an image file.'); return; }
+    setPhotoCompressing(true);
+    setParkingError('');
+    try {
+      const compressed = await compressImage(file);
+      setPhoto(compressed);
+    } catch {
+      setParkingError('Failed to process image.');
+    } finally {
+      setPhotoCompressing(false);
     }
   };
 
@@ -605,82 +691,99 @@ export function AdminPage() {
               {/* Map */}
               <div ref={mapContainerRef} className="w-full h-80" />
 
-              {/* Pin form — shown only after clicking the map */}
-              {pinLat !== null && (
+              {/* Form — shown after map click or edit button */}
+              {showForm && (
                 <div className="p-5 border-t border-slate-100 bg-slate-50">
                   <div className="flex items-start gap-3 mb-4">
-                    <div className="w-8 h-8 rounded-full bg-orange-100 flex items-center justify-center flex-shrink-0 mt-0.5">
-                      <MapPin className="w-4 h-4 text-orange-600" />
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5 ${editTarget ? 'bg-blue-100' : 'bg-orange-100'}`}>
+                      {editTarget ? <Pencil className="w-4 h-4 text-blue-600" /> : <MapPin className="w-4 h-4 text-orange-600" />}
                     </div>
                     <div className="flex-1">
-                      <p className="text-xs font-semibold text-slate-700">Pin dropped</p>
-                      <p className="text-xs text-slate-500 font-mono">{pinLat.toFixed(6)}, {pinLng!.toFixed(6)}</p>
+                      <p className="text-xs font-semibold text-slate-700">{editTarget ? `Editing: ${editTarget.name}` : 'New pin'}</p>
+                      {pinLat !== null && <p className="text-xs text-slate-500 font-mono">{pinLat.toFixed(6)}, {pinLng!.toFixed(6)}</p>}
                     </div>
-                    <button onClick={clearPin} className="text-slate-400 hover:text-slate-600 transition">
+                    <button onClick={clearForm} className="text-slate-400 hover:text-slate-600 transition">
                       <X className="w-4 h-4" />
                     </button>
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
-                      <label className="block text-xs font-medium text-slate-700 mb-1">Parking Name *</label>
-                      <input
-                        type="text"
-                        value={parkingName}
-                        onChange={e => setParkingName(e.target.value)}
-                        placeholder="e.g. SM Center Parking"
-                        maxLength={100}
-                        className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white"
-                      />
+                      <label className="block text-xs font-medium text-slate-700 mb-1">Name *</label>
+                      <input type="text" value={parkingName} onChange={e => setParkingName(e.target.value)}
+                        placeholder="e.g. SM Center Parking" maxLength={100}
+                        className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white" />
                     </div>
                     <div>
                       <label className="block text-xs font-medium text-slate-700 mb-1">Type</label>
-                      <select
-                        value={parkingType}
-                        onChange={e => setParkingType(e.target.value)}
-                        className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white"
-                      >
-                        {PARKING_TYPES.map(t => (
-                          <option key={t.value} value={t.value}>{t.label}</option>
-                        ))}
+                      <select value={parkingType} onChange={e => setParkingType(e.target.value)}
+                        className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white">
+                        {PARKING_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
                       </select>
                     </div>
+
+                    {/* Fare fields */}
+                    <div>
+                      <label className="block text-xs font-medium text-slate-700 mb-1">Normal Fare (₱)</label>
+                      <input type="number" min="0" max="9999" step="0.50" value={fareNormal}
+                        onChange={e => setFareNormal(e.target.value)} placeholder="e.g. 14"
+                        className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white" />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-slate-700 mb-1">Student / PWD & Senior Fare (₱)</label>
+                      <input type="number" min="0" max="9999" step="0.50" value={fareDiscounted}
+                        onChange={e => setFareDiscounted(e.target.value)} placeholder="e.g. 11"
+                        className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white" />
+                    </div>
+
                     <div className="sm:col-span-2">
                       <label className="block text-xs font-medium text-slate-700 mb-1">Notes (optional)</label>
-                      <input
-                        type="text"
-                        value={parkingNotes}
-                        onChange={e => setParkingNotes(e.target.value)}
-                        placeholder="e.g. Open 24hrs, free parking"
-                        maxLength={300}
-                        className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white"
-                      />
+                      <input type="text" value={parkingNotes} onChange={e => setParkingNotes(e.target.value)}
+                        placeholder="e.g. Open 24hrs, free parking" maxLength={300}
+                        className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white" />
+                    </div>
+
+                    {/* Photo upload */}
+                    <div className="sm:col-span-2">
+                      <label className="block text-xs font-medium text-slate-700 mb-1 flex items-center gap-1">
+                        <Image className="w-3 h-3" /> Photo (optional)
+                      </label>
+                      <div className="flex items-center gap-3">
+                        <label className="cursor-pointer flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-200 bg-white text-sm text-slate-600 hover:bg-slate-50 transition">
+                          <Plus className="w-3.5 h-3.5" />
+                          {photoCompressing ? 'Processing...' : photo ? 'Change photo' : 'Upload photo'}
+                          <input type="file" accept="image/*" className="hidden" onChange={handlePhotoChange} disabled={photoCompressing} />
+                        </label>
+                        {photo && (
+                          <div className="flex items-center gap-2">
+                            <img src={photo} alt="preview" className="w-12 h-12 rounded-lg object-cover border border-slate-200" />
+                            <button onClick={() => setPhoto(null)} className="text-slate-400 hover:text-red-500 transition">
+                              <X className="w-4 h-4" />
+                            </button>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
 
-                  {parkingError && (
-                    <p className="mt-2 text-xs text-red-600">{parkingError}</p>
-                  )}
+                  {parkingError && <p className="mt-2 text-xs text-red-600">{parkingError}</p>}
 
                   <div className="mt-4 flex gap-3">
-                    <button
-                      onClick={handleSaveParking}
-                      disabled={savingParking}
-                      className="flex items-center gap-2 px-4 py-2 rounded-lg bg-teal-600 text-white text-sm font-medium hover:bg-teal-700 transition disabled:opacity-50"
-                    >
-                      <Plus className="w-4 h-4" />
-                      {savingParking ? 'Saving...' : 'Save Parking Spot'}
+                    <button onClick={handleSaveParking} disabled={savingParking || photoCompressing}
+                      className="flex items-center gap-2 px-4 py-2 rounded-lg bg-teal-600 text-white text-sm font-medium hover:bg-teal-700 transition disabled:opacity-50">
+                      {editTarget ? <Pencil className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
+                      {savingParking ? 'Saving...' : editTarget ? 'Save Changes' : 'Save Spot'}
                     </button>
-                    <button onClick={clearPin} className="px-4 py-2 rounded-lg border border-slate-200 text-sm text-slate-600 hover:bg-white transition">
+                    <button onClick={clearForm} className="px-4 py-2 rounded-lg border border-slate-200 text-sm text-slate-600 hover:bg-white transition">
                       Cancel
                     </button>
                   </div>
                 </div>
               )}
 
-              {pinLat === null && (
+              {!showForm && (
                 <div className="p-4 text-center text-slate-400 text-xs border-t border-slate-100">
-                  Click on the map above to place a parking pin
+                  Click on the map above to place a new pin
                 </div>
               )}
             </div>
@@ -703,25 +806,49 @@ export function AdminPage() {
               ) : (
                 <div className="divide-y divide-slate-100">
                   {parking.map((p) => (
-                    <div key={p.id} className="flex items-center gap-4 px-6 py-3 hover:bg-slate-50 transition">
-                      <div className="w-8 h-8 rounded-full bg-teal-50 flex items-center justify-center flex-shrink-0">
-                        <ParkingSquare className="w-4 h-4 text-teal-600" />
+                    <div key={p.id} className="flex items-start gap-3 px-6 py-4 hover:bg-slate-50 transition">
+                      <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5 ${p.type === 'gas_station' ? 'bg-green-50' : 'bg-teal-50'}`}>
+                        {p.type === 'gas_station'
+                          ? <Fuel className="w-4 h-4 text-green-600" />
+                          : <ParkingSquare className="w-4 h-4 text-teal-600" />}
                       </div>
+                      {p.photo && (
+                        <img src={p.photo} alt={p.name} className="w-10 h-10 rounded-lg object-cover border border-slate-200 flex-shrink-0 mt-0.5" />
+                      )}
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-semibold text-slate-800 truncate">{p.name}</p>
-                        <div className="flex items-center gap-2 mt-0.5">
+                        <div className="flex flex-wrap items-center gap-1.5 mt-1">
                           <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${TYPE_COLORS[p.type] || TYPE_COLORS.other}`}>
                             {PARKING_TYPES.find(t => t.value === p.type)?.label || p.type}
                           </span>
+                          {p.fare_normal != null && (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-teal-50 text-teal-700">
+                              ₱{p.fare_normal} Normal
+                            </span>
+                          )}
+                          {p.fare_discounted != null && (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700">
+                              ₱{p.fare_discounted} Student/PWD/Senior
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2 mt-0.5">
                           <span className="text-xs text-slate-400 font-mono">{p.lat.toFixed(5)}, {p.lng.toFixed(5)}</span>
                           {p.notes && <span className="text-xs text-slate-500 truncate max-w-[160px]">{p.notes}</span>}
                         </div>
                       </div>
-                      <span className="text-xs text-slate-400 flex-shrink-0">{timeAgo(p.added_at)}</span>
+                      <span className="text-xs text-slate-400 flex-shrink-0 mt-1">{timeAgo(p.added_at)}</span>
+                      <button
+                        onClick={() => handleEditParking(p)}
+                        className="flex-shrink-0 p-1.5 rounded-lg text-blue-400 hover:bg-blue-50 hover:text-blue-600 transition mt-0.5"
+                        title="Edit"
+                      >
+                        <Pencil className="w-4 h-4" />
+                      </button>
                       <button
                         onClick={() => setConfirmDeleteParking(p)}
                         disabled={actionLoading === `del-parking-${p.id}`}
-                        className="flex-shrink-0 p-1.5 rounded-lg text-red-400 hover:bg-red-50 hover:text-red-600 transition disabled:opacity-50"
+                        className="flex-shrink-0 p-1.5 rounded-lg text-red-400 hover:bg-red-50 hover:text-red-600 transition disabled:opacity-50 mt-0.5"
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>

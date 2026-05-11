@@ -180,18 +180,24 @@ adminRouter.post(
   requireAdmin,
   [
     body('name').trim().notEmpty().isLength({ max: 100 }),
-    body('type').isIn(['mall', 'street', 'jeepney_terminal', 'tricycle_terminal', 'public', 'church', 'school', 'other']),
+    body('type').isIn(['mall', 'street', 'jeepney_terminal', 'tricycle_terminal', 'public', 'church', 'school', 'gas_station', 'other']),
     body('lat').isFloat({ min: 15, max: 20 }),
     body('lng').isFloat({ min: 119, max: 127 }),
     body('notes').optional().trim().isLength({ max: 300 }),
+    body('fare_normal').optional({ nullable: true }).isFloat({ min: 0, max: 9999 }),
+    body('fare_discounted').optional({ nullable: true }).isFloat({ min: 0, max: 9999 }),
+    body('photo').optional({ nullable: true }).isString().isLength({ max: 500000 }),
   ],
   async (req, res) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) return res.status(400).json({ error: errors.array()[0].msg });
     try {
-      const { name, type, lat, lng, notes } = req.body;
+      const { name, type, lat, lng, notes, fare_normal, fare_discounted, photo } = req.body;
       const id = await db.addParkingLocation({
         name, type, lat, lng, notes,
+        fare_normal: fare_normal ?? null,
+        fare_discounted: fare_discounted ?? null,
+        photo: photo || null,
         addedBy: req.authUser.id,
       });
       res.json({ id, message: 'Parking location added.' });
@@ -209,18 +215,24 @@ adminRouter.patch(
   requireAdmin,
   [
     body('name').optional().trim().notEmpty().isLength({ max: 100 }),
-    body('type').optional().isIn(['mall', 'street', 'jeepney_terminal', 'tricycle_terminal', 'public', 'church', 'school', 'other']),
+    body('type').optional().isIn(['mall', 'street', 'jeepney_terminal', 'tricycle_terminal', 'public', 'church', 'school', 'gas_station', 'other']),
     body('notes').optional().trim().isLength({ max: 300 }),
+    body('fare_normal').optional({ nullable: true }).isFloat({ min: 0, max: 9999 }),
+    body('fare_discounted').optional({ nullable: true }).isFloat({ min: 0, max: 9999 }),
+    body('photo').optional({ nullable: true }).isString().isLength({ max: 500000 }),
   ],
   async (req, res) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) return res.status(400).json({ error: errors.array()[0].msg });
     try {
-      const { name, type, notes } = req.body;
+      const { name, type, notes, fare_normal, fare_discounted, photo } = req.body;
       const updates = {};
       if (name !== undefined) updates.name = name;
       if (type !== undefined) updates.type = type;
       if (notes !== undefined) updates.notes = notes;
+      if (fare_normal !== undefined) updates.fare_normal = fare_normal;
+      if (fare_discounted !== undefined) updates.fare_discounted = fare_discounted;
+      if (photo !== undefined) updates.photo = photo;
       await db.updateParkingLocation(req.params.id, updates);
       res.json({ message: 'Parking location updated.' });
     } catch (err) {

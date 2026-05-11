@@ -522,7 +522,7 @@ export function DashboardMap({
   const parkingMarkersRef = useRef<any[]>([]);
 
   const [showParking, setShowParking] = useState(true);
-  const [parkingLocations, setParkingLocations] = useState<{ id: string; name: string; type: string; lat: number; lng: number; notes: string }[]>([]);
+  const [parkingLocations, setParkingLocations] = useState<{ id: string; name: string; type: string; lat: number; lng: number; notes: string; fare_normal: number | null; fare_discounted: number | null; photo: string | null }[]>([]);
 
   const [isMapActivated, setIsMapActivated] = useState(true);
   const [mapReady, setMapReady] = useState(false);
@@ -1587,7 +1587,14 @@ export function DashboardMap({
 
     if (!showParking || parkingLocations.length === 0) return;
 
+    const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    const PTYPE_LABELS: Record<string, string> = {
+      mall: 'Mall Parking', street: 'Street Parking', jeepney_terminal: 'Jeepney Terminal',
+      tricycle_terminal: 'Tricycle Terminal', public: 'Public Parking', church: 'Church Parking',
+      school: 'School Parking', gas_station: 'Gas Station', other: 'Other',
+    };
     parkingMarkersRef.current = parkingLocations.map(p => {
+      const isGas = p.type === 'gas_station';
       const marker = new gmaps.Marker({
         position: { lat: p.lat, lng: p.lng },
         map: mapRef.current,
@@ -1596,15 +1603,25 @@ export function DashboardMap({
         icon: {
           path: 'M -1,-1 L 1,-1 L 1,1 L -1,1 Z',
           scale: 9,
-          fillColor: '#1d4ed8',
+          fillColor: isGas ? '#16a34a' : '#1d4ed8',
           fillOpacity: 1,
           strokeColor: '#fff',
           strokeWeight: 1.5,
         },
-        label: { text: 'P', color: '#fff', fontSize: '9px', fontWeight: 'bold' },
+        label: { text: isGas ? 'G' : 'P', color: '#fff', fontSize: '9px', fontWeight: 'bold' },
       });
+      const typeLabel = PTYPE_LABELS[p.type] || p.type;
+      const fareHtml = (p.fare_normal != null || p.fare_discounted != null)
+        ? `<div style="margin-top:5px;font-size:11px;display:flex;gap:6px;flex-wrap:wrap;">
+            ${p.fare_normal != null ? `<span style="background:#ccfbf1;color:#0f766e;padding:1px 6px;border-radius:99px;font-weight:600;">₱${p.fare_normal} Normal</span>` : ''}
+            ${p.fare_discounted != null ? `<span style="background:#dbeafe;color:#1d4ed8;padding:1px 6px;border-radius:99px;font-weight:600;">₱${p.fare_discounted} Student/PWD/Senior</span>` : ''}
+          </div>`
+        : '';
+      const photoHtml = p.photo
+        ? `<img src="${p.photo}" alt="" style="width:100%;max-width:200px;height:90px;object-fit:cover;border-radius:6px;margin-bottom:6px;display:block;" />`
+        : '';
       const infoWindow = new gmaps.InfoWindow({
-        content: `<div style="font-size:13px;font-weight:700;color:#1e293b">${p.name}</div><div style="font-size:11px;color:#64748b;margin-top:2px">${p.type.charAt(0).toUpperCase() + p.type.slice(1)} Parking${p.notes ? ' · ' + p.notes : ''}</div>`,
+        content: `<div style="max-width:210px;font-family:sans-serif;">${photoHtml}<div style="font-size:13px;font-weight:700;color:#1e293b">${esc(p.name)}</div><div style="font-size:11px;color:#64748b;margin-top:2px">${esc(typeLabel)}${p.notes ? ' · ' + esc(p.notes) : ''}</div>${fareHtml}</div>`,
       });
       marker.addListener('click', () => infoWindow.open(mapRef.current, marker));
       return marker;
