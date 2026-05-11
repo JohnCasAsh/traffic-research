@@ -180,7 +180,7 @@ adminRouter.post(
   requireAdmin,
   [
     body('name').trim().notEmpty().isLength({ max: 100 }),
-    body('type').isIn(['mall', 'street', 'jeepney_terminal', 'tricycle_terminal', 'public', 'church', 'school', 'gas_station', 'other']),
+    body('type').isIn(['mall', 'street', 'jeepney_terminal', 'tricycle_terminal', 'public', 'church', 'school', 'gas_station', 'gasoline_station', 'diesel_station', 'ev_charging', 'other']),
     body('lat').isFloat({ min: 15, max: 20 }),
     body('lng').isFloat({ min: 119, max: 127 }),
     body('notes').optional().trim().isLength({ max: 300 }),

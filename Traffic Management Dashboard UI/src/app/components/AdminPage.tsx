@@ -70,9 +70,40 @@ const PARKING_TYPES: { value: string; label: string }[] = [
   { value: 'public', label: 'Public Parking' },
   { value: 'church', label: 'Church Parking' },
   { value: 'school', label: 'School Parking' },
-  { value: 'gas_station', label: 'Gas Station' },
   { value: 'other', label: 'Other' },
 ];
+
+const GAS_TYPES: { value: string; label: string }[] = [
+  { value: 'gasoline_station', label: 'Gasoline Station' },
+  { value: 'diesel_station', label: 'Diesel Station' },
+  { value: 'gas_station', label: 'Gas & Diesel Station' },
+  { value: 'ev_charging', label: 'EV Charging Station' },
+];
+
+const ALL_TYPES = [...PARKING_TYPES, ...GAS_TYPES];
+
+function isGasType(type: string) {
+  return ['gas_station', 'gasoline_station', 'diesel_station', 'ev_charging'].includes(type);
+}
+
+function getGasPriceConfig(type: string) {
+  if (type === 'ev_charging') return {
+    label1: 'Charging Rate (₱/kWh)', placeholder1: 'e.g. 10',
+    label2: 'Off-peak Rate (₱/kWh)', placeholder2: 'e.g. 8',
+  };
+  if (type === 'gasoline_station') return {
+    label1: 'Gasoline Price (₱/L)', placeholder1: 'e.g. 62',
+    label2: 'EV Charging Rate (₱/kWh)', placeholder2: 'e.g. 10',
+  };
+  if (type === 'diesel_station') return {
+    label1: 'Diesel Price (₱/L)', placeholder1: 'e.g. 58',
+    label2: 'EV Charging Rate (₱/kWh)', placeholder2: 'e.g. 10',
+  };
+  return {
+    label1: 'Gas / Diesel Price (₱/L)', placeholder1: 'e.g. 62',
+    label2: 'EV Charging Rate (₱/kWh)', placeholder2: 'e.g. 10',
+  };
+}
 
 const TYPE_COLORS: Record<string, string> = {
   mall: 'bg-blue-100 text-blue-700',
@@ -83,6 +114,9 @@ const TYPE_COLORS: Record<string, string> = {
   church: 'bg-purple-100 text-purple-700',
   school: 'bg-green-100 text-green-700',
   gas_station: 'bg-green-100 text-green-700',
+  gasoline_station: 'bg-yellow-100 text-yellow-700',
+  diesel_station: 'bg-orange-100 text-orange-700',
+  ev_charging: 'bg-emerald-100 text-emerald-700',
   other: 'bg-slate-100 text-slate-500',
 };
 
@@ -176,10 +210,10 @@ export function AdminPage() {
     if (!mapRef.current || tab !== 'parking') return;
     parkingMarkersRef.current.forEach(m => m.setMap(null));
     const filtered = parking.filter(p =>
-      mapSubTab === 'gas' ? p.type === 'gas_station' : p.type !== 'gas_station'
+      mapSubTab === 'gas' ? isGasType(p.type) : !isGasType(p.type)
     );
     parkingMarkersRef.current = filtered.map(p => {
-      const isGas = p.type === 'gas_station';
+      const isGas = isGasType(p.type);
       const m = new google.maps.Marker({
         position: { lat: p.lat, lng: p.lng },
         map: mapRef.current!,
@@ -195,8 +229,9 @@ export function AdminPage() {
         label: { text: isGas ? 'G' : 'P', color: '#fff', fontSize: '10px', fontWeight: 'bold' },
       });
       const typeLabel = PARKING_TYPES.find(t => t.value === p.type)?.label || p.type;
+      const gasCfg = getGasPriceConfig(p.type);
       const priceHtml = isGas
-        ? `${p.fare_normal != null ? `<span style="color:#15803d;font-weight:600">₱${p.fare_normal}/L Gas</span>` : ''}${p.fare_normal != null && p.fare_discounted != null ? ' · ' : ''}${p.fare_discounted != null ? `<span style="color:#1d4ed8;font-weight:600">₱${p.fare_discounted}/kWh EV</span>` : ''}`
+        ? `${p.fare_normal != null ? `<span style="color:#15803d;font-weight:600">₱${p.fare_normal} ${gasCfg.label1}</span>` : ''}${p.fare_normal != null && p.fare_discounted != null ? ' · ' : ''}${p.fare_discounted != null ? `<span style="color:#1d4ed8;font-weight:600">₱${p.fare_discounted} ${gasCfg.label2}</span>` : ''}`
         : `${p.fare_normal != null ? `<span style="color:#0f766e;font-weight:600">₱${p.fare_normal} Normal</span>` : ''}${p.fare_normal != null && p.fare_discounted != null ? ' · ' : ''}${p.fare_discounted != null ? `<span style="color:#1d4ed8;font-weight:600">₱${p.fare_discounted} Student/PWD/Senior</span>` : ''}`;
       const info = new google.maps.InfoWindow({
         content: `<div style="font-size:13px;font-weight:600;color:#1e293b">${p.name}</div><div style="font-size:11px;color:#64748b;margin-top:2px">${typeLabel}</div>${priceHtml ? `<div style="font-size:11px;margin-top:4px">${priceHtml}</div>` : ''}`,
@@ -276,7 +311,7 @@ export function AdminPage() {
   function switchMapSubTab(next: 'parking' | 'gas') {
     clearForm();
     setMapSubTab(next);
-    setParkingType(next === 'gas' ? 'gas_station' : 'mall');
+    setParkingType(next === 'gas' ? 'gasoline_station' : 'mall');
   }
 
   function handleEditParking(p: ParkingRow) {
@@ -730,16 +765,16 @@ export function AdminPage() {
               {showForm && (
                 <div className="p-5 border-t border-slate-100 bg-slate-50">
                   <div className="flex items-start gap-3 mb-4">
-                    <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5 ${editTarget ? 'bg-blue-100' : parkingType === 'gas_station' ? 'bg-green-100' : 'bg-orange-100'}`}>
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5 ${editTarget ? 'bg-blue-100' : isGasType(parkingType) ? 'bg-green-100' : 'bg-orange-100'}`}>
                       {editTarget
                         ? <Pencil className="w-4 h-4 text-blue-600" />
-                        : parkingType === 'gas_station'
+                        : isGasType(parkingType)
                           ? <Fuel className="w-4 h-4 text-green-600" />
                           : <MapPin className="w-4 h-4 text-orange-600" />}
                     </div>
                     <div className="flex-1">
                       <p className="text-xs font-semibold text-slate-700">
-                        {editTarget ? `Editing: ${editTarget.name}` : parkingType === 'gas_station' ? 'New Gas Station' : 'New Parking / Terminal'}
+                        {editTarget ? `Editing: ${editTarget.name}` : isGasType(parkingType) ? `New ${GAS_TYPES.find(t => t.value === parkingType)?.label || 'Fuel Station'}` : 'New Parking / Terminal'}
                       </p>
                       {pinLat !== null && <p className="text-xs text-slate-500 font-mono">{pinLat.toFixed(6)}, {pinLng!.toFixed(6)}</p>}
                     </div>
@@ -755,47 +790,54 @@ export function AdminPage() {
                         placeholder="e.g. SM Center Parking" maxLength={100}
                         className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white" />
                     </div>
-                    {mapSubTab === 'gas' ? (
-                      <div>
-                        <label className="block text-xs font-medium text-slate-700 mb-1">Type</label>
-                        <div className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 bg-green-50 text-green-700 font-medium flex items-center gap-2">
-                          <Fuel className="w-3.5 h-3.5" /> Gas Station
-                        </div>
-                      </div>
-                    ) : (
-                      <div>
-                        <label className="block text-xs font-medium text-slate-700 mb-1">Type</label>
-                        <select value={parkingType} onChange={e => setParkingType(e.target.value)}
-                          className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white">
-                          {PARKING_TYPES.filter(t => t.value !== 'gas_station').map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
-                        </select>
-                      </div>
-                    )}
+                    <div>
+                      <label className="block text-xs font-medium text-slate-700 mb-1">Type</label>
+                      <select value={parkingType} onChange={e => setParkingType(e.target.value)}
+                        className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white">
+                        {(mapSubTab === 'gas' ? GAS_TYPES : PARKING_TYPES).map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+                      </select>
+                    </div>
 
-                    {/* Fare / Price fields — labels change based on type */}
-                    <div>
-                      <label className="block text-xs font-medium text-slate-700 mb-1">
-                        {parkingType === 'gas_station' ? 'Gasoline / Diesel Price (₱/L)' : 'Normal Fare (₱)'}
-                      </label>
-                      <input type="number" min="0" max="9999" step="0.50" value={fareNormal}
-                        onChange={e => setFareNormal(e.target.value)}
-                        placeholder={parkingType === 'gas_station' ? 'e.g. 62' : 'e.g. 14'}
-                        className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white" />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium text-slate-700 mb-1">
-                        {parkingType === 'gas_station' ? 'EV Charging Rate (₱/kWh)' : 'Student / PWD & Senior Fare (₱)'}
-                      </label>
-                      <input type="number" min="0" max="9999" step="0.50" value={fareDiscounted}
-                        onChange={e => setFareDiscounted(e.target.value)}
-                        placeholder={parkingType === 'gas_station' ? 'e.g. 10' : 'e.g. 11'}
-                        className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white" />
-                    </div>
+                    {/* Price fields — adapt to type */}
+                    {(() => {
+                      const cfg = isGasType(parkingType) ? getGasPriceConfig(parkingType) : null;
+                      return cfg ? (
+                        <>
+                          <div>
+                            <label className="block text-xs font-medium text-slate-700 mb-1">{cfg.label1}</label>
+                            <input type="number" min="0" max="9999" step="0.50" value={fareNormal}
+                              onChange={e => setFareNormal(e.target.value)} placeholder={cfg.placeholder1}
+                              className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white" />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium text-slate-700 mb-1">{cfg.label2} <span className="text-slate-400">(optional)</span></label>
+                            <input type="number" min="0" max="9999" step="0.50" value={fareDiscounted}
+                              onChange={e => setFareDiscounted(e.target.value)} placeholder={cfg.placeholder2}
+                              className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white" />
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <div>
+                            <label className="block text-xs font-medium text-slate-700 mb-1">Normal Fare (₱)</label>
+                            <input type="number" min="0" max="9999" step="0.50" value={fareNormal}
+                              onChange={e => setFareNormal(e.target.value)} placeholder="e.g. 14"
+                              className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white" />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium text-slate-700 mb-1">Student / PWD & Senior Fare (₱)</label>
+                            <input type="number" min="0" max="9999" step="0.50" value={fareDiscounted}
+                              onChange={e => setFareDiscounted(e.target.value)} placeholder="e.g. 11"
+                              className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white" />
+                          </div>
+                        </>
+                      );
+                    })()}
 
                     <div className="sm:col-span-2">
                       <label className="block text-xs font-medium text-slate-700 mb-1">Notes (optional)</label>
                       <input type="text" value={parkingNotes} onChange={e => setParkingNotes(e.target.value)}
-                        placeholder="e.g. Open 24hrs, free parking" maxLength={300}
+                        placeholder={isGasType(parkingType) ? 'e.g. Also sells kerosene, LPG — open 24hrs' : 'e.g. Open 24hrs, free parking'} maxLength={300}
                         className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white" />
                     </div>
 
@@ -828,7 +870,7 @@ export function AdminPage() {
                     <button onClick={handleSaveParking} disabled={savingParking || photoCompressing}
                       className="flex items-center gap-2 px-4 py-2 rounded-lg bg-teal-600 text-white text-sm font-medium hover:bg-teal-700 transition disabled:opacity-50">
                       {editTarget ? <Pencil className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
-                      {savingParking ? 'Saving...' : editTarget ? 'Save Changes' : parkingType === 'gas_station' ? 'Save Gas Station' : 'Save Parking Spot'}
+                      {savingParking ? 'Saving...' : editTarget ? 'Save Changes' : isGasType(parkingType) ? 'Save Station' : 'Save Parking Spot'}
                     </button>
                     <button onClick={clearForm} className="px-4 py-2 rounded-lg border border-slate-200 text-sm text-slate-600 hover:bg-white transition">
                       Cancel
@@ -846,13 +888,13 @@ export function AdminPage() {
 
             {/* Pinned Locations List — split by category */}
             {(() => {
-              const parkingSpots = parking.filter(p => p.type !== 'gas_station');
-              const gasStations = parking.filter(p => p.type === 'gas_station');
+              const parkingSpots = parking.filter(p => !isGasType(p.type));
+              const gasStations = parking.filter(p => isGasType(p.type));
 
               const renderItem = (p: ParkingRow) => (
                     <div key={p.id} className="flex items-start gap-3 px-6 py-4 hover:bg-slate-50 transition">
-                      <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5 ${p.type === 'gas_station' ? 'bg-green-50' : 'bg-teal-50'}`}>
-                        {p.type === 'gas_station'
+                      <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5 ${isGasType(p.type) ? 'bg-green-50' : 'bg-teal-50'}`}>
+                        {isGasType(p.type)
                           ? <Fuel className="w-4 h-4 text-green-600" />
                           : <ParkingSquare className="w-4 h-4 text-teal-600" />}
                       </div>
@@ -865,16 +907,22 @@ export function AdminPage() {
                           <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${TYPE_COLORS[p.type] || TYPE_COLORS.other}`}>
                             {PARKING_TYPES.find(t => t.value === p.type)?.label || p.type}
                           </span>
-                          {p.fare_normal != null && (
-                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-teal-50 text-teal-700">
-                              {p.type === 'gas_station' ? `₱${p.fare_normal}/L Gas` : `₱${p.fare_normal} Normal`}
-                            </span>
-                          )}
-                          {p.fare_discounted != null && (
-                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700">
-                              {p.type === 'gas_station' ? `₱${p.fare_discounted}/kWh EV` : `₱${p.fare_discounted} Student/PWD/Senior`}
-                            </span>
-                          )}
+                          {p.fare_normal != null && (() => {
+                            const cfg = isGasType(p.type) ? getGasPriceConfig(p.type) : null;
+                            return (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-teal-50 text-teal-700">
+                                {cfg ? `₱${p.fare_normal} ${cfg.label1}` : `₱${p.fare_normal} Normal`}
+                              </span>
+                            );
+                          })()}
+                          {p.fare_discounted != null && (() => {
+                            const cfg = isGasType(p.type) ? getGasPriceConfig(p.type) : null;
+                            return (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700">
+                                {cfg ? `₱${p.fare_discounted} ${cfg.label2}` : `₱${p.fare_discounted} Student/PWD/Senior`}
+                              </span>
+                            );
+                          })()}
                         </div>
                         <div className="flex items-center gap-2 mt-0.5">
                           <span className="text-xs text-slate-400 font-mono">{p.lat.toFixed(5)}, {p.lng.toFixed(5)}</span>
