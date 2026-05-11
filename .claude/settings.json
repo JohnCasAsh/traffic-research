@@ -4,7 +4,11 @@
       "PowerShell(cd \"c:\\\\Users\\\\John Asley\\\\OneDrive\\\\Desktop\\\\TRAFFIC _ MANAGEMENT\\\\Traffic Management Dashboard UI\" && npx swa deploy ./dist --env production --deployment-token \\(az staticwebapp secrets list --name navocs-frontend --resource-group traffic-management-rg --query \"properties.apiKey\" -o tsv\\) 2>&1)",
       "Bash(Get-Content \"C:\\\\Users\\\\JOHNAS~1\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--Users-John-Asley-OneDrive-Desktop-TRAFFIC---MANAGEMENT\\\\b77d72e4-20e4-4243-ac6f-bb4763bf690d\\\\tasks\\\\b9yxad98d.output\" -Tail 20)",
       "Bash(powershell -File deploy.ps1)",
-      "PowerShell(& \"c:\\\\Users\\\\John Asley\\\\OneDrive\\\\Desktop\\\\TRAFFIC _ MANAGEMENT\\\\deploy.ps1\")"
+      "PowerShell(& \"c:\\\\Users\\\\John Asley\\\\OneDrive\\\\Desktop\\\\TRAFFIC _ MANAGEMENT\\\\deploy.ps1\")",
+      "Bash(cd \"c:\\\\Users\\\\John Asley\\\\OneDrive\\\\Desktop\\\\TRAFFIC _ MANAGEMENT\" && git show 8088d50:\"Traffic Management Dashboard UI/src/app/components/Dashboard.tsx\" > \"Traffic Management Dashboard UI/src/app/components/Dashboard.tsx\")"
+    ],
+    "additionalDirectories": [
+      "c:\\Users\\John Asley\\OneDrive\\Desktop\\TRAFFIC _ MANAGEMENT\\Traffic Management Dashboard UI\\src\\app\\components"
     ]
   }
 }

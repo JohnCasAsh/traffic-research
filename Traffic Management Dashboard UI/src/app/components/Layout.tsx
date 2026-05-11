@@ -53,7 +53,7 @@ export function Layout() {
             {!isLanding && (
               <div className="hidden md:flex items-center space-x-1">
                 <NavLink to="/dashboard" icon={<MapPin className="w-4 h-4" />}>
-                  Map
+                  Dashboard
                 </NavLink>
                 <NavLink to="/parking-way" icon={<ParkingSquare className="w-4 h-4" />}>
                   Parking Way
@@ -128,7 +128,7 @@ export function Layout() {
           <div className="md:hidden border-t border-slate-200 bg-white">
             <div className="flex justify-around py-2">
               <MobileNavLink to="/dashboard" icon={<MapPin className="w-5 h-5" />}>
-                Map
+                Dashboard
               </MobileNavLink>
               <MobileNavLink to="/parking-way" icon={<ParkingSquare className="w-5 h-5" />}>
                 Parking
@@ -181,7 +181,7 @@ export function Layout() {
             <div>
               <h4 className="font-semibold text-white mb-3">Platform</h4>
               <ul className="space-y-2 text-sm">
-                <li><Link to="/dashboard" className="hover:text-teal-400 transition-colors">Map</Link></li>
+                <li><Link to="/dashboard" className="hover:text-teal-400 transition-colors">Dashboard</Link></li>
                 <li><Link to="/parking-way" className="hover:text-teal-400 transition-colors">Parking Way</Link></li>
                 <li><Link to="/walkway" className="hover:text-teal-400 transition-colors">Walkway</Link></li>
                 <li><Link to="/feedback" className="hover:text-teal-400 transition-colors">Feedback</Link></li>
