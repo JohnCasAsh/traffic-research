@@ -220,6 +220,7 @@ export function AdminPage() {
       zoomControl: true,
       streetViewControl: false,
       mapTypeControl: false,
+      clickableIcons: false,
     });
     mapRef.current = map;
 
@@ -701,8 +702,12 @@ export function AdminPage() {
               {showForm && (
                 <div className="p-5 border-t border-slate-100 bg-slate-50">
                   <div className="flex items-start gap-3 mb-4">
-                    <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5 ${editTarget ? 'bg-blue-100' : 'bg-orange-100'}`}>
-                      {editTarget ? <Pencil className="w-4 h-4 text-blue-600" /> : <MapPin className="w-4 h-4 text-orange-600" />}
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5 ${editTarget ? 'bg-blue-100' : parkingType === 'gas_station' ? 'bg-green-100' : 'bg-orange-100'}`}>
+                      {editTarget
+                        ? <Pencil className="w-4 h-4 text-blue-600" />
+                        : parkingType === 'gas_station'
+                          ? <Fuel className="w-4 h-4 text-green-600" />
+                          : <MapPin className="w-4 h-4 text-orange-600" />}
                     </div>
                     <div className="flex-1">
                       <p className="text-xs font-semibold text-slate-700">
