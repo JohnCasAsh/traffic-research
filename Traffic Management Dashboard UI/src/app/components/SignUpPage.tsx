@@ -10,7 +10,7 @@ export function SignUpPage() {
   const { isAuthenticated } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
-  const [role, setRole] = useState<'driver' | 'commuter'>('driver');
+  const [role, setRole] = useState<'driver' | 'commuter'>('commuter');
   const [form, setForm] = useState({ firstName: '', lastName: '', email: '', password: '' });
   const [confirmPassword, setConfirmPassword] = useState('');
 
@@ -172,21 +172,6 @@ export function SignUpPage() {
               <div className="grid grid-cols-2 gap-3">
                 <button
                   type="button"
-                  onClick={() => setRole('driver')}
-                  className={`flex flex-col items-center gap-2 py-4 px-3 rounded-xl border-2 transition-all ${
-                    role === 'driver'
-                      ? 'border-teal-500 bg-teal-50 text-teal-700'
-                      : 'border-slate-200 bg-slate-50 text-slate-500 hover:border-slate-300'
-                  }`}
-                >
-                  <Car className={`w-6 h-6 ${role === 'driver' ? 'text-teal-600' : 'text-slate-400'}`} />
-                  <div>
-                    <div className="text-sm font-semibold">Driver</div>
-                    <div className="text-xs opacity-70">Tricycle, car, motorcycle</div>
-                  </div>
-                </button>
-                <button
-                  type="button"
                   onClick={() => setRole('commuter')}
                   className={`flex flex-col items-center gap-2 py-4 px-3 rounded-xl border-2 transition-all ${
                     role === 'commuter'
@@ -198,6 +183,21 @@ export function SignUpPage() {
                   <div>
                     <div className="text-sm font-semibold">Commuter</div>
                     <div className="text-xs opacity-70">Riding jeep, bus, e-trike</div>
+                  </div>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setRole('driver')}
+                  className={`flex flex-col items-center gap-2 py-4 px-3 rounded-xl border-2 transition-all ${
+                    role === 'driver'
+                      ? 'border-teal-500 bg-teal-50 text-teal-700'
+                      : 'border-slate-200 bg-slate-50 text-slate-500 hover:border-slate-300'
+                  }`}
+                >
+                  <Car className={`w-6 h-6 ${role === 'driver' ? 'text-teal-600' : 'text-slate-400'}`} />
+                  <div>
+                    <div className="text-sm font-semibold">Driver</div>
+                    <div className="text-xs opacity-70">Tricycle, car, motorcycle</div>
                   </div>
                 </button>
               </div>
