@@ -1,7 +1,29 @@
 import { useState } from 'react';
-import { MessageSquare, Send, CheckCircle, AlertTriangle, MapPin, Fuel, Car, HelpCircle } from 'lucide-react';
+import { MessageSquare, Send, CheckCircle, AlertTriangle, MapPin, Fuel, Car, HelpCircle, Camera, X } from 'lucide-react';
 import { useAuth } from '../auth';
 import { API_URL, buildAuthHeaders } from '../api';
+
+async function compressImage(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new window.Image();
+      img.onload = () => {
+        const MAX = 1280;
+        const ratio = Math.min(MAX / img.width, MAX / img.height, 1);
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.round(img.width * ratio);
+        canvas.height = Math.round(img.height * ratio);
+        canvas.getContext('2d')!.drawImage(img, 0, 0, canvas.width, canvas.height);
+        resolve(canvas.toDataURL('image/jpeg', 0.8));
+      };
+      img.onerror = reject;
+      img.src = e.target!.result as string;
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
 
 const CATEGORIES = [
   { value: 'traffic', label: 'Traffic Issue', icon: Car },
@@ -16,9 +38,27 @@ export function FeedbackPage() {
   const [category, setCategory] = useState('traffic');
   const [location, setLocation] = useState('');
   const [message, setMessage] = useState('');
+  const [photo, setPhoto] = useState<string | null>(null);
+  const [photoCompressing, setPhotoCompressing] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState('');
+
+  const handlePhotoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) { setError('Please select an image file.'); return; }
+    setPhotoCompressing(true);
+    setError('');
+    try {
+      setPhoto(await compressImage(file));
+    } catch {
+      setError('Failed to process image.');
+    } finally {
+      setPhotoCompressing(false);
+      e.target.value = '';
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -30,6 +70,7 @@ export function FeedbackPage() {
         category,
         location: location.trim(),
         message: message.trim(),
+        photo: photo || null,
         submittedBy: user ? `${user.firstName} ${user.lastName}`.trim() : 'Anonymous',
       };
       await fetch(`${API_URL}/api/feedback`, {
@@ -55,7 +96,7 @@ export function FeedbackPage() {
           <h2 className="text-xl font-bold text-slate-900">Thank you!</h2>
           <p className="text-sm text-slate-500">Your report has been submitted. We'll review it and update the map data accordingly.</p>
           <button
-            onClick={() => { setSubmitted(false); setMessage(''); setLocation(''); setCategory('traffic'); }}
+            onClick={() => { setSubmitted(false); setMessage(''); setLocation(''); setCategory('traffic'); setPhoto(null); }}
             className="px-6 py-2.5 rounded-xl bg-teal-600 text-white text-sm font-medium hover:bg-teal-700 transition"
           >
             Submit another
@@ -135,11 +176,50 @@ export function FeedbackPage() {
             <p className="text-xs text-slate-400 text-right mt-1">{message.length}/1000</p>
           </div>
 
+          {/* Photo Proof */}
+          <div>
+            <label className="block text-sm font-semibold text-slate-700 mb-1.5">
+              Photo Proof <span className="text-slate-400 font-normal">(optional)</span>
+            </label>
+            {photo ? (
+              <div className="relative">
+                <img
+                  src={photo}
+                  alt="proof"
+                  className="w-full max-h-52 object-cover rounded-xl border border-slate-200"
+                />
+                <button
+                  type="button"
+                  onClick={() => setPhoto(null)}
+                  className="absolute top-2 right-2 w-7 h-7 rounded-full bg-black/50 text-white flex items-center justify-center hover:bg-black/70 transition"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            ) : (
+              <label className={`flex flex-col items-center justify-center gap-2 w-full py-6 rounded-xl border-2 border-dashed cursor-pointer transition ${photoCompressing ? 'border-slate-200 opacity-50' : 'border-slate-200 hover:border-teal-400 hover:bg-teal-50'}`}>
+                <Camera className="w-6 h-6 text-slate-400" />
+                <span className="text-sm text-slate-500 font-medium">
+                  {photoCompressing ? 'Processing...' : 'Tap to upload a photo'}
+                </span>
+                <span className="text-xs text-slate-400">JPG, PNG, HEIC — max 10MB</span>
+                <input
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  className="hidden"
+                  onChange={handlePhotoChange}
+                  disabled={photoCompressing}
+                />
+              </label>
+            )}
+          </div>
+
           {error && <p className="text-xs text-red-600">{error}</p>}
 
           <button
             type="submit"
-            disabled={submitting}
+            disabled={submitting || photoCompressing}
             className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-teal-600 text-white text-sm font-semibold hover:bg-teal-700 transition disabled:opacity-50"
           >
             <Send className="w-4 h-4" />
