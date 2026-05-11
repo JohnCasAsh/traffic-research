@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router';
 import { motion } from 'motion/react';
-import { MapPin, Navigation, Fuel, DollarSign, Car, Zap, Settings, Info, X, AlertCircle, ArrowUpDown, Bookmark, Trash2, ChevronRight } from 'lucide-react';
+import { MapPin, Navigation, Fuel, DollarSign, Car, Zap, Settings, Info, X, AlertCircle, ArrowUpDown, Bookmark, Trash2, ChevronRight, Bike, Truck, Bus, type LucideIcon } from 'lucide-react';
 import { importLibrary, setOptions } from '@googlemaps/js-api-loader';
 import { DashboardMap } from './DashboardMap';
 import { AssistantPanel } from './AssistantPanel';
@@ -137,6 +137,19 @@ const VEHICLE_DEFAULTS: Record<string, { fuelType: string; fuelPrice: string }> 
   etrike:      { fuelType: 'electric', fuelPrice: '10.00' },
   emotorcycle: { fuelType: 'electric', fuelPrice: '10.00' },
 };
+
+function getVehicleIconConfig(vehicleType: string): { icon: LucideIcon; color: string } {
+  const isElectric = vehicleType.startsWith('e_');
+  const isHybrid = vehicleType.startsWith('hybrid_');
+  let icon: LucideIcon;
+  if (['motorcycle', 'e_motorcycle'].includes(vehicleType)) icon = Bike;
+  else if (['tricycle', 'e_trike'].includes(vehicleType)) icon = Bike;
+  else if (['van', 'hybrid_van', 'truck'].includes(vehicleType)) icon = Truck;
+  else if (vehicleType === 'bus') icon = Bus;
+  else icon = Car;
+  const color = isElectric ? 'text-green-600' : isHybrid ? 'text-teal-500' : 'text-slate-500';
+  return { icon, color };
+}
 
 type RouteFormData = {
   origin: string;
@@ -358,7 +371,7 @@ export function Dashboard() {
               <div className="bg-white rounded-xl shadow-sm border border-slate-200 px-4 py-3 grid grid-cols-2 gap-3">
                 <div>
                   <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">
-                    <Car className="w-3.5 h-3.5 text-slate-500" />
+                    {(() => { const { icon: VIcon, color } = getVehicleIconConfig(formData.vehicleType); return <VIcon className={`w-3.5 h-3.5 ${color}`} />; })()}
                     Vehicle
                   </label>
                   <select
