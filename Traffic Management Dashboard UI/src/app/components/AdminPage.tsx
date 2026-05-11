@@ -40,7 +40,8 @@ type ParkingRow = {
 const PARKING_TYPES: { value: string; label: string }[] = [
   { value: 'mall', label: 'Mall Parking' },
   { value: 'street', label: 'Street Parking' },
-  { value: 'terminal', label: 'Jeepney / Tricycle Terminal' },
+  { value: 'jeepney_terminal', label: 'Jeepney Terminal' },
+  { value: 'tricycle_terminal', label: 'Tricycle Terminal' },
   { value: 'public', label: 'Public Parking' },
   { value: 'church', label: 'Church Parking' },
   { value: 'school', label: 'School Parking' },
@@ -50,7 +51,8 @@ const PARKING_TYPES: { value: string; label: string }[] = [
 const TYPE_COLORS: Record<string, string> = {
   mall: 'bg-blue-100 text-blue-700',
   street: 'bg-slate-100 text-slate-700',
-  terminal: 'bg-orange-100 text-orange-700',
+  jeepney_terminal: 'bg-orange-100 text-orange-700',
+  tricycle_terminal: 'bg-amber-100 text-amber-700',
   public: 'bg-teal-100 text-teal-700',
   church: 'bg-purple-100 text-purple-700',
   school: 'bg-green-100 text-green-700',
