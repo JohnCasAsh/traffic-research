@@ -83,9 +83,11 @@ export function Layout() {
                     <NavLink to="/speed-meter" icon={<Gauge className="w-4 h-4" />}>
                       Speed Meter
                     </NavLink>
-                    <NavLink to="/feedback" icon={<MessageSquare className="w-4 h-4" />}>
-                      Feedback
-                    </NavLink>
+                    {user?.role === 'driver' && (
+                      <NavLink to="/feedback" icon={<MessageSquare className="w-4 h-4" />}>
+                        Feedback
+                      </NavLink>
+                    )}
                     {user?.role === 'admin' && (
                       <NavLink to="/admin" icon={<Shield className="w-4 h-4" />}>
                         Admin
@@ -177,9 +179,11 @@ export function Layout() {
                   <MobileNavLink to="/speed-meter" icon={<Gauge className="w-5 h-5" />}>
                     Speed
                   </MobileNavLink>
-                  <MobileNavLink to="/feedback" icon={<MessageSquare className="w-5 h-5" />}>
-                    Feedback
-                  </MobileNavLink>
+                  {user?.role === 'driver' && (
+                    <MobileNavLink to="/feedback" icon={<MessageSquare className="w-5 h-5" />}>
+                      Feedback
+                    </MobileNavLink>
+                  )}
                   {user?.role === 'admin' && (
                     <MobileNavLink to="/admin" icon={<Shield className="w-5 h-5" />}>
                       Admin

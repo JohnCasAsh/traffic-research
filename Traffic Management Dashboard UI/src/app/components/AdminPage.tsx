@@ -1202,128 +1202,155 @@ export function AdminPage() {
 
       {/* Feedback Reports Tab */}
       {tab === 'feedback' && (
-        <div className="space-y-4">
-          <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
-            <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
-              <h2 className="font-semibold text-slate-900 text-sm flex items-center gap-2">
-                <MessageSquare className="w-4 h-4 text-teal-600" />
-                Feedback Reports
-                <span className="text-xs font-normal text-slate-400">({feedbackList.length})</span>
-              </h2>
-              <button onClick={loadFeedback} className="text-xs text-slate-500 hover:text-teal-600 flex items-center gap-1 transition">
-                <RefreshCw className="w-3 h-3" /> Refresh
-              </button>
-            </div>
+        <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+          <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+            <h2 className="font-semibold text-slate-900 text-sm flex items-center gap-2">
+              <MessageSquare className="w-4 h-4 text-teal-600" />
+              Received Reports
+              <span className="text-xs font-normal text-slate-400">({feedbackList.length})</span>
+            </h2>
+            <button onClick={loadFeedback} disabled={feedbackLoading} className="text-xs text-slate-500 hover:text-teal-600 flex items-center gap-1 transition disabled:opacity-50">
+              <RefreshCw className={`w-3 h-3 ${feedbackLoading ? 'animate-spin' : ''}`} /> Refresh
+            </button>
+          </div>
 
-            {feedbackLoading ? (
-              <div className="px-6 py-10 text-center text-sm text-slate-400">Loading feedback…</div>
-            ) : feedbackList.length === 0 ? (
-              <div className="px-6 py-10 text-center text-sm text-slate-400">No feedback submitted yet.</div>
-            ) : (
-              <div className="divide-y divide-slate-100">
-                {feedbackList.map((fb) => {
-                  const isExpanded = expandedFeedback === fb.id;
-                  const isResponding = respondingTo === fb.id;
-                  const statusColor = fb.status === 'resolved' ? 'bg-green-100 text-green-700' : fb.status === 'reviewed' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700';
-                  const roleColor = fb.submitter_role === 'commuter' ? 'bg-teal-100 text-teal-700' : 'bg-orange-100 text-orange-700';
-                  return (
-                    <div key={fb.id} className="px-6 py-4">
-                      {/* Row header */}
-                      <div className="flex items-start gap-3">
-                        <div className="flex-1 min-w-0">
-                          <div className="flex flex-wrap items-center gap-2 mb-1">
-                            <span className="font-semibold text-slate-800 text-sm">{fb.submitted_by}</span>
-                            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${roleColor}`}>
+          {feedbackLoading ? (
+            <div className="py-10 text-center text-sm text-slate-400">Loading…</div>
+          ) : feedbackList.length === 0 ? (
+            <div className="py-10 text-center text-sm text-slate-400">No feedback submitted yet.</div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-slate-50 text-xs text-slate-500 font-medium">
+                  <tr>
+                    <th className="text-left px-4 py-3">From</th>
+                    <th className="text-left px-4 py-3">Category</th>
+                    <th className="text-left px-4 py-3">Message</th>
+                    <th className="text-left px-4 py-3">Date</th>
+                    <th className="text-left px-4 py-3">Status</th>
+                    <th className="text-left px-4 py-3">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {feedbackList.map((fb) => {
+                    const isExpanded = expandedFeedback === fb.id;
+                    const isResponding = respondingTo === fb.id;
+                    const statusColor = fb.status === 'resolved' ? 'bg-green-100 text-green-700' : fb.status === 'reviewed' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700';
+                    const roleColor = fb.submitter_role === 'commuter' ? 'bg-teal-100 text-teal-700' : 'bg-orange-100 text-orange-700';
+                    return (
+                      <>
+                        <tr key={fb.id} className="hover:bg-slate-50 transition">
+                          <td className="px-4 py-3">
+                            <p className="font-medium text-slate-800 text-xs whitespace-nowrap">{fb.submitted_by}</p>
+                            <span className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-medium ${roleColor}`}>
                               {fb.submitter_role}
                             </span>
-                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-600 capitalize">
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-600 capitalize whitespace-nowrap">
                               {fb.category}
                             </span>
-                            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${statusColor}`}>
+                            {fb.location && <p className="text-xs text-slate-400 mt-0.5 max-w-[120px] truncate">{fb.location}</p>}
+                          </td>
+                          <td className="px-4 py-3 max-w-[280px]">
+                            <p className="text-xs text-slate-700 line-clamp-2">{fb.message}</p>
+                            {fb.admin_response && (
+                              <p className="text-xs text-blue-600 mt-0.5 line-clamp-1">↩ {fb.admin_response}</p>
+                            )}
+                          </td>
+                          <td className="px-4 py-3 text-xs text-slate-400 whitespace-nowrap">
+                            {new Date(fb.submitted_at).toLocaleDateString()}<br />
+                            <span className="text-slate-300">{new Date(fb.submitted_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium capitalize ${statusColor}`}>
                               {fb.status}
                             </span>
-                          </div>
-                          {fb.location && <p className="text-xs text-slate-500 mb-1">📍 {fb.location}</p>}
-                          <p className="text-sm text-slate-700 line-clamp-2">{fb.message}</p>
-                          <p className="text-xs text-slate-400 mt-1">{new Date(fb.submitted_at).toLocaleString()}</p>
-                          {fb.admin_response && (
-                            <div className="mt-2 p-2.5 rounded-lg bg-blue-50 border border-blue-100">
-                              <p className="text-xs font-semibold text-blue-700 mb-0.5">Admin Response:</p>
-                              <p className="text-xs text-blue-800">{fb.admin_response}</p>
-                            </div>
-                          )}
-                        </div>
-                        <div className="flex flex-col gap-1 flex-shrink-0">
-                          <button
-                            onClick={() => setExpandedFeedback(isExpanded ? null : fb.id)}
-                            className="px-2.5 py-1 rounded-lg text-xs font-medium bg-slate-50 text-slate-600 hover:bg-slate-100 transition"
-                          >
-                            {isExpanded ? 'Collapse' : 'View'}
-                          </button>
-                          <button
-                            onClick={() => { setRespondingTo(isResponding ? null : fb.id); setResponseText(fb.admin_response || ''); setResponseStatus(fb.status === 'pending' ? 'reviewed' : fb.status); }}
-                            className="px-2.5 py-1 rounded-lg text-xs font-medium bg-teal-50 text-teal-700 hover:bg-teal-100 transition"
-                          >
-                            Respond
-                          </button>
-                        </div>
-                      </div>
-
-                      {/* Expanded: full message + photo */}
-                      {isExpanded && (
-                        <div className="mt-3 space-y-2">
-                          <p className="text-sm text-slate-800 whitespace-pre-wrap bg-slate-50 rounded-lg p-3">{fb.message}</p>
-                          {fb.photo && (
-                            <img src={fb.photo} alt="proof" className="max-h-64 rounded-xl border border-slate-200 object-cover" />
-                          )}
-                        </div>
-                      )}
-
-                      {/* Response form */}
-                      {isResponding && (
-                        <div className="mt-3 space-y-2 bg-slate-50 rounded-xl p-3">
-                          <div className="flex gap-2">
-                            {(['reviewed', 'resolved', 'pending'] as const).map(s => (
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-1.5">
+                              {(fb.photo || fb.message.length > 80) && (
+                                <button
+                                  onClick={() => setExpandedFeedback(isExpanded ? null : fb.id)}
+                                  className="px-2 py-1 rounded-lg text-xs font-medium bg-slate-50 text-slate-600 hover:bg-slate-100 transition whitespace-nowrap"
+                                >
+                                  {isExpanded ? 'Hide' : 'View'}
+                                </button>
+                              )}
                               <button
-                                key={s}
-                                type="button"
-                                onClick={() => setResponseStatus(s)}
-                                className={`px-2.5 py-1 rounded-lg text-xs font-medium transition capitalize ${responseStatus === s ? (s === 'resolved' ? 'bg-green-600 text-white' : s === 'reviewed' ? 'bg-blue-600 text-white' : 'bg-amber-500 text-white') : 'bg-white border border-slate-200 text-slate-600'}`}
+                                onClick={() => { setRespondingTo(isResponding ? null : fb.id); setResponseText(fb.admin_response || ''); setResponseStatus(fb.status === 'pending' ? 'reviewed' : fb.status); }}
+                                className="px-2 py-1 rounded-lg text-xs font-medium bg-teal-50 text-teal-700 hover:bg-teal-100 transition whitespace-nowrap"
                               >
-                                {s}
+                                {isResponding ? 'Cancel' : 'Respond'}
                               </button>
-                            ))}
-                          </div>
-                          <textarea
-                            value={responseText}
-                            onChange={e => setResponseText(e.target.value)}
-                            placeholder="Type your response to this report…"
-                            rows={3}
-                            className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white resize-none"
-                          />
-                          <div className="flex gap-2">
-                            <button
-                              onClick={() => setRespondingTo(null)}
-                              className="px-3 py-1.5 rounded-lg text-xs font-medium border border-slate-200 text-slate-600 hover:bg-slate-100 transition"
-                            >
-                              Cancel
-                            </button>
-                            <button
-                              onClick={() => handleSaveResponse(fb.id)}
-                              disabled={savingResponse}
-                              className="px-3 py-1.5 rounded-lg text-xs font-medium bg-teal-600 text-white hover:bg-teal-700 transition disabled:opacity-50"
-                            >
-                              {savingResponse ? 'Saving…' : 'Save Response'}
-                            </button>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
+                            </div>
+                          </td>
+                        </tr>
+
+                        {/* Expanded row: full message + photo */}
+                        {isExpanded && (
+                          <tr key={`${fb.id}-expanded`}>
+                            <td colSpan={6} className="px-4 pb-3">
+                              <div className="bg-slate-50 rounded-xl p-3 space-y-2">
+                                <p className="text-sm text-slate-800 whitespace-pre-wrap">{fb.message}</p>
+                                {fb.photo && (
+                                  <img src={fb.photo} alt="proof" className="max-h-48 rounded-lg border border-slate-200 object-cover" />
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+
+                        {/* Respond row */}
+                        {isResponding && (
+                          <tr key={`${fb.id}-respond`}>
+                            <td colSpan={6} className="px-4 pb-3">
+                              <div className="bg-blue-50 rounded-xl p-3 space-y-2 border border-blue-100">
+                                <div className="flex gap-2">
+                                  {(['reviewed', 'resolved', 'pending'] as const).map(s => (
+                                    <button
+                                      key={s}
+                                      type="button"
+                                      onClick={() => setResponseStatus(s)}
+                                      className={`px-2.5 py-1 rounded-lg text-xs font-medium transition capitalize ${responseStatus === s ? (s === 'resolved' ? 'bg-green-600 text-white' : s === 'reviewed' ? 'bg-blue-600 text-white' : 'bg-amber-500 text-white') : 'bg-white border border-slate-200 text-slate-600'}`}
+                                    >
+                                      {s}
+                                    </button>
+                                  ))}
+                                </div>
+                                <textarea
+                                  value={responseText}
+                                  onChange={e => setResponseText(e.target.value)}
+                                  placeholder="Type your response…"
+                                  rows={2}
+                                  className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white resize-none"
+                                />
+                                <div className="flex gap-2">
+                                  <button
+                                    onClick={() => handleSaveResponse(fb.id)}
+                                    disabled={savingResponse}
+                                    className="px-3 py-1.5 rounded-lg text-xs font-medium bg-teal-600 text-white hover:bg-teal-700 transition disabled:opacity-50"
+                                  >
+                                    {savingResponse ? 'Saving…' : 'Save Response'}
+                                  </button>
+                                  <button
+                                    onClick={() => setRespondingTo(null)}
+                                    className="px-3 py-1.5 rounded-lg text-xs font-medium border border-slate-200 text-slate-600 hover:bg-slate-100 transition"
+                                  >
+                                    Cancel
+                                  </button>
+                                </div>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       )}
     </div>
