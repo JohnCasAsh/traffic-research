@@ -678,8 +678,90 @@ export function AboutPage() {
               <span className="mt-0.5 w-6 h-6 rounded-full bg-teal-200 text-teal-700 text-xs font-bold flex items-center justify-center flex-shrink-0">6</span>
               <div>
                 <p className="text-sm font-semibold text-teal-800">Why not just use Google Maps or Waze?</p>
-                <p className="text-sm text-teal-700 mt-0.5">They optimize for time. Navocs optimizes for fuel cost per vehicle type using physics-based modeling. No existing app does this for tricycles or EVs in a Philippine provincial city — that is the gap this study fills.</p>
+                <p className="text-sm text-teal-700 mt-0.5">They solve navigation — getting from A to B. Navocs solves fuel cost — which path to A costs your vehicle the least. These are different problems. Google Maps has no VSP model, no vehicle-specific fuel calculation, and no cross-powertrain comparison. See the full breakdown below.</p>
               </div>
+            </div>
+
+          </div>
+        </motion.section>
+
+        {/* Why Not Google Maps — Critical Panelist Section */}
+        <motion.section
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.275 }}
+          className="bg-white rounded-2xl border border-slate-200 p-8"
+        >
+          <div className="flex items-center gap-3 mb-2">
+            <div className="w-9 h-9 rounded-lg bg-rose-50 flex items-center justify-center">
+              <MapPin className="w-5 h-5 text-rose-600" />
+            </div>
+            <h2 className="text-xl font-bold text-slate-900">"Why Not Just Use Google Maps or Waze?"</h2>
+          </div>
+          <p className="text-sm text-slate-500 mb-6">
+            This is the most common panelist question. The answer is not that Navocs is better — it is that Navocs does something Google Maps <strong>cannot do</strong>.
+          </p>
+
+          <div className="space-y-4">
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm border-collapse">
+                <thead>
+                  <tr className="bg-slate-100">
+                    <th className="text-left px-4 py-3 rounded-tl-xl font-semibold text-slate-700">Capability</th>
+                    <th className="text-center px-4 py-3 font-semibold text-slate-700">Google Maps / Waze</th>
+                    <th className="text-center px-4 py-3 rounded-tr-xl font-semibold text-teal-700">Navocs</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {[
+                    ['Optimize for fastest time', '✅ Yes', '—'],
+                    ['Optimize for fuel cost', '❌ No', '✅ Yes'],
+                    ['VSP-based fuel model per road segment', '❌ No', '✅ Yes'],
+                    ['Different route for tricycle vs e-trike', '❌ No', '✅ Yes'],
+                    ['ICE vs BEV vs HEV cost comparison', '❌ No', '✅ Yes'],
+                    ['Built for Philippine provincial vehicle mix', '❌ No', '✅ Yes'],
+                    ['Real-time live traffic', '✅ Yes', '❌ Future work'],
+                  ].map(([cap, google, navocs], i) => (
+                    <tr key={i} className="hover:bg-slate-50">
+                      <td className="px-4 py-3 text-slate-700">{cap}</td>
+                      <td className={`px-4 py-3 text-center font-medium ${google.includes('✅') ? 'text-green-600' : 'text-rose-500'}`}>{google}</td>
+                      <td className={`px-4 py-3 text-center font-medium ${navocs.includes('✅') ? 'text-teal-600' : 'text-slate-400'}`}>{navocs}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="bg-slate-900 rounded-xl p-5">
+              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-3">The correct framing</p>
+              <div className="space-y-2 text-sm">
+                <div className="flex gap-2">
+                  <span className="text-rose-400 font-bold shrink-0">Wrong claim:</span>
+                  <span className="text-slate-300">"Navocs gives better routes than Google Maps" — this requires experimental proof we do not have yet.</span>
+                </div>
+                <div className="flex gap-2 mt-2">
+                  <span className="text-teal-400 font-bold shrink-0">Correct claim:</span>
+                  <span className="text-slate-300">"Navocs solves a problem Google Maps cannot solve — fuel cost optimization per vehicle type using VSP modeling."</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+              <p className="text-sm font-semibold text-amber-800 mb-1">What about experimental validation?</p>
+              <p className="text-sm text-amber-700 leading-relaxed">
+                The study does not claim Navocs produces lower fuel consumption than Google Maps in a live test — no such experiment has been conducted yet.
+                The contribution is the <strong>design and implementation</strong> of a fuel-efficient routing system using A* and VSP for vehicle types that no existing tool models.
+                Empirical comparison against existing tools is identified as a priority for future work.
+              </p>
+            </div>
+
+            <div className="bg-teal-50 border border-teal-200 rounded-xl p-4">
+              <p className="text-sm font-semibold text-teal-800 mb-1">One-sentence answer for panelists</p>
+              <p className="text-sm text-teal-700 italic">
+                "We are not claiming to outperform Google Maps — we are implementing a capability it does not have:
+                VSP-based fuel cost routing per vehicle type, applied for the first time to Tuguegarao City's vehicle mix."
+              </p>
             </div>
 
           </div>
