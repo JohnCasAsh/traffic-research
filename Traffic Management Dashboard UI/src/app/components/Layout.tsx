@@ -230,11 +230,10 @@ export function Layout() {
               </ul>
             </div>
             <div>
-              <h4 className="font-semibold text-white mb-3">Research</h4>
+              <h4 className="font-semibold text-white mb-3">About</h4>
               <ul className="space-y-2 text-sm">
-                <li><a href="#" className="hover:text-teal-400 transition-colors">Methodology</a></li>
-                <li><a href="#" className="hover:text-teal-400 transition-colors">Publications</a></li>
-                <li><a href="#" className="hover:text-teal-400 transition-colors">Case Studies</a></li>
+                <li><Link to="/about" className="hover:text-teal-400 transition-colors">About Navocs</Link></li>
+                <li><Link to="/feedback" className="hover:text-teal-400 transition-colors">Feedback</Link></li>
               </ul>
             </div>
           </div>
