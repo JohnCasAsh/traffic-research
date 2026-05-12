@@ -168,14 +168,14 @@ export function AboutPage() {
             </div>
 
             <div className="bg-amber-50 border border-amber-200 rounded-xl p-5">
-              <p className="text-sm font-semibold text-amber-800 mb-2">Why not just use Google Maps or Waze?</p>
+              <p className="text-sm font-semibold text-amber-800 mb-2">How is this different from Google Maps or Waze?</p>
               <p className="text-sm text-amber-700 leading-relaxed">
-                Existing navigation apps optimize for <strong>speed</strong> — they recommend the fastest route.
-                When all vehicles follow the same fastest route, that route becomes congested, creating the bottleneck
-                effect. Navocs optimizes for <strong>fuel efficiency and cost</strong> using the VSP energy model,
-                which is specific to each vehicle type. A tricycle on a smooth 2.1 km route burns less fuel than the
-                same tricycle on a 1.8 km stop-and-go route through downtown — Navocs surfaces that difference.
-                No existing app does this for tricycles in Philippine provincial cities.
+                Google Maps and Waze optimize for <strong>travel time</strong> — they do not calculate fuel consumption
+                per vehicle type, and they have no model for tricycles. Navocs is designed to compute route cost using
+                the <strong>VSP (Vehicle Specific Power)</strong> energy model, which accounts for speed, acceleration,
+                and road gradient per vehicle profile. This study proposes and implements this approach for
+                Tuguegarao City as a research prototype — whether it produces measurably better outcomes than
+                time-based routing is the subject of ongoing validation and experimentation.
               </p>
             </div>
           </div>
