@@ -900,6 +900,34 @@ export function AboutPage() {
               </div>
             </div>
 
+            <div className="flex gap-3 p-4 rounded-xl border border-slate-200 bg-slate-50">
+              <span className="mt-0.5 w-6 h-6 rounded-full bg-slate-200 text-slate-700 text-xs font-bold flex items-center justify-center flex-shrink-0">8</span>
+              <div>
+                <p className="text-sm font-semibold text-slate-800">Long-term value — if daily commuters already know everything, why keep using it?</p>
+                <p className="text-sm text-slate-600 mt-0.5 leading-relaxed">
+                  Individual commuter reuse decreases once they learn their routes. That is honest.
+                  The long-term value of Navocs <strong>shifts from the individual to the city.</strong>
+                </p>
+                <div className="mt-3 space-y-2">
+                  {[
+                    { who: 'Week 1–2', what: 'Individual commuter discovers routes, parking, and terminals' },
+                    { who: 'Month 1–3', what: 'Tricycle drivers use fuel comparison daily — traffic changes every trip' },
+                    { who: 'Month 3–12', what: 'Road Reporter data accumulates — blocked sidewalks, unsafe walkways, heat hazards mapped city-wide' },
+                    { who: 'Year 1+', what: 'LGUs and urban planners get evidence-based data for sidewalk repair, shade tree placement, and terminal improvements' },
+                    { who: 'Long term', what: 'EV adopters benefit from battery-aware routing as e-trikes grow under RA 11697' },
+                  ].map(({ who, what }) => (
+                    <div key={who} className="flex gap-2 text-xs">
+                      <span className="font-bold text-slate-700 shrink-0 w-28">{who}</span>
+                      <span className="text-slate-500">{what}</span>
+                    </div>
+                  ))}
+                </div>
+                <p className="text-xs text-slate-500 mt-3 italic">
+                  The app serves individuals short-term and the city long-term. Its lasting contribution is as a community data collection platform — not just a personal navigation tool.
+                </p>
+              </div>
+            </div>
+
           </div>
         </motion.section>
 
