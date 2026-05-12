@@ -203,6 +203,64 @@ export function AboutPage() {
           </div>
         </motion.section>
 
+        {/* Why A* */}
+        <motion.section
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.14 }}
+          className="bg-white rounded-2xl border border-slate-200 p-8"
+        >
+          <div className="flex items-center gap-3 mb-6">
+            <div className="w-9 h-9 rounded-lg bg-violet-50 flex items-center justify-center">
+              <GitBranch className="w-5 h-5 text-violet-600" />
+            </div>
+            <h2 className="text-xl font-bold text-slate-900">Why A* Algorithm?</h2>
+          </div>
+
+          <div className="space-y-4">
+            <div className="grid sm:grid-cols-2 gap-4">
+              <div className="bg-red-50 border border-red-200 rounded-xl p-4">
+                <p className="text-sm font-semibold text-red-800 mb-2">Shortest Path (Dijkstra)</p>
+                <p className="text-sm text-red-700 leading-relaxed">
+                  Finds the route with the least <strong>distance</strong>. Treats every road segment the same —
+                  only asks "how long is this road?" Does not consider fuel cost, traffic, or vehicle type.
+                  Checks every possible road before deciding — slow on large road networks.
+                </p>
+              </div>
+              <div className="bg-violet-50 border border-violet-200 rounded-xl p-4">
+                <p className="text-sm font-semibold text-violet-800 mb-2">A* Algorithm</p>
+                <p className="text-sm text-violet-700 leading-relaxed">
+                  Uses <strong>two things at once</strong> — the actual cost of the path so far, plus an estimate
+                  of the remaining cost to the destination (the heuristic). This lets it skip roads going in the
+                  wrong direction and reach the answer faster. More importantly, you can plug <strong>any cost
+                  function</strong> into it — not just distance.
+                </p>
+              </div>
+            </div>
+
+            <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
+              <p className="text-sm font-semibold text-slate-700 mb-2">How it works in Navocs</p>
+              <p className="text-sm text-slate-600 leading-relaxed mb-3">
+                Instead of plugging in distance as the cost, Navocs plugs in <strong>VSP-based fuel consumption</strong>
+                combined with traffic delay and speed stability. A* then finds the route where the total fuel cost
+                across all road segments is lowest — not the shortest distance, not the fastest time, but the most
+                energy-efficient path for that specific vehicle.
+              </p>
+              <div className="bg-slate-900 rounded-lg px-4 py-3 font-mono text-xs text-teal-300">
+                Cost per segment = w1·Time + w2·Fuel(VSP) + w3·Traffic Delay + w4·Speed Stability
+              </div>
+            </div>
+
+            <div className="bg-teal-50 border border-teal-200 rounded-xl p-4">
+              <p className="text-sm font-semibold text-teal-800 mb-1">One-sentence answer for panelists</p>
+              <p className="text-sm text-teal-700 italic">
+                "We use A* because it allows a custom cost function — and our cost function is VSP-based fuel
+                consumption per vehicle type, which shortest-path algorithms cannot support efficiently."
+              </p>
+            </div>
+          </div>
+        </motion.section>
+
         {/* Algorithm */}
         <motion.section
           initial={{ opacity: 0, y: 16 }}
