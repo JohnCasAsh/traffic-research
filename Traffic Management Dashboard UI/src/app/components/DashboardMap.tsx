@@ -1710,19 +1710,6 @@ export function DashboardMap({
         </div>
       )}
 
-      {isMapActivated &&
-        mapReady &&
-        !configurationError &&
-        !normalizedOrigin &&
-        !normalizedDestination && (
-        <motion.div
-          initial={{ opacity: 0, y: -8 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="absolute top-4 left-1/2 -translate-x-1/2 z-20 bg-white/95 backdrop-blur rounded-full border border-slate-200 px-4 py-2 text-xs font-medium text-slate-700 shadow"
-        >
-          Enter origin and destination to preview your route.
-        </motion.div>
-      )}
 
       {isMapActivated && routeSummary && (
         <div className="absolute top-4 left-4 z-20 bg-white/95 backdrop-blur rounded-lg shadow-lg border border-slate-200 px-4 py-3">
@@ -1782,36 +1769,28 @@ export function DashboardMap({
       )}
 
       {isMapActivated && liveTrackingEnabled && !configurationError && (
-        <div className="absolute top-20 right-4 z-20 max-w-[260px] rounded-lg border border-slate-200 bg-white/95 px-3 py-2 text-[11px] text-slate-700 shadow">
-          <div className="font-semibold text-slate-800">Live Tracking</div>
-          <div className={streamConnected ? 'text-emerald-700' : streamFailureCount >= 3 ? 'text-red-600' : 'text-amber-700'}>
-            {streamConnected
-              ? 'Traffic feed connected'
-              : streamFailureCount >= 3
-              ? 'Backend offline — live data unavailable'
-              : 'Connecting traffic feed...'}
-          </div>
-          {trackingStatusMessage && streamConnected && (
-            <div className="mt-1 text-slate-600">{trackingStatusMessage}</div>
-          )}
+        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-20 flex items-center gap-1.5 bg-white/95 backdrop-blur rounded-full border border-slate-200 px-3 py-1.5 shadow-sm">
+          <span className={`w-2 h-2 rounded-full flex-shrink-0 ${streamConnected ? 'bg-emerald-500 animate-pulse' : streamFailureCount >= 3 ? 'bg-red-500' : 'bg-amber-400 animate-pulse'}`} />
+          <span className="text-[11px] font-medium text-slate-600">
+            {streamConnected ? 'Live traffic connected' : streamFailureCount >= 3 ? 'Traffic feed offline' : 'Connecting…'}
+          </span>
         </div>
       )}
 
       {isMapActivated && activeTrafficAlerts.length > 0 && !configurationError && (
-        <div className="absolute bottom-4 right-4 z-20 max-w-[280px] rounded-lg border border-red-200 bg-white/95 px-3 py-3 shadow">
-          <div className="mb-2 text-xs font-semibold text-red-700">Live Congestion Alerts</div>
-          <div className="space-y-2">
+        <div className="absolute top-14 right-4 z-20 max-w-[260px] rounded-xl border border-red-200 bg-white/95 backdrop-blur px-3 py-2.5 shadow-md">
+          <div className="flex items-center gap-1.5 mb-2">
+            <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse flex-shrink-0" />
+            <span className="text-xs font-semibold text-red-700">Live Congestion Alerts</span>
+          </div>
+          <div className="space-y-1.5">
             {activeTrafficAlerts.slice(0, 3).map((alert) => (
-              <div key={`${alert.vehicleId}-${alert.updatedAt}`} className="rounded border border-red-100 bg-red-50 px-2 py-1">
-                <div className="text-[11px] font-medium text-red-800">{alert.message}</div>
-                <div className="text-[10px] text-red-700">
-                  Vehicle {alert.vehicleId.slice(0, 6)} | {Math.round(alert.speedKph)} km/h
+              <div key={`${alert.vehicleId}-${alert.updatedAt}`} className="rounded-lg border border-red-100 bg-red-50 px-2 py-1.5">
+                <div className="text-[11px] font-medium text-red-800 leading-snug">{alert.message}</div>
+                <div className="text-[10px] text-red-600 mt-0.5">
+                  Vehicle {alert.vehicleId.slice(0, 6)} · {Math.round(alert.speedKph)} km/h
+                  {typeof alert.durationMinutes === 'number' && ` · ${alert.durationMinutes.toFixed(1)} min`}
                 </div>
-                {typeof alert.durationMinutes === 'number' && (
-                  <div className="text-[10px] text-red-700">
-                    In traffic for {alert.durationMinutes.toFixed(1)} min
-                  </div>
-                )}
               </div>
             ))}
           </div>
@@ -1862,50 +1841,56 @@ export function DashboardMap({
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ delay: 0.4 }}
-            className="absolute bottom-4 left-4 bg-white rounded-lg shadow-lg p-4 border border-slate-200 z-20"
+            className="absolute bottom-4 left-4 bg-white rounded-xl shadow-lg p-4 border border-slate-200 z-20 min-w-[160px]"
           >
-            <div className="text-xs font-medium text-slate-700 mb-2">Traffic Legend</div>
-            <div className="space-y-1">
-              <div className="flex items-center space-x-2">
+            <div className="text-xs font-semibold text-slate-700 mb-2.5 uppercase tracking-wide">Legend</div>
+
+            {/* Traffic flow */}
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
                 <motion.div
                   animate={{ scaleX: [1, 1.15, 1] }}
                   transition={{ duration: 1.5, repeat: Infinity }}
-                  className="w-6 h-1.5 bg-green-500 rounded-full"
+                  className="w-6 h-1.5 bg-green-500 rounded-full flex-shrink-0"
                 />
                 <span className="text-xs text-slate-600">Low Traffic ({trafficLevelCounts.low})</span>
               </div>
-              <div className="flex items-center space-x-2">
-                <div className="w-6 h-1.5 bg-orange-500 rounded-full" />
+              <div className="flex items-center gap-2">
+                <div className="w-6 h-1.5 bg-orange-500 rounded-full flex-shrink-0" />
                 <span className="text-xs text-slate-600">Moderate ({trafficLevelCounts.moderate})</span>
               </div>
-              <div className="flex items-center space-x-2">
-                <div className="w-6 h-1.5 bg-red-500 rounded-full" />
-                <span className="text-xs text-slate-600">Heavy Traffic ({trafficLevelCounts.heavy})</span>
+              <div className="flex items-center gap-2">
+                <div className="w-6 h-1.5 bg-red-500 rounded-full flex-shrink-0" />
+                <span className="text-xs text-slate-600">Heavy ({trafficLevelCounts.heavy})</span>
               </div>
             </div>
+
+            {/* Markers */}
             {showParking && (
               <>
-                <div className="my-1.5 border-t border-slate-100" />
-                <div className="flex items-center space-x-2">
-                  <div className="w-5 h-5 rounded-full bg-green-600 flex items-center justify-center flex-shrink-0">
-                    <span className="text-white text-[9px] font-bold">G</span>
+                <div className="my-3 border-t border-slate-200" />
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <div className="w-5 h-5 rounded-full bg-green-600 flex items-center justify-center flex-shrink-0">
+                      <span className="text-white text-[9px] font-bold leading-none">G</span>
+                    </div>
+                    <span className="text-xs text-slate-600">Gas Station</span>
                   </div>
-                  <span className="text-xs text-slate-600">Gas Station</span>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <div className="w-5 h-5 rounded-full bg-amber-400 flex items-center justify-center flex-shrink-0">
-                    <span className="text-white text-[9px] font-bold">★</span>
+                  <div className="flex items-center gap-2">
+                    <div className="w-5 h-5 rounded-full bg-amber-400 flex items-center justify-center flex-shrink-0">
+                      <span className="text-white text-[9px] font-bold leading-none">★</span>
+                    </div>
+                    <span className="text-xs text-slate-600">Selected</span>
                   </div>
-                  <span className="text-xs text-slate-600">Selected</span>
                 </div>
               </>
             )}
             {currentLocation && (
               <>
-                <div className="my-1.5 border-t border-slate-100" />
-                <div className="flex items-center space-x-2">
+                <div className="my-3 border-t border-slate-200" />
+                <div className="flex items-center gap-2">
                   <div className="w-5 h-5 rounded-full bg-blue-500 flex items-center justify-center flex-shrink-0">
-                    <span className="text-white text-[9px] font-bold">●</span>
+                    <span className="text-white text-[9px] font-bold leading-none">●</span>
                   </div>
                   <span className="text-xs text-slate-600">You</span>
                 </div>
