@@ -315,6 +315,94 @@ export function AboutPage() {
           </div>
         </motion.section>
 
+        {/* What is VSP */}
+        <motion.section
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.148 }}
+          className="bg-white rounded-2xl border border-slate-200 p-8"
+        >
+          <div className="flex items-center gap-3 mb-2">
+            <div className="w-9 h-9 rounded-lg bg-orange-50 flex items-center justify-center">
+              <Zap className="w-5 h-5 text-orange-500" />
+            </div>
+            <h2 className="text-xl font-bold text-slate-900">What is VSP — and Why Does It Matter?</h2>
+          </div>
+          <p className="text-sm text-slate-500 mb-6">VSP stands for <strong>Vehicle Specific Power</strong>. It is a number that tells you how hard your engine is working at any given moment.</p>
+
+          <div className="space-y-4">
+
+            <div className="bg-orange-50 border border-orange-200 rounded-xl p-4">
+              <p className="text-sm font-semibold text-orange-800 mb-2">Simple explanation</p>
+              <p className="text-sm text-orange-700 leading-relaxed">
+                Think of VSP as your engine's effort level. When you accelerate fast, climb a hill, or drive at high speed —
+                your engine works harder and burns more fuel. When you drive slow and steady — your engine barely works and
+                burns less fuel. VSP measures that effort as a single number.
+              </p>
+            </div>
+
+            <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
+              <p className="text-sm font-semibold text-slate-700 mb-2">The VSP formula</p>
+              <div className="bg-slate-900 rounded-lg px-4 py-3 font-mono text-xs text-amber-300 mb-3">
+                VSP = v · (1.1a + 9.81 · grade + 0.132) + 0.000302 · v³
+              </div>
+              <div className="grid sm:grid-cols-3 gap-2 text-sm text-slate-600">
+                <span><strong className="text-slate-800">v</strong> — your speed (m/s)</span>
+                <span><strong className="text-slate-800">a</strong> — how fast you're speeding up or braking (m/s²)</span>
+                <span><strong className="text-slate-800">grade</strong> — steepness of the road</span>
+              </div>
+            </div>
+
+            <div className="grid sm:grid-cols-2 gap-4">
+              <div className="bg-red-50 border border-red-200 rounded-xl p-4">
+                <p className="text-sm font-semibold text-red-800 mb-2">High VSP = more fuel burned</p>
+                <ul className="text-sm text-red-700 space-y-1">
+                  <li>— Stop-and-go traffic (constant acceleration)</li>
+                  <li>— Going uphill</li>
+                  <li>— Speeding up quickly from a stop</li>
+                  <li>— High speed on an open road</li>
+                </ul>
+              </div>
+              <div className="bg-green-50 border border-green-200 rounded-xl p-4">
+                <p className="text-sm font-semibold text-green-800 mb-2">Low VSP = less fuel burned</p>
+                <ul className="text-sm text-green-700 space-y-1">
+                  <li>— Steady speed on a flat road</li>
+                  <li>— Slow and smooth driving</li>
+                  <li>— Coasting or light braking</li>
+                  <li>— Less acceleration, less engine load</li>
+                </ul>
+              </div>
+            </div>
+
+            <div className="bg-slate-50 border border-slate-200 rounded-xl p-5">
+              <p className="text-sm font-semibold text-slate-700 mb-3">How VSP works differently per vehicle type</p>
+              <div className="space-y-3">
+                <div className="flex gap-3 items-start">
+                  <span className="px-2 py-0.5 rounded-full bg-amber-200 text-amber-800 text-xs font-bold shrink-0 mt-0.5">ICE</span>
+                  <p className="text-sm text-slate-600"><strong>Tricycle, Motorcycle, Private Car</strong> — VSP directly maps to fuel burned per second. Higher VSP = more gasoline consumed. A* avoids roads where VSP will be high for your vehicle.</p>
+                </div>
+                <div className="flex gap-3 items-start">
+                  <span className="px-2 py-0.5 rounded-full bg-green-200 text-green-800 text-xs font-bold shrink-0 mt-0.5">BEV</span>
+                  <p className="text-sm text-slate-600"><strong>E-Trike, E-Motorcycle</strong> — VSP does not apply. Instead we use an energy model that calculates battery drain based on rolling resistance, wind drag, and acceleration. State of Charge (SoC) is tracked so the route never fully drains the battery.</p>
+                </div>
+                <div className="flex gap-3 items-start">
+                  <span className="px-2 py-0.5 rounded-full bg-teal-200 text-teal-800 text-xs font-bold shrink-0 mt-0.5">HEV</span>
+                  <p className="text-sm text-slate-600"><strong>Hybrid Car</strong> — Uses both. At high speed, the ICE engine runs and VSP applies. At low speed or braking, the electric motor takes over and the energy model applies instead.</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-teal-50 border border-teal-200 rounded-xl p-4">
+              <p className="text-sm font-semibold text-teal-800 mb-1">One-sentence answer for panelists</p>
+              <p className="text-sm text-teal-700 italic">
+                "VSP measures how hard your engine works on each road segment — Navocs uses that number to calculate fuel cost,
+                so A* can pick the route that costs your specific vehicle the least fuel."
+              </p>
+            </div>
+
+          </div>
+        </motion.section>
+
         {/* Algorithm */}
         <motion.section
           initial={{ opacity: 0, y: 16 }}
