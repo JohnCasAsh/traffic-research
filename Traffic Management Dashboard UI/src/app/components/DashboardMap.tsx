@@ -522,6 +522,7 @@ export function DashboardMap({
   const parkingMarkersRef = useRef<any[]>([]);
 
   const [showParking, setShowParking] = useState(true);
+  const [alertsExpanded, setAlertsExpanded] = useState(false);
   const [parkingLocations, setParkingLocations] = useState<{ id: string; name: string; type: string; lat: number; lng: number; notes: string; fare_normal: number | null; fare_discounted: number | null; fuel_prices?: { name: string; price: string }[] | null; photo: string | null }[]>([]);
 
   const [isMapActivated, setIsMapActivated] = useState(true);
@@ -1778,22 +1779,33 @@ export function DashboardMap({
       )}
 
       {isMapActivated && activeTrafficAlerts.length > 0 && !configurationError && (
-        <div className="absolute top-14 right-4 z-20 max-w-[260px] rounded-xl border border-red-200 bg-white/95 backdrop-blur px-3 py-2.5 shadow-md">
-          <div className="flex items-center gap-1.5 mb-2">
-            <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse flex-shrink-0" />
-            <span className="text-xs font-semibold text-red-700">Live Congestion Alerts</span>
-          </div>
-          <div className="space-y-1.5">
-            {activeTrafficAlerts.slice(0, 3).map((alert) => (
-              <div key={`${alert.vehicleId}-${alert.updatedAt}`} className="rounded-lg border border-red-100 bg-red-50 px-2 py-1.5">
-                <div className="text-[11px] font-medium text-red-800 leading-snug">{alert.message}</div>
-                <div className="text-[10px] text-red-600 mt-0.5">
-                  Vehicle {alert.vehicleId.slice(0, 6)} · {Math.round(alert.speedKph)} km/h
-                  {typeof alert.durationMinutes === 'number' && ` · ${alert.durationMinutes.toFixed(1)} min`}
+        <div className="absolute bottom-4 right-4 z-20 max-w-[240px] rounded-xl border border-red-200 bg-white/95 backdrop-blur shadow-md overflow-hidden">
+          <button
+            type="button"
+            onClick={() => setAlertsExpanded(p => !p)}
+            className="w-full flex items-center justify-between gap-2 px-3 py-2 hover:bg-red-50 transition-colors"
+          >
+            <div className="flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse flex-shrink-0" />
+              <span className="text-xs font-semibold text-red-700">
+                Congestion ({activeTrafficAlerts.length})
+              </span>
+            </div>
+            <span className="text-[10px] text-slate-400">{alertsExpanded ? '▲' : '▼'}</span>
+          </button>
+          {alertsExpanded && (
+            <div className="px-3 pb-2.5 space-y-1.5 border-t border-red-100">
+              {activeTrafficAlerts.slice(0, 3).map((alert) => (
+                <div key={`${alert.vehicleId}-${alert.updatedAt}`} className="rounded-lg border border-red-100 bg-red-50 px-2 py-1.5 mt-1.5">
+                  <div className="text-[11px] font-medium text-red-800 leading-snug">{alert.message}</div>
+                  <div className="text-[10px] text-red-600 mt-0.5">
+                    Vehicle {alert.vehicleId.slice(0, 6)} · {Math.round(alert.speedKph)} km/h
+                    {typeof alert.durationMinutes === 'number' && ` · ${alert.durationMinutes.toFixed(1)} min`}
+                  </div>
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
