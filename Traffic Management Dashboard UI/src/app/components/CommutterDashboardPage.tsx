@@ -6,8 +6,10 @@ import {
   Car, X, RefreshCw, MapPinOff,
 } from 'lucide-react';
 import { importLibrary, setOptions } from '@googlemaps/js-api-loader';
-import { API_URL } from '../api';
+import { API_URL, buildAuthHeaders } from '../api';
 import { useLocationConsent } from '../LocationConsentContext';
+import { useAuth } from '../auth';
+import { AssistantPanel } from './AssistantPanel';
 
 const MAPS_API_KEY = (
   (import.meta as ImportMeta & { env?: { VITE_GOOGLE_MAPS_API_KEY?: string } }).env
@@ -149,7 +151,20 @@ function PlaceAutocompleteInput({
 export function CommutterDashboardPage() {
   const navigate = useNavigate();
   const { currentLocation, setCurrentLocation } = useLocationConsent();
+  const { token } = useAuth();
   const [gpsStatus, setGpsStatus] = useState<string>('Getting GPS…');
+  const [chatUrl, setChatUrl] = useState<string | null>(null);
+  const [chatLoading, setChatLoading] = useState(true);
+
+  useEffect(() => {
+    if (!token) return;
+    setChatLoading(true);
+    fetch(`${API_URL}/api/auth/chat-token`, { headers: buildAuthHeaders(token) })
+      .then(r => r.ok ? r.json() : Promise.reject())
+      .then(data => setChatUrl(data.url))
+      .catch(() => setChatUrl(null))
+      .finally(() => setChatLoading(false));
+  }, [token]);
 
   // FROM state
   const [fromText, setFromText] = useState('');
@@ -323,6 +338,7 @@ export function CommutterDashboardPage() {
     });
 
   return (
+    <>
     <div className="min-h-[calc(100vh-4rem)] bg-slate-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
 
@@ -535,5 +551,8 @@ export function CommutterDashboardPage() {
         </div>
       </div>
     </div>
+
+    <AssistantPanel chatUrl={chatUrl} chatLoading={chatLoading} />
+    </>
   );
 }
