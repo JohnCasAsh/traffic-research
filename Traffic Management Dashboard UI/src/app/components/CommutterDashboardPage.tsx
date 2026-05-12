@@ -226,6 +226,23 @@ export function CommutterDashboardPage() {
     });
   }, []);
 
+  const makeMarkerOptions = (isGas: boolean, isSel: boolean): google.maps.MarkerOptions => ({
+    icon: {
+      path: google.maps.SymbolPath.CIRCLE,
+      scale: isSel ? 16 : 14,
+      fillColor: isSel ? '#f59e0b' : isGas ? '#16a34a' : '#2563eb',
+      fillOpacity: 1,
+      strokeColor: '#ffffff',
+      strokeWeight: 2.5,
+    },
+    label: {
+      text: isSel ? '★' : isGas ? 'G' : 'P',
+      color: '#ffffff',
+      fontSize: isSel ? '12px' : '11px',
+      fontWeight: 'bold',
+    },
+  });
+
   // Place markers
   useEffect(() => {
     if (!mapReady || !mapRef.current) return;
@@ -234,8 +251,10 @@ export function CommutterDashboardPage() {
     locations.forEach((loc) => {
       const isGas = GAS_TYPES.has(loc.type);
       const marker = new google.maps.Marker({
-        position: { lat: loc.lat, lng: loc.lng }, map: mapRef.current!, title: loc.name,
-        icon: { path: google.maps.SymbolPath.CIRCLE, scale: 12, fillColor: isGas ? '#16a34a' : '#0d9488', fillOpacity: 1, strokeColor: '#ffffff', strokeWeight: 2.5 },
+        position: { lat: loc.lat, lng: loc.lng },
+        map: mapRef.current!,
+        title: loc.name,
+        ...makeMarkerOptions(isGas, false),
       });
       marker.addListener('click', () => { setSelected(loc); mapRef.current?.panTo({ lat: loc.lat, lng: loc.lng }); });
       markersRef.current.set(loc.id, marker);
@@ -249,7 +268,9 @@ export function CommutterDashboardPage() {
       if (!loc) return;
       const isGas = GAS_TYPES.has(loc.type);
       const isSel = selected?.id === id;
-      marker.setIcon({ path: google.maps.SymbolPath.CIRCLE, scale: isSel ? 16 : 12, fillColor: isSel ? '#f59e0b' : (isGas ? '#16a34a' : '#0d9488'), fillOpacity: 1, strokeColor: '#ffffff', strokeWeight: 2.5 });
+      const opts = makeMarkerOptions(isGas, isSel);
+      marker.setIcon(opts.icon!);
+      marker.setLabel(opts.label!);
     });
   }, [selected, locations]);
 
@@ -497,9 +518,14 @@ export function CommutterDashboardPage() {
 
               {/* Legend */}
               <div className="absolute top-3 right-3 bg-white/95 backdrop-blur-sm rounded-xl border border-slate-200 shadow-sm px-3 py-2 space-y-1.5">
-                {[['bg-teal-500', 'Parking'], ['bg-green-600', 'Gas Station'], ['bg-amber-400', 'Selected'], ['bg-blue-500', 'You']].map(([color, label]) => (
+                {[
+                  ['bg-blue-600', 'P', 'Parking'],
+                  ['bg-green-600', 'G', 'Gas Station'],
+                  ['bg-amber-400', '★', 'Selected'],
+                  ['bg-blue-500', '·', 'You'],
+                ].map(([color, letter, label]) => (
                   <div key={label} className="flex items-center gap-2">
-                    <span className={`w-3 h-3 rounded-full ${color}`} />
+                    <span className={`w-5 h-5 rounded-full ${color} flex items-center justify-center text-white text-[9px] font-bold flex-shrink-0`}>{letter}</span>
                     <span className="text-xs text-slate-600">{label}</span>
                   </div>
                 ))}
