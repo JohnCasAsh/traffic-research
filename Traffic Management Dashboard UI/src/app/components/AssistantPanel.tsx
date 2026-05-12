@@ -37,7 +37,7 @@ export function AssistantPanel({ chatUrl, chatLoading }: Props) {
         onClick={() => setOpen((v) => !v)}
         aria-label={open ? 'Close Route Assistant' : 'Open Route Assistant'}
         className={`fixed top-1/2 -translate-y-1/2 z-50 flex flex-col items-center gap-1.5 rounded-l-xl border border-r-0 border-slate-200 bg-white px-2 py-4 shadow-lg transition-all duration-300 hover:bg-orange-50 hover:border-orange-200 group ${
-          open ? 'right-96' : 'right-0'
+          open ? 'right-[min(24rem,100vw)]' : 'right-0'
         }`}
       >
         <MessageCircle className="w-5 h-5 text-orange-500" />
@@ -62,10 +62,10 @@ export function AssistantPanel({ chatUrl, chatLoading }: Props) {
 
       {/* Slide-in panel */}
       <div
-        className={`fixed top-16 right-0 bottom-0 z-40 flex flex-col bg-white border-l border-slate-200 shadow-2xl transition-transform duration-300 ease-in-out ${
+        className={`fixed top-[122px] md:top-16 right-0 bottom-0 z-40 flex flex-col bg-white border-l border-slate-200 shadow-2xl transition-transform duration-300 ease-in-out ${
           open ? 'translate-x-0' : 'translate-x-full'
         }`}
-        style={{ width: '24rem' }}
+        style={{ width: '24rem', maxWidth: '100vw' }}
       >
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 shrink-0">
