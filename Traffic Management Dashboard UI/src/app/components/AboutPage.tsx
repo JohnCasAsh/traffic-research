@@ -208,6 +208,54 @@ export function AboutPage() {
             Navocs uses a VSP-based fuel scoring engine to re-rank Google Routes API candidates and recommend
             the route with the best balance of time, fuel cost, traffic delay, and speed stability — per vehicle type.
           </p>
+
+          <div className="mt-5 space-y-3">
+            <div className="bg-slate-900 rounded-xl p-5">
+              <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">What this study is primarily about</p>
+              <div className="space-y-3">
+                <div className="flex gap-3 items-start">
+                  <span className="w-6 h-6 rounded-full bg-teal-500 text-white text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">1</span>
+                  <div>
+                    <p className="text-sm font-semibold text-teal-300">Primary — Driver Fuel Efficiency</p>
+                    <p className="text-xs text-slate-400 mt-0.5">VSP-based Eco-Route scoring for 10 vehicle types. All 3 research objectives, the Fs formula, and all 3 test corridors measure this.</p>
+                  </div>
+                </div>
+                <div className="flex gap-3 items-start">
+                  <span className="w-6 h-6 rounded-full bg-blue-500 text-white text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">2</span>
+                  <div>
+                    <p className="text-sm font-semibold text-blue-300">Secondary — City-Wide Energy Awareness</p>
+                    <p className="text-xs text-slate-400 mt-0.5">Reducing total fuel consumption by making the invisible cost of stop-and-go traffic visible to drivers and urban planners.</p>
+                  </div>
+                </div>
+                <div className="flex gap-3 items-start">
+                  <span className="w-6 h-6 rounded-full bg-slate-500 text-white text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">3</span>
+                  <div>
+                    <p className="text-sm font-semibold text-slate-300">Supporting — Commuter Features</p>
+                    <p className="text-xs text-slate-400 mt-0.5">Walking routes, terminals, and parking reduce unnecessary tricycle demand — addressing the demand side of the energy problem. Not the core research contribution.</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+              <p className="text-sm font-semibold text-amber-800 mb-1">What "Urban Commuters" means in the title</p>
+              <p className="text-sm text-amber-700 leading-relaxed">
+                In the Philippine context, <strong>"urban commuter"</strong> refers to anyone traveling within the city —
+                tricycle drivers, car owners, van operators, and pedestrian commuters alike.
+                The title does not limit the study to pedestrians. It covers all urban travelers,
+                with primary focus on motorized vehicle operators and their fuel cost.
+              </p>
+            </div>
+
+            <div className="bg-teal-50 border border-teal-200 rounded-xl p-4">
+              <p className="text-sm font-semibold text-teal-800 mb-1">One-sentence answer for panelists</p>
+              <p className="text-sm text-teal-700 italic">
+                "The primary focus is energy-aware route optimization for drivers using VSP-based fuel modeling.
+                Commuter features address the demand side of the energy problem — reducing unnecessary vehicle trips
+                through safer walking alternatives."
+              </p>
+            </div>
+          </div>
         </motion.section>
 
         {/* Energy Awareness — The Big Picture */}
