@@ -141,7 +141,7 @@ export function AboutPage() {
               <p className="text-sm font-semibold text-slate-800 mb-2">The Problem in Tuguegarao City</p>
               <p className="text-sm text-slate-600 leading-relaxed">
                 Tuguegarao City — the hottest city in the Philippines — has no eco-routing system built for its vehicle mix.
-                Roads are dominated by tricycles carrying 1–3 passengers, creating stop-and-go congestion that burns more
+                Roads are dominated by tricycles carrying 1–5 passengers, creating stop-and-go congestion that burns more
                 fuel per kilometer than steady-speed driving. Sidewalks are blocked by parked vehicles, forcing pedestrians
                 onto the road. Students and workers pay for short tricycle trips they could walk if infrastructure existed.
                 No existing system measures or addresses these conditions locally.
