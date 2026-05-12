@@ -456,6 +456,73 @@ export function AboutPage() {
           </ul>
         </motion.section>
 
+        {/* Study Scope & Limitations */}
+        <motion.section
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.27 }}
+          className="bg-white rounded-2xl border border-slate-200 p-8"
+        >
+          <div className="flex items-center gap-3 mb-6">
+            <div className="w-9 h-9 rounded-lg bg-slate-100 flex items-center justify-center">
+              <Shield className="w-5 h-5 text-slate-600" />
+            </div>
+            <h2 className="text-xl font-bold text-slate-900">Study Scope & Honest Limitations</h2>
+          </div>
+
+          <div className="space-y-3">
+
+            <div className="flex gap-3 p-4 rounded-xl border border-slate-200 bg-slate-50">
+              <span className="mt-0.5 w-6 h-6 rounded-full bg-slate-200 text-slate-700 text-xs font-bold flex items-center justify-center flex-shrink-0">1</span>
+              <div>
+                <p className="text-sm font-semibold text-slate-800">What this study contributes</p>
+                <p className="text-sm text-slate-600 mt-0.5">The design, development, and deployment of a fuel-efficient routing system applying A* with VSP — the first of its kind built for Tuguegarao City. The algorithm, vehicle profiles, and system architecture are the core contribution.</p>
+              </div>
+            </div>
+
+            <div className="flex gap-3 p-4 rounded-xl border border-amber-200 bg-amber-50">
+              <span className="mt-0.5 w-6 h-6 rounded-full bg-amber-200 text-amber-700 text-xs font-bold flex items-center justify-center flex-shrink-0">2</span>
+              <div>
+                <p className="text-sm font-semibold text-amber-800">Validation is simulation-based, not empirical yet</p>
+                <p className="text-sm text-amber-700 mt-0.5">Traffic delay estimates are based on theoretical VSP parameters — such as stop-and-go patterns burning more fuel. Real GPS data collection on Tuguegarao roads is ongoing. Full empirical validation is identified as future work.</p>
+              </div>
+            </div>
+
+            <div className="flex gap-3 p-4 rounded-xl border border-amber-200 bg-amber-50">
+              <span className="mt-0.5 w-6 h-6 rounded-full bg-amber-200 text-amber-700 text-xs font-bold flex items-center justify-center flex-shrink-0">3</span>
+              <div>
+                <p className="text-sm font-semibold text-amber-800">VSP formula is not yet locally calibrated</p>
+                <p className="text-sm text-amber-700 mt-0.5">The VSP model is internationally validated in transportation research but has not been calibrated specifically for Filipino tricycles. Local calibration using collected speed data is a planned future enhancement.</p>
+              </div>
+            </div>
+
+            <div className="flex gap-3 p-4 rounded-xl border border-blue-200 bg-blue-50">
+              <span className="mt-0.5 w-6 h-6 rounded-full bg-blue-200 text-blue-700 text-xs font-bold flex items-center justify-center flex-shrink-0">4</span>
+              <div>
+                <p className="text-sm font-semibold text-blue-800">Commuters and drivers have different roles</p>
+                <p className="text-sm text-blue-700 mt-0.5">A* route optimization is designed for drivers — tricycle operators, motorcyclists, and private car owners. Commuters use Navocs for walking directions, parking spots, and terminal guidance — not tricycle routing.</p>
+              </div>
+            </div>
+
+            <div className="flex gap-3 p-4 rounded-xl border border-blue-200 bg-blue-50">
+              <span className="mt-0.5 w-6 h-6 rounded-full bg-blue-200 text-blue-700 text-xs font-bold flex items-center justify-center flex-shrink-0">5</span>
+              <div>
+                <p className="text-sm font-semibold text-blue-800">Supporting features are tools, not the study</p>
+                <p className="text-sm text-blue-700 mt-0.5">The AI assistant, speed meter, road reporter, and parking map are supporting tools that aid data collection and user access. The core study is the A* routing algorithm and VSP energy model.</p>
+              </div>
+            </div>
+
+            <div className="flex gap-3 p-4 rounded-xl border border-teal-200 bg-teal-50">
+              <span className="mt-0.5 w-6 h-6 rounded-full bg-teal-200 text-teal-700 text-xs font-bold flex items-center justify-center flex-shrink-0">6</span>
+              <div>
+                <p className="text-sm font-semibold text-teal-800">Why not just use Google Maps or Waze?</p>
+                <p className="text-sm text-teal-700 mt-0.5">They optimize for time. Navocs optimizes for fuel cost per vehicle type using physics-based modeling. No existing app does this for tricycles or EVs in a Philippine provincial city — that is the gap this study fills.</p>
+              </div>
+            </div>
+
+          </div>
+        </motion.section>
+
         {/* Tech Stack */}
         <motion.section
           initial={{ opacity: 0, y: 16 }}
