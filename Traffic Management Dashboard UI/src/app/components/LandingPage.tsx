@@ -16,8 +16,6 @@ import {
   Gauge,
   Users,
   Car,
-  Shield,
-  ParkingSquare,
   PersonStanding,
 } from 'lucide-react';
 
@@ -381,7 +379,7 @@ export function LandingPage() {
           </p>
         </motion.div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-3xl mx-auto">
           <RoleCard
             icon={<Car className="w-8 h-8 text-blue-600" />}
             role="Driver"
@@ -405,29 +403,6 @@ export function LandingPage() {
               'Walkway navigation',
               'AI Route Assistant',
               'Feedback submission',
-            ]}
-          />
-          <RoleCard
-            icon={<BarChart3 className="w-8 h-8 text-purple-600" />}
-            role="Researcher"
-            color="purple"
-            features={[
-              'Full analytics dashboard',
-              'Route efficiency trends',
-              'Vehicle type breakdowns',
-              'Speed & traffic data',
-              'Exportable reports',
-            ]}
-          />
-          <RoleCard
-            icon={<Shield className="w-8 h-8 text-slate-600" />}
-            role="Admin"
-            color="slate"
-            features={[
-              'User management',
-              'All researcher features',
-              'System-wide oversight',
-              'Route and feedback review',
             ]}
           />
         </div>
