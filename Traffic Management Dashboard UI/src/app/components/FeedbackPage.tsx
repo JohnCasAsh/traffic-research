@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { MessageSquare, Send, CheckCircle, AlertTriangle, MapPin, Fuel, Car, HelpCircle, Camera, X } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { MessageSquare, Send, CheckCircle, AlertTriangle, MapPin, Fuel, Car, HelpCircle, Camera, X, Navigation, Thermometer, PersonStanding, TriangleAlert } from 'lucide-react';
 import { useAuth } from '../auth';
 import { API_URL, buildAuthHeaders } from '../api';
 
@@ -26,16 +26,20 @@ async function compressImage(file: File): Promise<string> {
 }
 
 const CATEGORIES = [
-  { value: 'traffic', label: 'Traffic Issue', icon: Car },
+  { value: 'blocked_sidewalk', label: 'Blocked Sidewalk', icon: PersonStanding },
+  { value: 'unsafe_walkway', label: 'Unsafe Walkway', icon: TriangleAlert },
+  { value: 'no_shade', label: 'No Shade / Heat Hazard', icon: Thermometer },
+  { value: 'traffic', label: 'Traffic Congestion', icon: Car },
   { value: 'road', label: 'Road Condition', icon: AlertTriangle },
   { value: 'parking', label: 'Parking Problem', icon: MapPin },
+  { value: 'tricycle', label: 'Tricycle Issue', icon: Navigation },
   { value: 'gas', label: 'Gas Station Info', icon: Fuel },
   { value: 'other', label: 'Other', icon: HelpCircle },
 ];
 
 export function FeedbackPage() {
   const { token, user } = useAuth();
-  const [category, setCategory] = useState('traffic');
+  const [category, setCategory] = useState('blocked_sidewalk');
   const [location, setLocation] = useState('');
   const [message, setMessage] = useState('');
   const [photo, setPhoto] = useState<string | null>(null);
@@ -43,6 +47,20 @@ export function FeedbackPage() {
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState('');
+  const [gps, setGps] = useState<{ lat: number; lng: number } | null>(null);
+  const [gpsStatus, setGpsStatus] = useState<'detecting' | 'captured' | 'denied' | 'idle'>('idle');
+
+  useEffect(() => {
+    setGpsStatus('detecting');
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setGps({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+        setGpsStatus('captured');
+      },
+      () => setGpsStatus('denied'),
+      { enableHighAccuracy: true, timeout: 8000 }
+    );
+  }, []);
 
   const handlePhotoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -72,6 +90,7 @@ export function FeedbackPage() {
         message: message.trim(),
         photo: photo || null,
         submittedBy: user ? `${user.firstName} ${user.lastName}`.trim() : 'Anonymous',
+        gps: gps ? { lat: gps.lat, lng: gps.lng } : null,
       };
       const res = await fetch(`${API_URL}/api/feedback`, {
         method: 'POST',
@@ -95,7 +114,7 @@ export function FeedbackPage() {
             <CheckCircle className="w-8 h-8 text-teal-600" />
           </div>
           <h2 className="text-xl font-bold text-slate-900">Thank you!</h2>
-          <p className="text-sm text-slate-500">Your report has been submitted. We'll review it and update the map data accordingly.</p>
+          <p className="text-sm text-slate-500">Your road report has been submitted{gps ? ' with your GPS location' : ''}. The research team will review it and use it to improve walkway and traffic data for Tuguegarao City.</p>
           <button
             onClick={() => { setSubmitted(false); setMessage(''); setLocation(''); setCategory('traffic'); setPhoto(null); }}
             className="px-6 py-2.5 rounded-xl bg-teal-600 text-white text-sm font-medium hover:bg-teal-700 transition"
@@ -117,8 +136,8 @@ export function FeedbackPage() {
             <MessageSquare className="w-5 h-5 text-blue-600" />
           </div>
           <div>
-            <h1 className="text-xl font-bold text-slate-900">Feedback & Report</h1>
-            <p className="text-sm text-slate-500">Help improve the map data for Tuguegarao City</p>
+            <h1 className="text-xl font-bold text-slate-900">Road Report</h1>
+            <p className="text-sm text-slate-500">Report blocked sidewalks, unsafe walkways, congestion & more — your GPS location is captured automatically</p>
           </div>
         </div>
 
@@ -146,16 +165,32 @@ export function FeedbackPage() {
             </div>
           </div>
 
+          {/* GPS Status */}
+          <div className={`flex items-center gap-2 px-3.5 py-2.5 rounded-xl text-sm border ${
+            gpsStatus === 'captured' ? 'bg-green-50 border-green-200 text-green-700' :
+            gpsStatus === 'detecting' ? 'bg-blue-50 border-blue-200 text-blue-600' :
+            gpsStatus === 'denied' ? 'bg-amber-50 border-amber-200 text-amber-700' :
+            'bg-slate-50 border-slate-200 text-slate-500'
+          }`}>
+            <Navigation className="w-4 h-4 flex-shrink-0" />
+            {gpsStatus === 'captured' && gps && (
+              <span>GPS captured — <span className="font-mono">{gps.lat.toFixed(5)}, {gps.lng.toFixed(5)}</span> — your exact location will be attached to this report</span>
+            )}
+            {gpsStatus === 'detecting' && <span>Detecting your GPS location…</span>}
+            {gpsStatus === 'denied' && <span>GPS not available — add the location name manually below</span>}
+            {gpsStatus === 'idle' && <span>Getting location…</span>}
+          </div>
+
           {/* Location */}
           <div>
             <label className="block text-sm font-semibold text-slate-700 mb-1.5">
-              Location <span className="text-slate-400 font-normal">(optional)</span>
+              Location name <span className="text-slate-400 font-normal">(optional — add landmark or street name)</span>
             </label>
             <input
               type="text"
               value={location}
               onChange={e => setLocation(e.target.value)}
-              placeholder="e.g. Rizal St., SM Center, Buntun Bridge"
+              placeholder="e.g. Rizal St., SM Center, near PSBank, Enrile Ave."
               maxLength={150}
               className="w-full px-3.5 py-2.5 text-sm rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white"
             />
@@ -229,7 +264,7 @@ export function FeedbackPage() {
         </form>
 
         <p className="text-xs text-center text-slate-400">
-          Reports are reviewed by the admin team and used to keep map data accurate.
+          Reports include your GPS coordinates and are reviewed by the research team to identify unsafe walkways, blocked sidewalks, and congestion hotspots in Tuguegarao City.
         </p>
       </div>
     </div>
