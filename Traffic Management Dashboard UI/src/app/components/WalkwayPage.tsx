@@ -22,6 +22,10 @@ export function WalkwayPage() {
   const destLat = parseFloat(searchParams.get('dest_lat') || '0');
   const destLng = parseFloat(searchParams.get('dest_lng') || '0');
   const destName = decodeURIComponent(searchParams.get('dest_name') || '');
+  // Optional manual origin passed from commuter dashboard
+  const originLat = parseFloat(searchParams.get('origin_lat') || '0');
+  const originLng = parseFloat(searchParams.get('origin_lng') || '0');
+  const hasManualOrigin = !!(originLat && originLng);
   const hasDestination = !!(destLat && destLng);
 
   const { currentLocation, setCurrentLocation } = useLocationConsent();
@@ -37,13 +41,19 @@ export function WalkwayPage() {
   const rendererRef = useRef<google.maps.DirectionsRenderer | null>(null);
   const routeCalcRef = useRef(false);
 
-  // Init map
+  // Init map — load both 'maps' and 'routes' libraries
   useEffect(() => {
     if (mapInitRef.current || !mapContainerRef.current) return;
     mapInitRef.current = true;
     setOptions({ key: MAPS_API_KEY, v: 'weekly' });
-    importLibrary('maps').then((mapsLib) => {
-      const { Map, DirectionsRenderer } = mapsLib as typeof google.maps;
+
+    Promise.all([
+      importLibrary('maps'),
+      importLibrary('routes'),
+    ]).then(([mapsLib, routesLib]) => {
+      const { Map } = mapsLib as typeof google.maps;
+      const { DirectionsRenderer } = routesLib as typeof google.maps;
+
       mapRef.current = new Map(mapContainerRef.current!, {
         center: hasDestination ? { lat: destLat, lng: destLng } : TUGUEGARAO,
         zoom: 15,
@@ -56,6 +66,8 @@ export function WalkwayPage() {
       });
       rendererRef.current.setMap(mapRef.current);
       setMapReady(true);
+    }).catch(() => {
+      setRouteError('Failed to load map. Please refresh.');
     });
   }, []);
 
@@ -65,7 +77,8 @@ export function WalkwayPage() {
     setCalculating(true);
     setRouteError('');
 
-    const service = new google.maps.DirectionsService();
+    const { DirectionsService } = google.maps as typeof google.maps;
+    const service = new DirectionsService();
     const originLatLng = origin ?? TUGUEGARAO;
 
     service.route(
@@ -98,7 +111,7 @@ export function WalkwayPage() {
     );
   };
 
-  // GPS watcher — identical to DashboardMap (driver page)
+  // GPS watcher — auto-start, driver-identical pattern
   useEffect(() => {
     if (typeof navigator === 'undefined' || !navigator.geolocation) return;
 
@@ -125,13 +138,14 @@ export function WalkwayPage() {
     return () => navigator.geolocation.clearWatch(watchId);
   }, [setCurrentLocation]);
 
-  // When map is ready: show route from GPS if available, else from city center
+  // When map is ready: use GPS if available, manual origin if provided, else city center
   useEffect(() => {
     if (!mapReady || !hasDestination) return;
-    calculateRoute(currentLocation);
+    const origin = currentLocation ?? (hasManualOrigin ? { lat: originLat, lng: originLng } : null);
+    calculateRoute(origin);
   }, [mapReady]);
 
-  // GPS became available — recalculate from real location
+  // GPS became available — recalculate from real location (skip if manual origin preferred)
   useEffect(() => {
     if (!mapReady || !hasDestination || !currentLocation) return;
     routeCalcRef.current = false;
@@ -189,11 +203,15 @@ export function WalkwayPage() {
           </div>
         </div>
 
-        {/* GPS status */}
+        {/* GPS / origin status */}
         <div className="px-4 py-2.5 border-b border-slate-100 flex items-center gap-1.5">
           <span className={`w-2 h-2 rounded-full flex-shrink-0 ${currentLocation ? 'bg-teal-500 animate-pulse' : 'bg-amber-400 animate-pulse'}`} />
           <span className="text-xs text-slate-500 truncate">
-            {currentLocation ? 'Using your live location' : gpsMsg}
+            {currentLocation
+              ? 'Using your live location'
+              : hasManualOrigin
+                ? 'Using selected start location'
+                : gpsMsg}
           </span>
         </div>
 
@@ -265,7 +283,6 @@ export function WalkwayPage() {
       <div className="flex-1 relative min-h-[48vh] md:min-h-0">
         <div ref={mapContainerRef} className="absolute inset-0" />
 
-        {/* Recalculate with GPS hint */}
         {currentLocation && routeInfo && (
           <div className="absolute top-3 left-3 bg-white/95 backdrop-blur-sm rounded-xl border border-slate-200 shadow-sm px-3 py-2">
             <p className="text-xs text-slate-500 flex items-center gap-1.5">
