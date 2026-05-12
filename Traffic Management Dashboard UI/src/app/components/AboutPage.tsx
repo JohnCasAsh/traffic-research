@@ -887,6 +887,19 @@ export function AboutPage() {
               </div>
             </div>
 
+            <div className="flex gap-3 p-4 rounded-xl border border-slate-200 bg-slate-50">
+              <span className="mt-0.5 w-6 h-6 rounded-full bg-slate-200 text-slate-700 text-xs font-bold flex items-center justify-center flex-shrink-0">7</span>
+              <div>
+                <p className="text-sm font-semibold text-slate-800">Once a user knows parking spots — will they still use the app?</p>
+                <p className="text-sm text-slate-600 mt-0.5">
+                  The parking and terminal features are <strong>one-time discovery tools</strong> — most useful for new users, students, and visitors who don't know the city yet.
+                  Long-term retention comes from the <strong>fuel routing feature</strong>, which recalculates every trip because traffic conditions, time of day, and road states change daily.
+                  A tricycle driver doing 20 trips a day always gets a fresh fuel cost comparison. That is the repeatable daily value.
+                  For locals who already know every road — the app has lower reuse value for navigation features, but remains useful for fuel cost awareness and EV battery range planning as e-trike adoption grows.
+                </p>
+              </div>
+            </div>
+
           </div>
         </motion.section>
 
