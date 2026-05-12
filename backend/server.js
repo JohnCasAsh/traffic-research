@@ -94,8 +94,13 @@ app.use(helmet());
 const originPolicy = createOriginPolicy(process.env.ALLOWED_ORIGINS);
 app.use(cors({
   origin: function(origin, callback) {
-    if (!origin || originPolicy.isAllowed(origin)) {
+    // Require an explicit origin — requests with no origin (e.g. server-side tools)
+    // are rejected unless coming from the same host (no origin = same-origin in browsers).
+    if (origin && originPolicy.isAllowed(origin)) {
       callback(null, true);
+    } else if (!origin) {
+      // Allow same-origin / server-to-server calls but without credentials
+      callback(null, false);
     } else {
       callback(new Error('Not allowed by CORS'));
     }
@@ -151,6 +156,18 @@ app.use('/api/auth/resend-verification', sensitiveAuthLimiter);
 // Apply relaxed limiter to passive page-load checks
 app.use('/api/auth/me', pageAuthLimiter);
 app.use('/api/auth/chat-token', pageAuthLimiter);
+
+// Rate limit tracking and route analysis to prevent scraping / DoS
+const apiLimiter = rateLimit({
+  windowMs: 60000,
+  max: 120,
+  message: { error: 'Too many requests. Try again later.' },
+  keyGenerator: keyGen,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+app.use('/api/tracking', apiLimiter);
+app.use('/api/routes/analyze', apiLimiter);
 
 // Routes
 app.use('/api/auth', authRoutes);
@@ -240,10 +257,8 @@ app.post('/api/ops/make-test', async (req, res) => {
       notionResult,
     });
   } catch (error) {
-    res.status(502).json({
-      error: 'Failed to deliver Make event',
-      details: error.message,
-    });
+    console.error('[make-test] error:', error.message);
+    res.status(502).json({ error: 'Failed to deliver event.' });
   }
 });
 
@@ -276,7 +291,8 @@ app.post('/api/ops/log-progress', async (req, res) => {
 
     res.json({ message: 'Progress logged', result });
   } catch (error) {
-    res.status(502).json({ error: 'Failed to log progress', details: error.message });
+    console.error('[log-progress] error:', error.message);
+    res.status(502).json({ error: 'Failed to log progress.' });
   }
 });
 
@@ -303,7 +319,8 @@ app.post('/api/ops/health-summary', async (req, res) => {
 
     res.json({ message: 'Health summary logged', result });
   } catch (error) {
-    res.status(502).json({ error: 'Failed to log health summary', details: error.message });
+    console.error('[health-summary] error:', error.message);
+    res.status(502).json({ error: 'Failed to log health summary.' });
   }
 });
 

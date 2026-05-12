@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const express = require('express');
+const { requireAuth } = require('./auth');
 
 const router = express.Router();
 
@@ -739,7 +740,7 @@ setInterval(() => {
   }
 }, 60000).unref?.();
 
-router.get('/snapshot', (req, res) => {
+router.get('/snapshot', requireAuth, (req, res) => {
   const snapshot = buildSnapshot({
     lat: req.query.lat,
     lng: req.query.lng,
@@ -749,7 +750,7 @@ router.get('/snapshot', (req, res) => {
   res.json(snapshot);
 });
 
-router.get('/alerts', (req, res) => {
+router.get('/alerts', requireAuth, (req, res) => {
   const snapshot = buildSnapshot({
     lat: req.query.lat,
     lng: req.query.lng,
@@ -759,7 +760,7 @@ router.get('/alerts', (req, res) => {
   res.json({ generatedAt: snapshot.generatedAt, alerts: snapshot.alerts });
 });
 
-router.get('/history', (req, res) => {
+router.get('/history', requireAuth, (req, res) => {
   const nowMs = Date.now();
   const staleRemovedCount = pruneStaleVehicles(nowMs);
   const historyChanged = pruneHistoricalSegments(nowMs);
@@ -814,7 +815,7 @@ router.get('/history', (req, res) => {
   });
 });
 
-router.get('/analytics', (req, res) => {
+router.get('/analytics', requireAuth, (req, res) => {
   const nowMs = Date.now();
   const staleRemovedCount = pruneStaleVehicles(nowMs);
   const historyChanged = pruneHistoricalSegments(nowMs);
@@ -1005,7 +1006,7 @@ router.get('/analytics', (req, res) => {
   });
 });
 
-router.post('/update', (req, res) => {
+router.post('/update', requireAuth, (req, res) => {
   const nowMs = Date.now();
   
   // Check if user has consented to share location
@@ -1128,7 +1129,7 @@ router.post('/update', (req, res) => {
   });
 });
 
-router.get('/stream', (req, res) => {
+router.get('/stream', requireAuth, (req, res) => {
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache, no-transform');
   res.setHeader('Connection', 'keep-alive');

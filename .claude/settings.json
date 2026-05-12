@@ -18,7 +18,9 @@
       "PowerShell(az webapp deploy --resource-group traffic-management-rg --name traffic-backend-api --src-path \"C:\\\\Users\\\\John Asley\\\\AppData\\\\Local\\\\Temp\\\\backend-deploy-v2.zip\" --type zip --async false 2>&1)",
       "PowerShell(try { $r = Invoke-WebRequest 'https://api.navocs.com/api/auth/status' -UseBasicParsing; \"auth: $\\($r.StatusCode\\)\" } catch { \"auth: $\\($_.Exception.Response.StatusCode.value__\\)\" }; try { $r2 = Invoke-WebRequest 'https://api.navocs.com/api/feedback' -Method POST -ContentType 'application/json' -Body '{\"message\":\"test\"}' -UseBasicParsing; \"feedback: $\\($r2.StatusCode\\)\" } catch { \"feedback: $\\($_.Exception.Response.StatusCode.value__\\)\" })",
       "Bash(powershell -Command ' *)",
-      "PowerShell($env:SWA_DEPLOY_TOKEN -ne $null -and $env:SWA_DEPLOY_TOKEN.Length -gt 0)"
+      "PowerShell($env:SWA_DEPLOY_TOKEN -ne $null -and $env:SWA_DEPLOY_TOKEN.Length -gt 0)",
+      "Bash(Get-ChildItem -Path \"c:\\\\Users\\\\John Asley\\\\OneDrive\\\\Desktop\\\\TRAFFIC _ MANAGEMENT\" -Recurse -Directory)",
+      "Bash(Select-Object -First 20)"
     ],
     "additionalDirectories": [
       "c:\\Users\\John Asley\\OneDrive\\Desktop\\TRAFFIC _ MANAGEMENT\\Traffic Management Dashboard UI\\src\\app\\components"

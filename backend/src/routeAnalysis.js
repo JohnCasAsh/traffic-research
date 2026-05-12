@@ -2,6 +2,7 @@ const express = require('express');
 const fs = require('fs');
 const path = require('path');
 const jwt = require('jsonwebtoken');
+const { requireAuth } = require('./auth');
 const { fetchWithRetry } = require('./resilientFetch');
 
 const router = express.Router();
@@ -1644,7 +1645,7 @@ function assignEfficiencyScores(routes) {
   return routes;
 }
 
-router.post('/trips', (req, res) => {
+router.post('/trips', requireAuth, (req, res) => {
   const payload = req.body && typeof req.body === 'object' ? req.body : null;
   if (!payload) {
     return res.status(400).json({ error: 'Trip payload is required.' });
@@ -1666,7 +1667,7 @@ router.post('/trips', (req, res) => {
   });
 });
 
-router.get('/trips', (req, res) => {
+router.get('/trips', requireAuth, (req, res) => {
   const requestedLimit = Number.parseInt(String(req.query.limit || '50'), 10);
   const limit = Number.isFinite(requestedLimit)
     ? Math.max(1, Math.min(200, requestedLimit))
@@ -1678,7 +1679,7 @@ router.get('/trips', (req, res) => {
   });
 });
 
-router.post('/analyze', async (req, res) => {
+router.post('/analyze', requireAuth, async (req, res) => {
   const origin = normalizeWaypoint(req.body?.origin);
   const destination = normalizeWaypoint(req.body?.destination);
   const requestedRouteLimit = resolveRequestedRouteLimit(req.body?.routeLimit);
