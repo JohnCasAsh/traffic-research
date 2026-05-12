@@ -3,6 +3,9 @@ import { useSearchParams, Link } from 'react-router';
 import { PersonStanding, MapPin, Clock, ArrowLeft, Navigation, ChevronRight, AlertCircle } from 'lucide-react';
 import { importLibrary, setOptions } from '@googlemaps/js-api-loader';
 import { useLocationConsent } from '../LocationConsentContext';
+import { useAuth } from '../auth';
+import { API_URL, buildAuthHeaders } from '../api';
+import { AssistantPanel } from './AssistantPanel';
 
 const MAPS_API_KEY = (
   (import.meta as ImportMeta & { env?: { VITE_GOOGLE_MAPS_API_KEY?: string } }).env
@@ -30,6 +33,20 @@ export function WalkwayPage() {
   const hasDestination = !!(destLat && destLng);
 
   const { currentLocation, setCurrentLocation } = useLocationConsent();
+  const { token } = useAuth();
+  const [chatUrl, setChatUrl] = useState<string | null>(null);
+  const [chatLoading, setChatLoading] = useState(true);
+
+  useEffect(() => {
+    if (!token) return;
+    setChatLoading(true);
+    fetch(`${API_URL}/api/auth/chat-token`, { headers: buildAuthHeaders(token) })
+      .then(r => r.ok ? r.json() : Promise.reject())
+      .then(data => setChatUrl(data.url))
+      .catch(() => setChatUrl(null))
+      .finally(() => setChatLoading(false));
+  }, [token]);
+
   const [gpsMsg, setGpsMsg] = useState('Getting GPS…');
   const [routeOptions, setRouteOptions] = useState<RouteOption[]>([]);
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -161,27 +178,31 @@ export function WalkwayPage() {
 
   if (!hasDestination) {
     return (
-      <div className="min-h-[calc(100vh-4rem)] bg-slate-50 flex flex-col items-center justify-center p-6">
-        <div className="max-w-sm w-full text-center space-y-5">
-          <div className="w-16 h-16 rounded-2xl bg-teal-100 flex items-center justify-center mx-auto">
-            <PersonStanding className="w-8 h-8 text-teal-600" />
+      <>
+        <div className="min-h-[calc(100vh-4rem)] bg-slate-50 flex flex-col items-center justify-center p-6">
+          <div className="max-w-sm w-full text-center space-y-5">
+            <div className="w-16 h-16 rounded-2xl bg-teal-100 flex items-center justify-center mx-auto">
+              <PersonStanding className="w-8 h-8 text-teal-600" />
+            </div>
+            <div>
+              <h1 className="text-xl font-bold text-slate-900">Walkway</h1>
+              <p className="text-sm text-slate-500 mt-1">Walking directions to any parking spot or gas station</p>
+            </div>
+            <Link
+              to="/commuter-dashboard"
+              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-teal-600 text-white text-sm font-semibold hover:bg-teal-700 transition"
+            >
+              <MapPin className="w-4 h-4" /> Pick a Destination
+            </Link>
           </div>
-          <div>
-            <h1 className="text-xl font-bold text-slate-900">Walkway</h1>
-            <p className="text-sm text-slate-500 mt-1">Walking directions to any parking spot or gas station</p>
-          </div>
-          <Link
-            to="/commuter-dashboard"
-            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-teal-600 text-white text-sm font-semibold hover:bg-teal-700 transition"
-          >
-            <MapPin className="w-4 h-4" /> Pick a Destination
-          </Link>
         </div>
-      </div>
+        <AssistantPanel chatUrl={chatUrl} chatLoading={chatLoading} />
+      </>
     );
   }
 
   return (
+    <>
     <div className="flex flex-col md:flex-row h-[calc(100vh-4rem)] overflow-hidden">
 
       {/* ── Left panel ── */}
@@ -322,5 +343,7 @@ export function WalkwayPage() {
         )}
       </div>
     </div>
+    <AssistantPanel chatUrl={chatUrl} chatLoading={chatLoading} />
+    </>
   );
 }

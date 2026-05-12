@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
 import { ParkingSquare, Fuel, MapPin, RefreshCw, Search, Navigation, PersonStanding, Car, CheckCircle } from 'lucide-react';
 import { useNavigate } from 'react-router';
-import { API_URL } from '../api';
+import { API_URL, buildAuthHeaders } from '../api';
 import { useLocationConsent } from '../LocationConsentContext';
+import { useAuth } from '../auth';
+import { AssistantPanel } from './AssistantPanel';
 import { formatLocationAccuracy } from '../location';
 
 type Location = {
@@ -71,6 +73,9 @@ function openNavigation(loc: Location, mode: 'walking' | 'driving', currentLocat
 export function ParkingWayPage() {
   const navigate = useNavigate();
   const { consent, setConsent, currentLocation } = useLocationConsent();
+  const { token } = useAuth();
+  const [chatUrl, setChatUrl] = useState<string | null>(null);
+  const [chatLoading, setChatLoading] = useState(true);
   const [locations, setLocations] = useState<Location[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -88,6 +93,16 @@ export function ParkingWayPage() {
   };
 
   useEffect(() => { load(); }, []);
+
+  useEffect(() => {
+    if (!token) return;
+    setChatLoading(true);
+    fetch(`${API_URL}/api/auth/chat-token`, { headers: buildAuthHeaders(token) })
+      .then(r => r.ok ? r.json() : Promise.reject())
+      .then(data => setChatUrl(data.url))
+      .catch(() => setChatUrl(null))
+      .finally(() => setChatLoading(false));
+  }, [token]);
 
   const filtered = locations
     .filter(l => {
@@ -110,6 +125,7 @@ export function ParkingWayPage() {
   const gasCount = locations.filter(l => GAS_TYPES.has(l.type)).length;
 
   return (
+    <>
     <div className="min-h-[calc(100vh-4rem)] bg-slate-50 p-4 sm:p-8">
       <div className="max-w-6xl mx-auto space-y-6">
 
@@ -349,5 +365,7 @@ export function ParkingWayPage() {
         )}
       </div>
     </div>
+    <AssistantPanel chatUrl={chatUrl} chatLoading={chatLoading} />
+    </>
   );
 }
