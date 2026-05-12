@@ -52,7 +52,8 @@ function openDriving(loc: ParkingLocation) {
 
 export function CommutterDashboardPage() {
   const navigate = useNavigate();
-  const { consent, setConsent, currentLocation } = useLocationConsent();
+  const { currentLocation, setCurrentLocation } = useLocationConsent();
+  const [gpsMsg, setGpsMsg] = useState('Getting GPS fix…');
   const [locations, setLocations] = useState<ParkingLocation[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -65,7 +66,6 @@ export function CommutterDashboardPage() {
   const markersRef = useRef<Map<string, google.maps.Marker>>(new Map());
   const userMarkerRef = useRef<google.maps.Marker | null>(null);
   const mapInitRef = useRef(false);
-
   const load = async () => {
     setLoading(true);
     try {
@@ -77,6 +77,36 @@ export function CommutterDashboardPage() {
   };
 
   useEffect(() => { load(); }, []);
+
+  // GPS watcher — identical pattern to DashboardMap (driver page)
+  useEffect(() => {
+    if (typeof navigator === 'undefined' || !navigator.geolocation) {
+      setGpsMsg('GPS not supported on this device.');
+      return;
+    }
+
+    const watchId = navigator.geolocation.watchPosition(
+      (pos) => {
+        setGpsMsg('');
+        setCurrentLocation({
+          lat: pos.coords.latitude,
+          lng: pos.coords.longitude,
+          accuracy: pos.coords.accuracy,
+          timestamp: Date.now(),
+        });
+      },
+      (error) => {
+        if (error.code === error.PERMISSION_DENIED) {
+          setGpsMsg('Location permission was denied.');
+          return;
+        }
+        setGpsMsg('Unable to get location. Retrying…');
+      },
+      { enableHighAccuracy: true, maximumAge: 5000, timeout: 6000 }
+    );
+
+    return () => navigator.geolocation.clearWatch(watchId);
+  }, [setCurrentLocation]);
 
   // Init Google Map
   useEffect(() => {
@@ -202,10 +232,10 @@ export function CommutterDashboardPage() {
   const gasCount = locations.filter((l) => GAS_TYPES.has(l.type)).length;
 
   return (
-    <div className="flex h-[calc(100vh-4rem)] overflow-hidden">
+    <div className="flex flex-col md:flex-row h-[calc(100vh-4rem)] overflow-hidden">
 
       {/* ── Left Sidebar ── */}
-      <div className="w-80 flex-shrink-0 flex flex-col bg-white border-r border-slate-200 overflow-hidden">
+      <div className="w-full md:w-80 md:flex-shrink-0 flex flex-col bg-white border-b md:border-b-0 md:border-r border-slate-200 overflow-hidden md:h-full" style={{ maxHeight: '52vh' }}>
 
         {/* Header */}
         <div className="px-4 pt-4 pb-3 border-b border-slate-100 space-y-3">
@@ -220,21 +250,11 @@ export function CommutterDashboardPage() {
           </div>
 
           {/* GPS Status */}
-          <div className="flex items-center justify-between gap-2 bg-slate-50 rounded-xl px-3 py-2">
-            <div className="flex items-center gap-2 min-w-0">
-              <span className={`w-2 h-2 rounded-full flex-shrink-0 ${consent.isConsented ? (currentLocation ? 'bg-teal-500 animate-pulse' : 'bg-amber-400 animate-pulse') : 'bg-slate-300'}`} />
-              <span className="text-xs text-slate-600 truncate">
-                {consent.isConsented
-                  ? currentLocation ? 'Live · sorting by distance' : 'Getting GPS fix…'
-                  : 'Enable GPS for distance sort'}
-              </span>
-            </div>
-            <button
-              onClick={() => consent.isConsented ? setConsent(false) : setConsent(true)}
-              className={`flex-shrink-0 px-2.5 py-1 rounded-lg text-xs font-semibold transition ${consent.isConsented ? 'bg-slate-200 text-slate-600 hover:bg-slate-300' : 'bg-teal-600 text-white hover:bg-teal-700'}`}
-            >
-              {consent.isConsented ? 'Stop' : 'Enable'}
-            </button>
+          <div className="flex items-center gap-2 bg-slate-50 rounded-xl px-3 py-2">
+            <span className={`w-2 h-2 rounded-full flex-shrink-0 ${currentLocation ? 'bg-teal-500 animate-pulse' : 'bg-amber-400 animate-pulse'}`} />
+            <span className="text-xs text-slate-600 truncate">
+              {currentLocation ? 'Live · sorting by distance' : gpsMsg}
+            </span>
           </div>
 
           {/* Search */}
@@ -296,10 +316,6 @@ export function CommutterDashboardPage() {
                 {selected.fare_discounted != null && <span className="px-2 py-0.5 rounded-lg text-xs font-semibold bg-blue-100 text-blue-800 border border-blue-200">₱{selected.fare_discounted} Discounted</span>}
               </div>
             ) : null}
-
-            {!consent.isConsented && (
-              <p className="text-xs text-amber-600 mb-2">Enable GPS above to use your exact location.</p>
-            )}
 
             <div className="grid grid-cols-2 gap-2">
               <button
@@ -380,7 +396,7 @@ export function CommutterDashboardPage() {
       </div>
 
       {/* ── Map ── */}
-      <div className="flex-1 relative">
+      <div className="flex-1 relative min-h-[45vh] md:min-h-0">
         <div ref={mapContainerRef} className="absolute inset-0" />
 
         {/* Map legend */}
@@ -403,17 +419,11 @@ export function CommutterDashboardPage() {
           </div>
         </div>
 
-        {/* GPS prompt on map */}
-        {!consent.isConsented && (
+        {/* GPS acquiring hint — only show while waiting for first fix */}
+        {!currentLocation && (
           <div className="absolute bottom-5 left-1/2 -translate-x-1/2 bg-white rounded-2xl border border-slate-200 shadow-lg px-4 py-3 flex items-center gap-3">
-            <Navigation className="w-4 h-4 text-teal-600 flex-shrink-0" />
-            <span className="text-xs text-slate-600">Enable GPS to see your location on the map</span>
-            <button
-              onClick={() => setConsent(true)}
-              className="px-3 py-1.5 rounded-lg bg-teal-600 text-white text-xs font-bold hover:bg-teal-700 transition flex-shrink-0"
-            >
-              Enable
-            </button>
+            <Navigation className="w-4 h-4 text-amber-500 flex-shrink-0" />
+            <span className="text-xs text-slate-600">{gpsMsg || 'Getting GPS fix…'}</span>
           </div>
         )}
 

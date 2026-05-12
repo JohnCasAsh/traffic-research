@@ -24,7 +24,8 @@ export function WalkwayPage() {
   const destName = decodeURIComponent(searchParams.get('dest_name') || '');
   const hasDestination = !!(destLat && destLng);
 
-  const { consent, setConsent, currentLocation } = useLocationConsent();
+  const { currentLocation, setCurrentLocation } = useLocationConsent();
+  const [gpsMsg, setGpsMsg] = useState('Getting GPS…');
   const [routeInfo, setRouteInfo] = useState<RouteInfo | null>(null);
   const [routeError, setRouteError] = useState('');
   const [calculating, setCalculating] = useState(false);
@@ -97,22 +98,43 @@ export function WalkwayPage() {
     );
   };
 
-  // When map is ready: if GPS is consented but not yet available, wait for it.
-  // If not consented OR GPS already available, calculate immediately.
+  // GPS watcher — identical to DashboardMap (driver page)
+  useEffect(() => {
+    if (typeof navigator === 'undefined' || !navigator.geolocation) return;
+
+    const watchId = navigator.geolocation.watchPosition(
+      (pos) => {
+        setGpsMsg('');
+        setCurrentLocation({
+          lat: pos.coords.latitude,
+          lng: pos.coords.longitude,
+          accuracy: pos.coords.accuracy,
+          timestamp: Date.now(),
+        });
+      },
+      (error) => {
+        if (error.code === error.PERMISSION_DENIED) {
+          setGpsMsg('Location permission was denied.');
+          return;
+        }
+        setGpsMsg('Unable to get location. Retrying…');
+      },
+      { enableHighAccuracy: true, maximumAge: 5000, timeout: 6000 }
+    );
+
+    return () => navigator.geolocation.clearWatch(watchId);
+  }, [setCurrentLocation]);
+
+  // When map is ready: show route from GPS if available, else from city center
   useEffect(() => {
     if (!mapReady || !hasDestination) return;
-    if (!consent.isConsented) {
-      calculateRoute(null); // No GPS consent — use city center
-    } else if (currentLocation) {
-      calculateRoute(currentLocation); // GPS already ready
-    }
-    // else: consented but GPS not yet ready — the next effect handles it
+    calculateRoute(currentLocation);
   }, [mapReady]);
 
-  // GPS just became available — always recalculate with real location
+  // GPS became available — recalculate from real location
   useEffect(() => {
     if (!mapReady || !hasDestination || !currentLocation) return;
-    routeCalcRef.current = false; // Allow fresh calculation
+    routeCalcRef.current = false;
     calculateRoute(currentLocation);
   }, [currentLocation]);
 
@@ -142,10 +164,10 @@ export function WalkwayPage() {
   }
 
   return (
-    <div className="flex h-[calc(100vh-4rem)] overflow-hidden">
+    <div className="flex flex-col md:flex-row h-[calc(100vh-4rem)] overflow-hidden">
 
       {/* ── Left panel ── */}
-      <div className="w-72 flex-shrink-0 flex flex-col bg-white border-r border-slate-200 overflow-hidden">
+      <div className="w-full md:w-72 md:flex-shrink-0 flex flex-col bg-white border-b md:border-b-0 md:border-r border-slate-200 overflow-hidden md:h-full" style={{ maxHeight: '52vh' }}>
 
         {/* Header */}
         <div className="px-4 py-4 border-b border-slate-100">
@@ -167,26 +189,12 @@ export function WalkwayPage() {
           </div>
         </div>
 
-        {/* GPS toggle */}
-        <div className="px-4 py-2.5 border-b border-slate-100 flex items-center justify-between gap-2">
-          <div className="flex items-center gap-1.5 min-w-0">
-            <span className={`w-2 h-2 rounded-full flex-shrink-0 ${consent.isConsented ? (currentLocation ? 'bg-teal-500 animate-pulse' : 'bg-amber-400 animate-pulse') : 'bg-slate-300'}`} />
-            <span className="text-xs text-slate-500 truncate">
-              {consent.isConsented ? (currentLocation ? 'Using your live location' : 'Getting GPS…') : 'Using city center as start'}
-            </span>
-          </div>
-          <button
-            onClick={() => {
-              if (consent.isConsented) {
-                setConsent(false);
-              } else {
-                setConsent(true);
-              }
-            }}
-            className={`flex-shrink-0 px-2.5 py-1 rounded-lg text-xs font-semibold transition ${consent.isConsented ? 'bg-slate-100 text-slate-600 hover:bg-slate-200' : 'bg-teal-600 text-white hover:bg-teal-700'}`}
-          >
-            {consent.isConsented ? 'Stop' : 'Use GPS'}
-          </button>
+        {/* GPS status */}
+        <div className="px-4 py-2.5 border-b border-slate-100 flex items-center gap-1.5">
+          <span className={`w-2 h-2 rounded-full flex-shrink-0 ${currentLocation ? 'bg-teal-500 animate-pulse' : 'bg-amber-400 animate-pulse'}`} />
+          <span className="text-xs text-slate-500 truncate">
+            {currentLocation ? 'Using your live location' : gpsMsg}
+          </span>
         </div>
 
         {/* Route summary */}
@@ -254,7 +262,7 @@ export function WalkwayPage() {
       </div>
 
       {/* ── Map ── */}
-      <div className="flex-1 relative">
+      <div className="flex-1 relative min-h-[48vh] md:min-h-0">
         <div ref={mapContainerRef} className="absolute inset-0" />
 
         {/* Recalculate with GPS hint */}

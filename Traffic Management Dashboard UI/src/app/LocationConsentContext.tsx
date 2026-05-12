@@ -13,6 +13,7 @@ type LocationConsentContextType = {
     location: { lat: number; lng: number; accuracy: number; timestamp: number } | null
   ) => void;
   isSharingLocation: boolean;
+  gpsError: string | null;
 };
 
 const LocationConsentContext = createContext<LocationConsentContextType | undefined>(undefined);
@@ -22,13 +23,9 @@ const CONSENT_STORAGE_KEY_TIMESTAMP = 'tm_location_consent_timestamp';
 
 export function LocationConsentProvider({ children }: { children: React.ReactNode }) {
   const [consent, setConsentState] = useState<LocationConsent>(() => {
-    if (typeof window === 'undefined') {
-      return { isConsented: false, lastUpdated: 0 };
-    }
-
+    if (typeof window === 'undefined') return { isConsented: false, lastUpdated: 0 };
     const stored = window.localStorage.getItem(CONSENT_STORAGE_KEY);
     const timestamp = window.localStorage.getItem(CONSENT_STORAGE_KEY_TIMESTAMP);
-
     return {
       isConsented: stored === 'true',
       lastUpdated: timestamp ? Number.parseInt(timestamp, 10) : 0,
@@ -36,38 +33,21 @@ export function LocationConsentProvider({ children }: { children: React.ReactNod
   });
 
   const [currentLocation, setCurrentLocation] = useState<{
-    lat: number;
-    lng: number;
-    accuracy: number;
-    timestamp: number;
+    lat: number; lng: number; accuracy: number; timestamp: number;
   } | null>(null);
 
   const setConsent = (isConsented: boolean) => {
     if (typeof window === 'undefined') return;
-
-    const newConsent = {
-      isConsented,
-      lastUpdated: Date.now(),
-    };
-
+    const newConsent = { isConsented, lastUpdated: Date.now() };
     window.localStorage.setItem(CONSENT_STORAGE_KEY, isConsented ? 'true' : 'false');
     window.localStorage.setItem(CONSENT_STORAGE_KEY_TIMESTAMP, newConsent.lastUpdated.toString());
-
     setConsentState(newConsent);
   };
 
-  const isSharingLocation = consent.isConsented && currentLocation !== null;
+  const isSharingLocation = currentLocation !== null;
 
   return (
-    <LocationConsentContext.Provider
-      value={{
-        consent,
-        setConsent,
-        currentLocation,
-        setCurrentLocation,
-        isSharingLocation,
-      }}
-    >
+    <LocationConsentContext.Provider value={{ consent, setConsent, currentLocation, setCurrentLocation, isSharingLocation, gpsError: null }}>
       {children}
     </LocationConsentContext.Provider>
   );
@@ -75,8 +55,6 @@ export function LocationConsentProvider({ children }: { children: React.ReactNod
 
 export function useLocationConsent() {
   const context = useContext(LocationConsentContext);
-  if (!context) {
-    throw new Error('useLocationConsent must be used within LocationConsentProvider');
-  }
+  if (!context) throw new Error('useLocationConsent must be used within LocationConsentProvider');
   return context;
 }

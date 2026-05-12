@@ -167,15 +167,15 @@ app.post('/api/feedback', _requireAuth, async (req, res) => {
     const { category, location, message, photo, submittedBy } = req.body;
     if (!message?.trim()) return res.status(400).json({ error: 'Message is required.' });
     const db = require('./src/database');
-    const user = await db.getUserById(req.user.id);
+    const authUser = req.authUser;
     await db.addFeedback({
       category: category || 'other',
       location: location || '',
       message: message.trim(),
       photo: photo || null,
-      submittedBy: submittedBy || `${user?.first_name || ''} ${user?.last_name || ''}`.trim() || 'Anonymous',
-      submitterRole: user?.role || 'driver',
-      userId: req.user.id,
+      submittedBy: submittedBy || `${authUser?.first_name || ''} ${authUser?.last_name || ''}`.trim() || 'Anonymous',
+      submitterRole: authUser?.role || 'driver',
+      userId: authUser?.id || null,
     });
     res.json({ message: 'Feedback submitted.' });
   } catch (err) {

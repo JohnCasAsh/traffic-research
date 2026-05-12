@@ -9,7 +9,16 @@
       "PowerShell(Get-ChildItem \"c:\\\\Users\\\\John Asley\\\\OneDrive\\\\Desktop\\\\TRAFFIC _ MANAGEMENT\\\\backend\" -Recurse | Where-Object { $_.FullName -notmatch \"node_modules\" -and $_.Name -match \"\\\\.\\(js|ts|json\\)$\" -and $_.Name -ne \"package-lock.json\" } | Select-Object Name, DirectoryName)",
       "Bash(curl -s -o /dev/null -w \"%{http_code}\" -X POST https://api.navocs.com/api/feedback)",
       "Bash(curl -s -o /dev/null -w \"%{http_code}\" https://api.navocs.com/api/admin/feedback)",
-      "Bash(curl -s -o /dev/null -w \"%{http_code}\" https://api.navocs.com/api/health)"
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" https://api.navocs.com/api/health)",
+      "PowerShell(az webapp deployment list-publishing-credentials --resource-group traffic-management-rg --name traffic-backend-api -o json 2>&1)",
+      "PowerShell(az webapp restart --resource-group traffic-management-rg --name traffic-backend-api)",
+      "PowerShell(az webapp log tail --resource-group traffic-management-rg --name traffic-backend-api --timeout 10 2>&1)",
+      "PowerShell(az webapp log download --resource-group traffic-management-rg --name traffic-backend-api --log-file \"C:\\\\Users\\\\John Asley\\\\AppData\\\\Local\\\\Temp\\\\webapp_logs.zip\" 2>&1)",
+      "PowerShell(az webapp config appsettings set --resource-group traffic-management-rg --name traffic-backend-api --settings SCM_DO_BUILD_DURING_DEPLOYMENT=true ENABLE_ORYX_BUILD=true --output none)",
+      "PowerShell(az webapp deploy --resource-group traffic-management-rg --name traffic-backend-api --src-path \"C:\\\\Users\\\\John Asley\\\\AppData\\\\Local\\\\Temp\\\\backend-deploy-v2.zip\" --type zip --async false 2>&1)",
+      "PowerShell(try { $r = Invoke-WebRequest 'https://api.navocs.com/api/auth/status' -UseBasicParsing; \"auth: $\\($r.StatusCode\\)\" } catch { \"auth: $\\($_.Exception.Response.StatusCode.value__\\)\" }; try { $r2 = Invoke-WebRequest 'https://api.navocs.com/api/feedback' -Method POST -ContentType 'application/json' -Body '{\"message\":\"test\"}' -UseBasicParsing; \"feedback: $\\($r2.StatusCode\\)\" } catch { \"feedback: $\\($_.Exception.Response.StatusCode.value__\\)\" })",
+      "Bash(powershell -Command ' *)",
+      "PowerShell($env:SWA_DEPLOY_TOKEN -ne $null -and $env:SWA_DEPLOY_TOKEN.Length -gt 0)"
     ],
     "additionalDirectories": [
       "c:\\Users\\John Asley\\OneDrive\\Desktop\\TRAFFIC _ MANAGEMENT\\Traffic Management Dashboard UI\\src\\app\\components"
