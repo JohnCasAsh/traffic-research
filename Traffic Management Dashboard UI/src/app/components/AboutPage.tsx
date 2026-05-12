@@ -261,6 +261,60 @@ export function AboutPage() {
           </div>
         </motion.section>
 
+        {/* Google Maps vs Our Algorithm */}
+        <motion.section
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.145 }}
+          className="bg-white rounded-2xl border border-slate-200 p-8"
+        >
+          <div className="flex items-center gap-3 mb-6">
+            <div className="w-9 h-9 rounded-lg bg-amber-50 flex items-center justify-center">
+              <MapPin className="w-5 h-5 text-amber-600" />
+            </div>
+            <h2 className="text-xl font-bold text-slate-900">Google Maps vs. Our Algorithm</h2>
+          </div>
+
+          <div className="space-y-4">
+            <div className="grid sm:grid-cols-2 gap-4">
+              <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+                <p className="text-sm font-semibold text-amber-800 mb-2">What Google Maps does in Navocs</p>
+                <p className="text-sm text-amber-700 leading-relaxed">
+                  Displays the map, road names, and locations. Nothing more.
+                  Google Maps is the <strong>visual layer</strong> — it draws roads on screen so users can see where they are.
+                  It does not make any routing or efficiency decisions inside Navocs.
+                </p>
+              </div>
+              <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+                <p className="text-sm font-semibold text-blue-800 mb-2">What our A* algorithm does</p>
+                <p className="text-sm text-blue-700 leading-relaxed">
+                  Decides which road is most fuel-efficient for your vehicle type.
+                  Uses the <strong>VSP formula</strong> — a physics-based fuel model — to calculate the cost of every road segment.
+                  This is completely separate from Google's own routing.
+                </p>
+              </div>
+            </div>
+
+            <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
+              <p className="text-sm font-semibold text-slate-700 mb-2">Current system status — honest scope</p>
+              <p className="text-sm text-slate-600 leading-relaxed">
+                Traffic delay estimates (<strong>D(e)</strong>) are currently based on theoretical assumptions from the VSP model —
+                such as stop-and-go patterns during rush hour burning more fuel than steady-speed driving.
+                Real-time or historical traffic data collection via the Navocs speed meter is ongoing.
+                Full validation using collected GPS data from Tuguegarao roads is identified as future work.
+              </p>
+            </div>
+
+            <div className="bg-teal-50 border border-teal-200 rounded-xl p-4">
+              <p className="text-sm font-semibold text-teal-800 mb-1">One-sentence answer for panelists</p>
+              <p className="text-sm text-teal-700 italic">
+                "Google Maps provides the road display only — all efficiency decisions are made by our modified A* algorithm
+                using VSP-based fuel modeling, independent of Google's routing engine."
+              </p>
+            </div>
+          </div>
+        </motion.section>
+
         {/* Algorithm */}
         <motion.section
           initial={{ opacity: 0, y: 16 }}
