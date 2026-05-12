@@ -1,14 +1,21 @@
-import { useState, useEffect } from 'react';
-import { MessageCircle, X, Loader2, ChevronRight } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { MessageCircle, X, Loader2, ChevronRight, Car, PersonStanding } from 'lucide-react';
 
 type Props = {
   chatUrl: string | null;
   chatLoading: boolean;
 };
 
+const ROLE_PROMPTS = [
+  { label: "I'm a Driver", icon: Car, message: "I'm a driver", color: 'bg-blue-50 border-blue-200 text-blue-700 hover:bg-blue-100' },
+  { label: "I'm a Commuter", icon: PersonStanding, message: "I'm a commuter", color: 'bg-teal-50 border-teal-200 text-teal-700 hover:bg-teal-100' },
+];
+
 export function AssistantPanel({ chatUrl, chatLoading }: Props) {
   const [open, setOpen] = useState(false);
   const [navHeight, setNavHeight] = useState(64);
+  const [roleSent, setRoleSent] = useState(false);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
 
   useEffect(() => {
     const nav = document.querySelector('nav');
@@ -20,20 +27,68 @@ export function AssistantPanel({ chatUrl, chatLoading }: Props) {
     return () => ro.disconnect();
   }, []);
 
+  // Reset role selection when panel closes
+  useEffect(() => {
+    if (!open) setRoleSent(false);
+  }, [open]);
+
+  function sendRole(message: string) {
+    // Try postMessage to the GenAI iframe
+    if (iframeRef.current?.contentWindow) {
+      iframeRef.current.contentWindow.postMessage(
+        { type: 'user-input', input: message },
+        '*'
+      );
+    }
+    setRoleSent(true);
+  }
+
   const panelContent = chatLoading ? (
     <div className="w-full h-full flex items-center justify-center bg-white">
       <Loader2 className="w-6 h-6 text-orange-500 animate-spin" />
     </div>
   ) : chatUrl ? (
-    <iframe
-      src={chatUrl}
-      width="100%"
-      height="100%"
-      frameBorder="0"
-      allow="microphone; camera"
-      title="Route Assistant Chat"
-      className="w-full h-full"
-    />
+    <div className="flex flex-col h-full">
+      {/* Role quick-start buttons — shown until user picks one */}
+      {!roleSent && (
+        <div className="px-4 py-3 border-b border-slate-100 bg-slate-50 shrink-0">
+          <p className="text-xs text-slate-500 mb-2 font-medium">Who are you? Pick one to start:</p>
+          <div className="flex gap-2">
+            {ROLE_PROMPTS.map(({ label, icon: Icon, message, color }) => (
+              <button
+                key={label}
+                onClick={() => sendRole(message)}
+                className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl border text-xs font-semibold transition ${color}`}
+              >
+                <Icon className="w-3.5 h-3.5" />
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Chat iframe with "Powered by Gemini API" covered */}
+      <div className="relative flex-1 overflow-hidden">
+        <iframe
+          ref={iframeRef}
+          src={chatUrl}
+          width="100%"
+          height="100%"
+          frameBorder="0"
+          allow="microphone; camera"
+          title="Navocs AI Route Assistant"
+          className="w-full h-full"
+        />
+        {/* Cover the "Powered by Gemini API" footer branding */}
+        <div
+          className="absolute bottom-0 left-0 right-0 bg-white flex items-center justify-center"
+          style={{ height: 28 }}
+        >
+          <span className="text-xs text-slate-400">Navocs AI — Route &amp; Commuter Assistant</span>
+        </div>
+      </div>
+    </div>
   ) : (
     <div className="w-full h-full flex flex-col items-center justify-center bg-white text-slate-500 gap-2 px-6 text-center">
       <MessageCircle className="w-8 h-8 text-slate-300" />
@@ -43,7 +98,7 @@ export function AssistantPanel({ chatUrl, chatLoading }: Props) {
 
   return (
     <>
-      {/* Toggle tab — always visible on the right edge */}
+      {/* Toggle tab */}
       <button
         onClick={() => setOpen((v) => !v)}
         aria-label={open ? 'Close Route Assistant' : 'Open Route Assistant'}
@@ -71,7 +126,7 @@ export function AssistantPanel({ chatUrl, chatLoading }: Props) {
         />
       )}
 
-      {/* Slide-in panel — top is measured from actual nav height */}
+      {/* Slide-in panel */}
       <div
         className={`fixed right-0 bottom-0 z-40 flex flex-col bg-white border-l border-slate-200 shadow-2xl transition-transform duration-300 ease-in-out ${
           open ? 'translate-x-0' : 'translate-x-full'
@@ -82,7 +137,7 @@ export function AssistantPanel({ chatUrl, chatLoading }: Props) {
         <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 shrink-0">
           <div className="flex items-center gap-2">
             <MessageCircle className="w-4 h-4 text-orange-500" />
-            <h3 className="text-sm font-semibold text-slate-900">Route Assistant</h3>
+            <h3 className="text-sm font-semibold text-slate-900">Navocs AI Assistant</h3>
             {chatUrl && (
               <span className="flex items-center gap-1 text-xs text-emerald-600 font-medium">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
