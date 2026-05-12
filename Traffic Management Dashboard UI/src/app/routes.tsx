@@ -28,11 +28,11 @@ export const router = createBrowserRouter([
     children: [
       { index: true, Component: LandingPage },
       { path: "about", Component: AboutPage },
-      { path: "speed-meter", Component: SpeedMeterPrototypePage },
       {
         Component: RequireAuth,
         children: [
           { path: "dashboard", Component: Dashboard },
+          { path: "speed-meter", Component: SpeedMeterPrototypePage },
           { path: "routes", Component: RouteComparison },
           { path: "commuter-dashboard", Component: CommutterDashboardPage },
           { path: "parking-way", Component: ParkingWayPage },

@@ -50,7 +50,7 @@ export function Layout() {
               </div>
             </Link>
 
-            {!isLanding && (
+            {!isLanding && isAuthenticated && (
               <div className="hidden md:flex items-center space-x-1">
                 {user?.role === 'commuter' ? (
                   <>
@@ -145,7 +145,7 @@ export function Layout() {
         </div>
 
         {/* Mobile Navigation */}
-        {!isLanding && (
+        {!isLanding && isAuthenticated && (
           <div className="md:hidden border-t border-slate-200 bg-white">
             <div className="flex justify-around py-2">
               {user?.role === 'commuter' ? (
