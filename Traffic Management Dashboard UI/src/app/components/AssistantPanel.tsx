@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { MessageCircle, X, Loader2, ChevronRight } from 'lucide-react';
 
 type Props = {
@@ -8,6 +8,17 @@ type Props = {
 
 export function AssistantPanel({ chatUrl, chatLoading }: Props) {
   const [open, setOpen] = useState(false);
+  const [navHeight, setNavHeight] = useState(64);
+
+  useEffect(() => {
+    const nav = document.querySelector('nav');
+    if (!nav) return;
+    const update = () => setNavHeight(nav.offsetHeight);
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(nav);
+    return () => ro.disconnect();
+  }, []);
 
   const panelContent = chatLoading ? (
     <div className="w-full h-full flex items-center justify-center bg-white">
@@ -60,12 +71,12 @@ export function AssistantPanel({ chatUrl, chatLoading }: Props) {
         />
       )}
 
-      {/* Slide-in panel */}
+      {/* Slide-in panel — top is measured from actual nav height */}
       <div
-        className={`fixed top-[122px] md:top-16 right-0 bottom-0 z-40 flex flex-col bg-white border-l border-slate-200 shadow-2xl transition-transform duration-300 ease-in-out ${
+        className={`fixed right-0 bottom-0 z-40 flex flex-col bg-white border-l border-slate-200 shadow-2xl transition-transform duration-300 ease-in-out ${
           open ? 'translate-x-0' : 'translate-x-full'
         }`}
-        style={{ width: '24rem', maxWidth: '100vw' }}
+        style={{ top: navHeight, width: '24rem', maxWidth: '100vw' }}
       >
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 shrink-0">
