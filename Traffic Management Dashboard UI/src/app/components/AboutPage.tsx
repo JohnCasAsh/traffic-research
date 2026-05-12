@@ -168,15 +168,37 @@ export function AboutPage() {
             </div>
 
             <div className="bg-amber-50 border border-amber-200 rounded-xl p-5">
-              <p className="text-sm font-semibold text-amber-800 mb-2">How is this different from Google Maps or Waze?</p>
-              <p className="text-sm text-amber-700 leading-relaxed">
-                Google Maps and Waze optimize for <strong>travel time</strong> — they do not calculate fuel consumption
-                per vehicle type, and they have no model for tricycles. Navocs is designed to compute route cost using
-                the <strong>VSP (Vehicle Specific Power)</strong> energy model, which accounts for speed, acceleration,
-                and road gradient per vehicle profile. This study proposes and implements this approach for
-                Tuguegarao City as a research prototype — whether it produces measurably better outcomes than
-                time-based routing is the subject of ongoing validation and experimentation.
-              </p>
+              <p className="text-sm font-semibold text-amber-800 mb-3">The Gap — and How This Study Addresses It</p>
+              <div className="space-y-3 text-sm text-amber-700 leading-relaxed">
+                <p>
+                  Most existing routing systems and studies use <strong>shortest path algorithms</strong> — they calculate
+                  the route with the least distance. The problem with this approach is that when all vehicles are directed
+                  to the same shortest path, that road becomes a bottleneck. Vehicles accumulate at intersections,
+                  creating a stop-and-go cycle that consumes significantly more fuel and time than a longer but
+                  smoother alternative route.
+                </p>
+                <p>
+                  This study addresses that gap by introducing two components working together:
+                </p>
+                <div className="bg-white/60 rounded-lg p-3 border border-amber-200">
+                  <p className="font-semibold text-amber-800 mb-1">A* Algorithm</p>
+                  <p>A* (A-star) is a pathfinding algorithm that finds the most efficient route between two points by
+                  evaluating each possible path using a cost function — not just distance. Unlike shortest-path algorithms,
+                  A* can be guided by multiple factors at once, making it suitable for energy-aware routing.</p>
+                </div>
+                <div className="bg-white/60 rounded-lg p-3 border border-amber-200">
+                  <p className="font-semibold text-amber-800 mb-1">VSP — Vehicle Specific Power</p>
+                  <p>VSP is an energy model that estimates how much fuel a specific vehicle burns on a specific road segment,
+                  based on its speed, acceleration, and the road gradient. It is vehicle-specific — a tricycle has a
+                  different fuel consumption profile than a private car or an e-trike.</p>
+                </div>
+                <p>
+                  By using VSP as the edge cost inside the A* algorithm, Navocs routes vehicles based on
+                  <strong> actual estimated fuel cost per segment</strong> — not just distance or time. This is the
+                  proposed solution to the bottleneck problem that shortest-path systems create. This study implements
+                  and validates this approach as a prototype for Tuguegarao City.
+                </p>
+              </div>
             </div>
           </div>
         </motion.section>
