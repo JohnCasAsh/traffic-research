@@ -205,9 +205,82 @@ export function AboutPage() {
             </div>
           </div>
           <p className="mt-5 text-slate-600 text-sm leading-relaxed">
-            Navocs uses a <strong>Modified A* algorithm</strong> with an energy-aware edge cost function to recommend
-            the route with the best balance of time, fuel cost, traffic delay, and speed stability — tunable per user.
+            Navocs uses a VSP-based fuel scoring engine to re-rank Google Routes API candidates and recommend
+            the route with the best balance of time, fuel cost, traffic delay, and speed stability — per vehicle type.
           </p>
+        </motion.section>
+
+        {/* Energy Awareness — The Big Picture */}
+        <motion.section
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.102 }}
+          className="bg-white rounded-2xl border border-slate-200 p-8"
+        >
+          <div className="flex items-center gap-3 mb-2">
+            <div className="w-9 h-9 rounded-lg bg-orange-50 flex items-center justify-center">
+              <Zap className="w-5 h-5 text-orange-500" />
+            </div>
+            <h2 className="text-xl font-bold text-slate-900">Energy Awareness — The Bigger Picture</h2>
+          </div>
+          <p className="text-sm text-slate-500 mb-6">
+            Navocs is primarily an energy-awareness system. Commuters are one sub-part of a larger problem — vehicles, parking, and congestion are all connected.
+          </p>
+
+          <div className="space-y-4">
+
+            <div className="bg-slate-900 rounded-xl p-5">
+              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-4">The problem chain in Tuguegarao</p>
+              <div className="space-y-2">
+                {[
+                  { label: 'Cars park on sidewalks', color: 'text-red-400' },
+                  { label: 'Commuters cannot walk safely — forced to take tricycles', color: 'text-orange-400' },
+                  { label: 'More tricycles on the road = more stop-and-go traffic', color: 'text-amber-400' },
+                  { label: 'Higher VSP = more fuel burned per vehicle per kilometer', color: 'text-yellow-400' },
+                  { label: 'More emissions, higher driver cost, worse congestion for everyone', color: 'text-red-300' },
+                ].map(({ label, color }, i) => (
+                  <div key={i} className="flex gap-3 text-sm">
+                    <span className={`font-bold shrink-0 ${color}`}>→</span>
+                    <span className="text-slate-300">{label}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
+              <p className="text-sm font-semibold text-slate-700 mb-3">How Navocs attacks every link in that chain</p>
+              <div className="space-y-2">
+                {[
+                  { problem: 'Drivers burning too much fuel', response: 'Eco-Route — fuel-efficient path per vehicle type using VSP scoring' },
+                  { problem: 'Too many tricycles from commuters who could walk', response: 'Walking routes — reduce vehicle demand by enabling safe walking' },
+                  { problem: 'Sidewalks blocked by parked cars', response: 'Road Reporter — document with GPS, push LGUs to act on evidence' },
+                  { problem: 'No one sees which roads burn more fuel', response: 'VSP scoring — makes invisible fuel cost visible per road segment' },
+                  { problem: 'City has no data on infrastructure problems', response: 'Accumulated GPS + road reports = evidence for city planning' },
+                ].map(({ problem, response }) => (
+                  <div key={problem} className="grid sm:grid-cols-2 gap-2 text-xs border-b border-slate-100 pb-2 last:border-0 last:pb-0">
+                    <span className="text-red-600 font-medium">{problem}</span>
+                    <span className="text-teal-700">{response}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="bg-teal-50 border border-teal-200 rounded-xl p-4">
+              <p className="text-sm font-semibold text-teal-800 mb-1">Why commuters matter to the energy equation</p>
+              <p className="text-sm text-teal-700 leading-relaxed">
+                Every commuter who walks instead of taking a tricycle = one fewer vehicle on the road = less congestion = lower VSP for every driver still driving.
+                Commuters are not just users of Navocs — they are part of the energy system. Reducing unnecessary tricycle demand directly lowers total fuel consumption city-wide.
+              </p>
+            </div>
+
+            <div className="bg-teal-50 border border-teal-200 rounded-xl p-4">
+              <p className="text-sm font-semibold text-teal-800 mb-1">One-sentence answer for panelists</p>
+              <p className="text-sm text-teal-700 italic">
+                "Commuters are a sub-system of the energy problem — every unnecessary tricycle trip caused by blocked walkways adds to congestion and total fuel consumption. Navocs addresses both the driver's fuel cost and the commuter's contribution to vehicle demand."
+              </p>
+            </div>
+
+          </div>
         </motion.section>
 
         {/* Human-in-the-Loop Architecture */}
