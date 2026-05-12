@@ -1593,8 +1593,9 @@ export function DashboardMap({
       tricycle_terminal: 'Tricycle Terminal', public: 'Public Parking', church: 'Church Parking',
       school: 'School Parking', gas_station: 'Gas Station', ev_charging: 'EV Charging Station', other: 'Other',
     };
-    parkingMarkersRef.current = parkingLocations.map(p => {
-      const isGas = ['gas_station', 'gasoline_station', 'diesel_station', 'ev_charging'].includes(p.type);
+    const GAS_STATION_TYPES = ['gas_station', 'gasoline_station', 'diesel_station', 'ev_charging'];
+    parkingMarkersRef.current = parkingLocations.filter(p => GAS_STATION_TYPES.includes(p.type)).map(p => {
+      const isGas = true;
       const marker = new gmaps.Marker({
         position: { lat: p.lat, lng: p.lng },
         map: mapRef.current,
@@ -1846,12 +1847,12 @@ export function DashboardMap({
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
                 onClick={() => setShowParking(p => !p)}
-                className={`w-10 h-10 rounded-lg shadow-md flex items-center justify-center transition-colors font-bold text-sm ${showParking ? 'bg-blue-700 text-white' : 'bg-white text-slate-500 hover:bg-slate-50'}`}
-                aria-label="Toggle parking"
+                className={`w-10 h-10 rounded-lg shadow-md flex items-center justify-center transition-colors font-bold text-sm ${showParking ? 'bg-green-600 text-white' : 'bg-white text-slate-500 hover:bg-slate-50'}`}
+                aria-label="Toggle gas stations"
                 type="button"
-                title={showParking ? 'Hide parking spots' : 'Show parking spots'}
+                title={showParking ? 'Hide gas stations' : 'Show gas stations'}
               >
-                P
+                G
               </motion.button>
             )}
             </div>

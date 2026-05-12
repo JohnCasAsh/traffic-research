@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router';
 import {
-  ParkingSquare, Fuel, MapPin, Search, Navigation, PersonStanding,
+  ParkingSquare, MapPin, Search, Navigation, PersonStanding,
   Car, X, RefreshCw, MapPinOff,
 } from 'lucide-react';
 import { importLibrary, setOptions } from '@googlemaps/js-api-loader';
@@ -160,7 +160,6 @@ export function CommutterDashboardPage() {
   const [locations, setLocations] = useState<ParkingLocation[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
-  const [filterTab, setFilterTab] = useState<'all' | 'parking' | 'gas'>('all');
   const [selected, setSelected] = useState<ParkingLocation | null>(null);
 
   // Map
@@ -248,13 +247,12 @@ export function CommutterDashboardPage() {
     if (!mapReady || !mapRef.current) return;
     markersRef.current.forEach((m) => m.setMap(null));
     markersRef.current.clear();
-    locations.forEach((loc) => {
-      const isGas = GAS_TYPES.has(loc.type);
+    locations.filter((loc) => !GAS_TYPES.has(loc.type)).forEach((loc) => {
       const marker = new google.maps.Marker({
         position: { lat: loc.lat, lng: loc.lng },
         map: mapRef.current!,
         title: loc.name,
-        ...makeMarkerOptions(isGas, false),
+        ...makeMarkerOptions(false, false),
       });
       marker.addListener('click', () => { setSelected(loc); mapRef.current?.panTo({ lat: loc.lat, lng: loc.lng }); });
       markersRef.current.set(loc.id, marker);
@@ -264,11 +262,8 @@ export function CommutterDashboardPage() {
   // Highlight selected marker
   useEffect(() => {
     markersRef.current.forEach((marker, id) => {
-      const loc = locations.find((l) => l.id === id);
-      if (!loc) return;
-      const isGas = GAS_TYPES.has(loc.type);
       const isSel = selected?.id === id;
-      const opts = makeMarkerOptions(isGas, isSel);
+      const opts = makeMarkerOptions(false, isSel);
       marker.setIcon(opts.icon!);
       marker.setLabel(opts.label!);
     });
@@ -318,12 +313,9 @@ export function CommutterDashboardPage() {
 
   const filtered = locations
     .filter((l) => {
+      if (GAS_TYPES.has(l.type)) return false; // commuter dashboard: parking only
       const q = search.toLowerCase();
-      const matchSearch = l.name.toLowerCase().includes(q) || (l.notes || '').toLowerCase().includes(q);
-      const isGas = GAS_TYPES.has(l.type);
-      if (filterTab === 'parking') return matchSearch && !isGas;
-      if (filterTab === 'gas') return matchSearch && isGas;
-      return matchSearch;
+      return l.name.toLowerCase().includes(q) || (l.notes || '').toLowerCase().includes(q);
     })
     .sort((a, b) => {
       if (!origin) return a.name.localeCompare(b.name);
@@ -417,18 +409,7 @@ export function CommutterDashboardPage() {
                   />
                 </div>
 
-                {/* Filter tabs */}
-                <div className="flex rounded-lg overflow-hidden border border-slate-200">
-                  {(['all', 'parking', 'gas'] as const).map((f) => (
-                    <button
-                      key={f}
-                      onClick={() => setFilterTab(f)}
-                      className={`flex-1 py-1.5 text-xs font-semibold transition capitalize ${filterTab === f ? 'bg-teal-600 text-white' : 'text-slate-500 hover:bg-slate-50'}`}
-                    >
-                      {f === 'all' ? 'All' : f === 'parking' ? 'Parking' : 'Gas'}
-                    </button>
-                  ))}
-                </div>
+                {/* No filter tabs needed — parking only */}
               </div>
 
               {/* Location list — scrollable inside card */}
@@ -443,7 +424,6 @@ export function CommutterDashboardPage() {
                 ) : (
                   <div className="divide-y divide-slate-100">
                     {filtered.map((loc) => {
-                      const isGas = GAS_TYPES.has(loc.type);
                       const isSel = selected?.id === loc.id;
                       const dist = origin ? getDistanceM(origin.lat, origin.lng, loc.lat, loc.lng) : null;
                       return (
@@ -456,8 +436,8 @@ export function CommutterDashboardPage() {
                           }}
                           className={`w-full text-left px-4 py-3 flex items-center gap-3 transition ${isSel ? 'bg-amber-50 border-l-4 border-amber-400' : 'hover:bg-slate-50'}`}
                         >
-                          <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${isGas ? 'bg-green-100' : 'bg-teal-100'}`}>
-                            {isGas ? <Fuel className="w-4 h-4 text-green-600" /> : <ParkingSquare className="w-4 h-4 text-teal-600" />}
+                          <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 bg-blue-100">
+                            <ParkingSquare className="w-4 h-4 text-blue-600" />
                           </div>
                           <div className="flex-1 min-w-0">
                             <p className="text-sm font-semibold text-slate-800 truncate">{loc.name}</p>
@@ -522,7 +502,6 @@ export function CommutterDashboardPage() {
               <div className="absolute top-3 right-3 bg-white/95 backdrop-blur-sm rounded-xl border border-slate-200 shadow-sm px-3 py-2 space-y-1.5">
                 {[
                   ['bg-blue-600', 'P', 'Parking'],
-                  ['bg-green-600', 'G', 'Gas Station'],
                   ['bg-amber-400', '★', 'Selected'],
                   ['bg-blue-500', '·', 'You'],
                 ].map(([color, letter, label]) => (
