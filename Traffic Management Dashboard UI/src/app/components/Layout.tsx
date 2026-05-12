@@ -35,7 +35,7 @@ export function Layout() {
           style={{ scaleX: scrollYProgress }}
         />
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
+          <div className={`${isAuthenticated && !isLanding ? 'hidden md:flex' : 'flex'} items-center justify-between h-16`}>
             <Link to="/" className="flex items-center space-x-2">
               <motion.div
                 whileHover={{ rotate: 15, scale: 1.1 }}
