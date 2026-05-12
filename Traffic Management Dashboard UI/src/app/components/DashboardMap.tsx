@@ -523,6 +523,7 @@ export function DashboardMap({
 
   const [showParking, setShowParking] = useState(true);
   const [alertsExpanded, setAlertsExpanded] = useState(false);
+  const [legendExpanded, setLegendExpanded] = useState(false);
   const [parkingLocations, setParkingLocations] = useState<{ id: string; name: string; type: string; lat: number; lng: number; notes: string; fare_normal: number | null; fare_discounted: number | null; fuel_prices?: { name: string; price: string }[] | null; photo: string | null }[]>([]);
 
   const [isMapActivated, setIsMapActivated] = useState(true);
@@ -1853,64 +1854,75 @@ export function DashboardMap({
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ delay: 0.4 }}
-            className="absolute bottom-4 left-4 bg-white rounded-xl shadow-lg p-4 border border-slate-200 z-20 min-w-[160px]"
+            className="absolute bottom-4 left-4 bg-white/95 backdrop-blur rounded-xl shadow-md border border-slate-200 z-20 overflow-hidden"
           >
-            <div className="text-xs font-semibold text-slate-700 mb-2.5 uppercase tracking-wide">Legend</div>
+            <button
+              type="button"
+              onClick={() => setLegendExpanded(p => !p)}
+              className="w-full flex items-center justify-between gap-3 px-3 py-2 hover:bg-slate-50 transition-colors"
+            >
+              <span className="text-xs font-semibold text-slate-700 uppercase tracking-wide">Legend</span>
+              <span className="text-[10px] text-slate-400">{legendExpanded ? '▼' : '▲'}</span>
+            </button>
 
-            {/* Traffic flow */}
-            <div className="space-y-2">
-              <div className="flex items-center gap-2">
-                <motion.div
-                  animate={{ scaleX: [1, 1.15, 1] }}
-                  transition={{ duration: 1.5, repeat: Infinity }}
-                  className="w-6 h-1.5 bg-green-500 rounded-full flex-shrink-0"
-                />
-                <span className="text-xs text-slate-600">Low Traffic ({trafficLevelCounts.low})</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-6 h-1.5 bg-orange-500 rounded-full flex-shrink-0" />
-                <span className="text-xs text-slate-600">Moderate ({trafficLevelCounts.moderate})</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-6 h-1.5 bg-red-500 rounded-full flex-shrink-0" />
-                <span className="text-xs text-slate-600">Heavy ({trafficLevelCounts.heavy})</span>
-              </div>
-            </div>
-
-            {/* Markers */}
-            {showParking && (
-              <>
-                <div className="my-3 border-t border-slate-200" />
-                <div className="space-y-2">
+            {legendExpanded && (
+              <div className="px-3 pb-3 border-t border-slate-100">
+                {/* Traffic flow */}
+                <div className="space-y-2 mt-2.5">
                   <div className="flex items-center gap-2">
-                    <div className="w-5 h-5 rounded-full bg-green-600 flex items-center justify-center flex-shrink-0">
-                      <span className="text-white text-[9px] font-bold leading-none">G</span>
-                    </div>
-                    <span className="text-xs text-slate-600">Gas Station</span>
+                    <motion.div
+                      animate={{ scaleX: [1, 1.15, 1] }}
+                      transition={{ duration: 1.5, repeat: Infinity }}
+                      className="w-6 h-1.5 bg-green-500 rounded-full flex-shrink-0"
+                    />
+                    <span className="text-xs text-slate-600">Low Traffic ({trafficLevelCounts.low})</span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <div className="w-5 h-5 rounded-full bg-amber-400 flex items-center justify-center flex-shrink-0">
-                      <span className="text-white text-[9px] font-bold leading-none">★</span>
+                    <div className="w-6 h-1.5 bg-orange-500 rounded-full flex-shrink-0" />
+                    <span className="text-xs text-slate-600">Moderate ({trafficLevelCounts.moderate})</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="w-6 h-1.5 bg-red-500 rounded-full flex-shrink-0" />
+                    <span className="text-xs text-slate-600">Heavy ({trafficLevelCounts.heavy})</span>
+                  </div>
+                </div>
+
+                {/* Markers */}
+                {showParking && (
+                  <>
+                    <div className="my-2.5 border-t border-slate-200" />
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2">
+                        <div className="w-5 h-5 rounded-full bg-green-600 flex items-center justify-center flex-shrink-0">
+                          <span className="text-white text-[9px] font-bold leading-none">G</span>
+                        </div>
+                        <span className="text-xs text-slate-600">Gas Station</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="w-5 h-5 rounded-full bg-amber-400 flex items-center justify-center flex-shrink-0">
+                          <span className="text-white text-[9px] font-bold leading-none">★</span>
+                        </div>
+                        <span className="text-xs text-slate-600">Selected</span>
+                      </div>
                     </div>
-                    <span className="text-xs text-slate-600">Selected</span>
-                  </div>
-                </div>
-              </>
+                  </>
+                )}
+                {currentLocation && (
+                  <>
+                    <div className="my-2.5 border-t border-slate-200" />
+                    <div className="flex items-center gap-2">
+                      <div className="w-5 h-5 rounded-full bg-blue-500 flex items-center justify-center flex-shrink-0">
+                        <span className="text-white text-[9px] font-bold leading-none">●</span>
+                      </div>
+                      <span className="text-xs text-slate-600">You</span>
+                    </div>
+                  </>
+                )}
+                <p className="mt-2.5 max-w-[170px] text-[10px] text-slate-400 leading-snug">
+                  Local roads missing from Google data may not appear in generated routes.
+                </p>
+              </div>
             )}
-            {currentLocation && (
-              <>
-                <div className="my-3 border-t border-slate-200" />
-                <div className="flex items-center gap-2">
-                  <div className="w-5 h-5 rounded-full bg-blue-500 flex items-center justify-center flex-shrink-0">
-                    <span className="text-white text-[9px] font-bold leading-none">●</span>
-                  </div>
-                  <span className="text-xs text-slate-600">You</span>
-                </div>
-              </>
-            )}
-            <p className="mt-2 max-w-[190px] text-[10px] text-slate-500">
-              Local roads missing from Google data may not appear in generated routes.
-            </p>
           </motion.div>
         </>
       )}
