@@ -126,6 +126,80 @@ export function AboutPage() {
           </p>
         </motion.section>
 
+        {/* Not a Navigation App */}
+        <motion.section
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.11 }}
+          className="bg-white rounded-2xl border border-slate-200 p-8"
+        >
+          <div className="flex items-center gap-3 mb-2">
+            <div className="w-9 h-9 rounded-lg bg-rose-50 flex items-center justify-center">
+              <Car className="w-5 h-5 text-rose-600" />
+            </div>
+            <h2 className="text-xl font-bold text-slate-900">Navocs is Not a Navigation App</h2>
+          </div>
+          <p className="text-sm text-slate-500 mb-6">This is the most important thing to understand about what Navocs does — and does not do.</p>
+
+          <div className="space-y-4">
+
+            <div className="grid sm:grid-cols-2 gap-4">
+              <div className="bg-rose-50 border border-rose-200 rounded-xl p-4">
+                <p className="text-sm font-semibold text-rose-800 mb-2">What people assume it does</p>
+                <p className="text-sm text-rose-700 leading-relaxed">
+                  "Tell me where SM is." "How do I get to Rizal Street?" — In Tuguegarao, everyone already knows these
+                  answers. Locals ask neighbors. Drivers know every road. A navigation app would be useless here.
+                </p>
+              </div>
+              <div className="bg-teal-50 border border-teal-200 rounded-xl p-4">
+                <p className="text-sm font-semibold text-teal-800 mb-2">What Navocs actually does</p>
+                <p className="text-sm text-teal-700 leading-relaxed">
+                  "Which road to SM burns the least fuel for my tricycle?" — Nobody can answer that by asking a neighbor.
+                  No existing app calculates it per vehicle type. That is the problem Navocs solves.
+                </p>
+              </div>
+            </div>
+
+            <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
+              <p className="text-sm font-semibold text-slate-700 mb-3">The real value — in peso terms</p>
+              <p className="text-sm text-slate-600 leading-relaxed">
+                A tricycle driver does 20 trips a day. He always takes the same familiar road — because he knows it.
+                But that road has stop-and-go traffic, constant braking and accelerating, which burns more fuel.
+                Navocs compares routes and finds one that saves even <strong>₱3 per trip</strong> — that is
+                <strong> ₱60 a day</strong>, <strong>₱1,800 a month</strong>. He could never see that difference
+                just by driving. The fuel cost is invisible without calculation.
+              </p>
+            </div>
+
+            <div className="bg-slate-900 rounded-xl p-5">
+              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-3">The distinction for panelists</p>
+              <div className="space-y-2">
+                <div className="flex gap-3 text-sm">
+                  <span className="text-rose-400 font-bold shrink-0">Asking a local:</span>
+                  <span className="text-slate-300">Tells you how to get there</span>
+                </div>
+                <div className="flex gap-3 text-sm">
+                  <span className="text-amber-400 font-bold shrink-0">Google Maps / Waze:</span>
+                  <span className="text-slate-300">Tells you the fastest way to get there</span>
+                </div>
+                <div className="flex gap-3 text-sm">
+                  <span className="text-teal-400 font-bold shrink-0">Navocs:</span>
+                  <span className="text-slate-300">Tells you which way costs your vehicle the least fuel to get there — per vehicle type, using physics-based modeling</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-teal-50 border border-teal-200 rounded-xl p-4">
+              <p className="text-sm font-semibold text-teal-800 mb-1">One-sentence answer for panelists</p>
+              <p className="text-sm text-teal-700 italic">
+                "Navocs does not solve navigation — locals already know the city. It solves fuel cost visibility,
+                which no person or existing app can calculate per vehicle type for Tuguegarao roads."
+              </p>
+            </div>
+
+          </div>
+        </motion.section>
+
         {/* Research Scope — Why only Drivers and Commuters */}
         <motion.section
           initial={{ opacity: 0, y: 16 }}
