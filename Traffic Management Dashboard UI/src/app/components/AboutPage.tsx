@@ -196,6 +196,52 @@ export function AboutPage() {
           </div>
         </motion.section>
 
+        {/* Powertrain Types */}
+        <motion.section
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.22 }}
+          className="bg-white rounded-2xl border border-slate-200 p-8"
+        >
+          <div className="flex items-center gap-3 mb-6">
+            <div className="w-9 h-9 rounded-lg bg-blue-50 flex items-center justify-center">
+              <Zap className="w-5 h-5 text-blue-600" />
+            </div>
+            <h2 className="text-xl font-bold text-slate-900">Powertrain Types in Navocs</h2>
+          </div>
+          <div className="space-y-4">
+            <div className="rounded-xl border border-amber-200 bg-amber-50 p-5">
+              <div className="flex items-center gap-2 mb-2">
+                <span className="px-2 py-0.5 rounded-full bg-amber-200 text-amber-800 text-xs font-bold">ICE</span>
+                <span className="font-semibold text-slate-900 text-sm">Internal Combustion Engine</span>
+              </div>
+              <p className="text-sm text-slate-600 leading-relaxed">
+                Vehicles powered by burning gasoline or diesel fuel. Navocs calculates their fuel consumption using the <strong>VSP (Vehicle Specific Power)</strong> formula — which factors in speed, acceleration, and road gradient to estimate how much fuel is burned on each road segment. Includes: Tricycle, Motorcycle, Private Car.
+              </p>
+            </div>
+
+            <div className="rounded-xl border border-teal-200 bg-teal-50 p-5">
+              <div className="flex items-center gap-2 mb-2">
+                <span className="px-2 py-0.5 rounded-full bg-teal-200 text-teal-800 text-xs font-bold">HEV</span>
+                <span className="font-semibold text-slate-900 text-sm">Hybrid Electric Vehicle</span>
+              </div>
+              <p className="text-sm text-slate-600 leading-relaxed">
+                Vehicles that combine an ICE engine with an electric motor and battery. The system switches between fuel and electric power depending on speed and load. Navocs uses a <strong>dual-mode cost function</strong> — applying the VSP model at higher speeds (ICE mode) and the electric energy model at low speeds or braking (EV mode). Includes: Hybrid Car.
+              </p>
+            </div>
+
+            <div className="rounded-xl border border-green-200 bg-green-50 p-5">
+              <div className="flex items-center gap-2 mb-2">
+                <span className="px-2 py-0.5 rounded-full bg-green-200 text-green-800 text-xs font-bold">BEV</span>
+                <span className="font-semibold text-slate-900 text-sm">Battery Electric Vehicle</span>
+              </div>
+              <p className="text-sm text-slate-600 leading-relaxed">
+                Fully electric vehicles with no combustion engine — powered entirely by a rechargeable battery pack. Navocs uses an <strong>energy model</strong> based on rolling resistance, aerodynamic drag, and acceleration forces, divided by drivetrain efficiency (η). Also tracks <strong>SoC (State of Charge)</strong> to avoid routes that would drain the battery completely. Includes: E-Trike, E-Motorcycle.
+              </p>
+            </div>
+          </div>
+        </motion.section>
+
         {/* Research Gaps */}
         <motion.section
           initial={{ opacity: 0, y: 16 }}
