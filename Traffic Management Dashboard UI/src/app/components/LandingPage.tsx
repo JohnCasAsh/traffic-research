@@ -343,7 +343,7 @@ export function LandingPage() {
             <StepCard
               number="1"
               title="Sign Up & Pick Your Role"
-              description="Choose your role — Driver, Commuter, Researcher, or Admin. Each role unlocks different features tailored to how you use the system."
+              description="Sign up as a Driver or Commuter. Drivers get route comparison and live trip tracking. Commuters get walking directions, parking spots, and terminal guidance."
               icon={<Users className="w-6 h-6" />}
               delay={0.2}
             />

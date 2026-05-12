@@ -82,10 +82,10 @@ export function AssistantPanel({ chatUrl, chatLoading }: Props) {
         />
         {/* Cover the "Powered by Gemini API" footer branding */}
         <div
-          className="absolute bottom-0 left-0 right-0 bg-white flex items-center justify-center"
-          style={{ height: 28 }}
+          className="absolute bottom-0 left-0 right-0 flex items-center justify-center border-t border-slate-100"
+          style={{ height: 36, background: '#ffffff', zIndex: 10 }}
         >
-          <span className="text-xs text-slate-400">Navocs AI — Route &amp; Commuter Assistant</span>
+          <span className="text-xs font-medium text-slate-400">Navocs AI Assistant &mdash; Tuguegarao City</span>
         </div>
       </div>
     </div>

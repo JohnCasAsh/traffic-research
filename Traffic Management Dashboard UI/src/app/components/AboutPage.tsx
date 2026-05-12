@@ -126,6 +126,61 @@ export function AboutPage() {
           </p>
         </motion.section>
 
+        {/* Research Scope — Why only Drivers and Commuters */}
+        <motion.section
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.12 }}
+          className="bg-white rounded-2xl border border-slate-200 p-8"
+        >
+          <h2 className="text-xl font-bold text-slate-900 mb-2">Research Scope</h2>
+          <p className="text-sm text-slate-500 mb-6">Why this study focuses on Drivers and Commuters — and what problem it solves.</p>
+
+          <div className="space-y-5">
+            <div className="bg-slate-50 border border-slate-200 rounded-xl p-5">
+              <p className="text-sm font-semibold text-slate-800 mb-2">The Problem in Tuguegarao City</p>
+              <p className="text-sm text-slate-600 leading-relaxed">
+                Tuguegarao City — the hottest city in the Philippines — has no eco-routing system built for its vehicle mix.
+                Roads are dominated by tricycles carrying 1–3 passengers, creating stop-and-go congestion that burns more
+                fuel per kilometer than steady-speed driving. Sidewalks are blocked by parked vehicles, forcing pedestrians
+                onto the road. Students and workers pay for short tricycle trips they could walk if infrastructure existed.
+                No existing system measures or addresses these conditions locally.
+              </p>
+            </div>
+
+            <div className="grid sm:grid-cols-2 gap-4">
+              <div className="bg-blue-50 border border-blue-200 rounded-xl p-5">
+                <p className="text-sm font-semibold text-blue-800 mb-2">Drivers</p>
+                <p className="text-sm text-blue-700 leading-relaxed">
+                  Tricycle operators, delivery drivers, and private car owners who need to choose between routes.
+                  The system calculates actual fuel cost per route — not just distance — so they can make a decision
+                  based on money saved, not just minutes saved.
+                </p>
+              </div>
+              <div className="bg-teal-50 border border-teal-200 rounded-xl p-5">
+                <p className="text-sm font-semibold text-teal-800 mb-2">Commuters</p>
+                <p className="text-sm text-teal-700 leading-relaxed">
+                  Students and workers who travel by foot or public transport. The system provides walking routes,
+                  parking locations, and tricycle terminal guidance — helping them make informed decisions about
+                  when walking is viable versus when to take a tricycle.
+                </p>
+              </div>
+            </div>
+
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-5">
+              <p className="text-sm font-semibold text-amber-800 mb-2">Why not just use Google Maps or Waze?</p>
+              <p className="text-sm text-amber-700 leading-relaxed">
+                Existing navigation apps optimize for <strong>speed</strong> — they recommend the fastest route.
+                When all vehicles follow the same fastest route, that route becomes congested, creating the bottleneck
+                effect. Navocs optimizes for <strong>fuel efficiency and cost</strong> using the VSP energy model,
+                which is specific to each vehicle type. A tricycle on a smooth 2.1 km route burns less fuel than the
+                same tricycle on a 1.8 km stop-and-go route through downtown — Navocs surfaces that difference.
+                No existing app does this for tricycles in Philippine provincial cities.
+              </p>
+            </div>
+          </div>
+        </motion.section>
+
         {/* Algorithm */}
         <motion.section
           initial={{ opacity: 0, y: 16 }}
