@@ -48,11 +48,11 @@ const gpsFactors = [
 ];
 
 const stack = [
-  { icon: <Cpu className="w-5 h-5" />, label: 'Frontend', value: 'React + TypeScript', color: 'bg-blue-50 text-blue-600' },
+  { icon: <Cpu className="w-5 h-5" />, label: 'Frontend', value: 'React + TypeScript + Vite + Tailwind CSS', color: 'bg-blue-50 text-blue-600' },
   { icon: <GitBranch className="w-5 h-5" />, label: 'Backend', value: 'Node.js + Express', color: 'bg-green-50 text-green-600' },
-  { icon: <Database className="w-5 h-5" />, label: 'Database', value: 'PostgreSQL + PostGIS', color: 'bg-purple-50 text-purple-600' },
-  { icon: <MapPin className="w-5 h-5" />, label: 'Map Data', value: 'OpenStreetMap', color: 'bg-amber-50 text-amber-600' },
-  { icon: <BarChart3 className="w-5 h-5" />, label: 'GPS Data', value: 'navocs.com (Doppler + Kalman)', color: 'bg-teal-50 text-teal-600' },
+  { icon: <Database className="w-5 h-5" />, label: 'Database', value: 'Firebase Firestore', color: 'bg-orange-50 text-orange-600' },
+  { icon: <MapPin className="w-5 h-5" />, label: 'Routing', value: 'Google Maps API + Google Routes API', color: 'bg-amber-50 text-amber-600' },
+  { icon: <Zap className="w-5 h-5" />, label: 'AI Assistant', value: 'Google Vertex AI Agent Platform', color: 'bg-violet-50 text-violet-600' },
   { icon: <Shield className="w-5 h-5" />, label: 'Cloud', value: 'Azure App Service + Static Web Apps', color: 'bg-slate-50 text-slate-600' },
 ];
 
@@ -98,7 +98,22 @@ export function AboutPage() {
             <div className="flex flex-wrap gap-3 text-sm">
               <span className="px-3 py-1.5 rounded-full bg-white/10 border border-white/20">BS Computer Science</span>
               <span className="px-3 py-1.5 rounded-full bg-white/10 border border-white/20">University of Saint Louis Tuguegarao</span>
-              <span className="px-3 py-1.5 rounded-full bg-white/10 border border-white/20">2026</span>
+              <span className="px-3 py-1.5 rounded-full bg-white/10 border border-white/20">May 2026</span>
+            </div>
+
+            <div className="mt-2 space-y-2 text-sm text-slate-300">
+              <div>
+                <span className="text-slate-400 text-xs uppercase tracking-wide">Researchers — </span>
+                Krizzia A. Gelacio · John Asley C. Lunnay · Alexander James M. Talamayan · Cyghie D. Amistad
+              </div>
+              <div>
+                <span className="text-slate-400 text-xs uppercase tracking-wide">Research Adviser — </span>
+                Mr. Xygfrid Dante L. Abella
+              </div>
+              <div>
+                <span className="text-slate-400 text-xs uppercase tracking-wide">Research Design — </span>
+                Experimental Research Design + Agile Software Development Life Cycle (SDLC)
+              </div>
             </div>
           </motion.div>
         </div>
@@ -141,8 +156,8 @@ export function AboutPage() {
 
           <div className="grid sm:grid-cols-2 gap-3">
             {[
-              { feature: 'A* Route Algorithm', role: 'Core study — the research contribution', core: true },
-              { feature: 'VSP Energy Model', role: 'Core study — the fuel cost formula', core: true },
+              { feature: 'VSP Scoring Engine', role: 'Core study — re-ranks Google Routes API candidates by fuel cost per vehicle type', core: true },
+              { feature: 'VSP Energy Model', role: 'Core study — physics-based fuel formula applied per road segment', core: true },
               { feature: 'Speed Meter', role: 'Data collection — feeds speed data into D(e) traffic estimates', core: false },
               { feature: 'Road Reporter', role: 'Data collection — captures road conditions from users', core: false },
               { feature: 'AI Assistant', role: 'Supporting tool — helps users understand route recommendations', core: false },
@@ -193,6 +208,56 @@ export function AboutPage() {
             Navocs uses a <strong>Modified A* algorithm</strong> with an energy-aware edge cost function to recommend
             the route with the best balance of time, fuel cost, traffic delay, and speed stability — tunable per user.
           </p>
+        </motion.section>
+
+        {/* Human-in-the-Loop Architecture */}
+        <motion.section
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.105 }}
+          className="bg-white rounded-2xl border border-slate-200 p-8"
+        >
+          <div className="flex items-center gap-3 mb-2">
+            <div className="w-9 h-9 rounded-lg bg-violet-50 flex items-center justify-center">
+              <Car className="w-5 h-5 text-violet-600" />
+            </div>
+            <h2 className="text-xl font-bold text-slate-900">Human-in-the-Loop Architecture</h2>
+          </div>
+          <p className="text-sm text-slate-500 mb-6">
+            Navocs augments driver decision-making — it does not override it. This is a core design principle of the system.
+          </p>
+
+          <div className="space-y-4">
+            <div className="grid sm:grid-cols-3 gap-4">
+              {[
+                { actor: 'Transport Operator', role: 'Primary human actor. Inputs origin and destination. Views ranked Eco-Routes. Makes the final route decision. Retains full control.', color: 'bg-blue-50 border-blue-200 text-blue-800' },
+                { actor: 'Google Routes API', role: 'External system actor. Supplies up to 5 candidate routes based on standard shortest-path algorithms. No fuel model.', color: 'bg-amber-50 border-amber-200 text-amber-800' },
+                { actor: 'Navocs AI Assistant', role: 'AI actor powered by Google Vertex AI. Answers natural language queries about routes, chokepoints, and commute options.', color: 'bg-violet-50 border-violet-200 text-violet-800' },
+              ].map(({ actor, role, color }) => (
+                <div key={actor} className={`rounded-xl border p-4 ${color}`}>
+                  <p className="text-sm font-bold mb-1">{actor}</p>
+                  <p className="text-xs leading-relaxed opacity-80">{role}</p>
+                </div>
+              ))}
+            </div>
+
+            <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
+              <p className="text-sm font-semibold text-slate-700 mb-2">Why human-in-the-loop matters</p>
+              <p className="text-sm text-slate-600 leading-relaxed">
+                The system presents evidence-based Eco-Route recommendations — it does not force the driver to follow them.
+                Drivers retain their localized knowledge and decision-making authority. The algorithm enhances their choice,
+                not replaces it. This is especially important for tricycle operators who know their routes personally.
+              </p>
+            </div>
+
+            <div className="bg-teal-50 border border-teal-200 rounded-xl p-4">
+              <p className="text-sm font-semibold text-teal-800 mb-1">One-sentence answer for panelists</p>
+              <p className="text-sm text-teal-700 italic">
+                "Navocs uses a human-in-the-loop architecture — the algorithm recommends the most fuel-efficient route,
+                but the transport operator makes the final decision based on their own knowledge of local conditions."
+              </p>
+            </div>
+          </div>
         </motion.section>
 
         {/* Not a Navigation App */}
