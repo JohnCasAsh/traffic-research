@@ -767,6 +767,128 @@ export function AboutPage() {
           </div>
         </motion.section>
 
+        {/* Panelist Q&A — All Hard Questions */}
+        <motion.section
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.276 }}
+          className="bg-white rounded-2xl border border-slate-200 p-8"
+        >
+          <div className="flex items-center gap-3 mb-2">
+            <div className="w-9 h-9 rounded-lg bg-rose-50 flex items-center justify-center">
+              <FlaskConical className="w-5 h-5 text-rose-600" />
+            </div>
+            <h2 className="text-xl font-bold text-slate-900">Anticipated Panelist Questions — Honest Answers</h2>
+          </div>
+          <p className="text-sm text-slate-500 mb-6">
+            Every hard question a panelist can ask — answered honestly. No absolute claims. No fake data. Only what the study actually does.
+          </p>
+
+          <div className="space-y-3">
+
+            {/* Q1 */}
+            <div className="rounded-xl border border-slate-200 overflow-hidden">
+              <div className="bg-slate-800 px-4 py-3">
+                <p className="text-sm font-semibold text-white">"Where is your proof that Navocs saves more fuel than Google Maps?"</p>
+              </div>
+              <div className="px-4 py-3 bg-slate-50">
+                <p className="text-sm text-slate-600">There is no experimental proof yet — and we do not claim there is. The study contributes the <strong>design and implementation</strong> of a VSP-based fuel routing system. Comparing fuel savings against Google Maps routes in a live test is identified as future work. The claim is not "we save more fuel" — the claim is "we calculate fuel cost per vehicle type, which Google Maps does not do."</p>
+              </div>
+            </div>
+
+            {/* Q2 */}
+            <div className="rounded-xl border border-slate-200 overflow-hidden">
+              <div className="bg-slate-800 px-4 py-3">
+                <p className="text-sm font-semibold text-white">"You claim to be the first eco-routing system for Tuguegarao — where is your proof no one else built this?"</p>
+              </div>
+              <div className="px-4 py-3 bg-slate-50">
+                <p className="text-sm text-slate-600">The claim is scoped specifically: no published eco-routing system for Tuguegarao City using VSP modeling for tricycle and EV profiles was found in literature review. We do not claim to be first in the world — we claim to be first for this specific local context, based on our review of related work. If a panelist knows of one, we welcome the reference.</p>
+              </div>
+            </div>
+
+            {/* Q3 */}
+            <div className="rounded-xl border border-slate-200 overflow-hidden">
+              <div className="bg-slate-800 px-4 py-3">
+                <p className="text-sm font-semibold text-white">"Your VSP formula — did you test it on actual tricycles? How do you know it's accurate?"</p>
+              </div>
+              <div className="px-4 py-3 bg-slate-50">
+                <p className="text-sm text-slate-600">The VSP formula is adopted from peer-reviewed transportation research — it is an internationally validated model, not invented by this study. It has not been locally calibrated against actual tricycle fuel measurements yet. That is acknowledged as a limitation. The formula is applied as-is from literature, which is standard practice at thesis level when OBD-II or fuel sensor data is not yet available.</p>
+              </div>
+            </div>
+
+            {/* Q4 */}
+            <div className="rounded-xl border border-slate-200 overflow-hidden">
+              <div className="bg-slate-800 px-4 py-3">
+                <p className="text-sm font-semibold text-white">"Where does your traffic data come from? Did you actually collect it?"</p>
+              </div>
+              <div className="px-4 py-3 bg-slate-50">
+                <p className="text-sm text-slate-600">Traffic delay estimates are currently theoretical — based on time-of-day assumptions derived from VSP behavior (stop-and-go during rush hour = higher fuel cost). Real GPS speed data collection on Tuguegarao roads is ongoing using the Navocs speed meter tool. The current system uses theoretical parameters as placeholders until sufficient local data is collected.</p>
+              </div>
+            </div>
+
+            {/* Q5 */}
+            <div className="rounded-xl border border-slate-200 overflow-hidden">
+              <div className="bg-slate-800 px-4 py-3">
+                <p className="text-sm font-semibold text-white">"Did you test this with real drivers? Do actual users find it useful?"</p>
+              </div>
+              <div className="px-4 py-3 bg-slate-50">
+                <p className="text-sm text-slate-600">The system is a working prototype deployed at navocs.com. Formal user testing with a measured sample of drivers and commuters has not been conducted yet. Usability evaluation and user acceptance testing are identified as future work. The current stage is system design and implementation — not full-scale deployment evaluation.</p>
+              </div>
+            </div>
+
+            {/* Q6 */}
+            <div className="rounded-xl border border-slate-200 overflow-hidden">
+              <div className="bg-slate-800 px-4 py-3">
+                <p className="text-sm font-semibold text-white">"How do you know A* gives a better route than Dijkstra for this problem?"</p>
+              </div>
+              <div className="px-4 py-3 bg-slate-50">
+                <p className="text-sm text-slate-600">A* is chosen because it supports a custom cost function — which Dijkstra also does. The advantage of A* over Dijkstra is computational efficiency on large road networks due to the heuristic. Both can use the same VSP cost function. The study does not claim A* produces different fuel savings than Dijkstra — it claims A* is the more appropriate algorithm for scaling to a full road network. Simulation comparison is future work.</p>
+              </div>
+            </div>
+
+            {/* Q7 */}
+            <div className="rounded-xl border border-slate-200 overflow-hidden">
+              <div className="bg-slate-800 px-4 py-3">
+                <p className="text-sm font-semibold text-white">"What if your algorithm recommends a route that is actually worse? How do you know it won't?"</p>
+              </div>
+              <div className="px-4 py-3 bg-slate-50">
+                <p className="text-sm text-slate-600">The algorithm's output is only as good as its input data. If the VSP parameters or traffic estimates are inaccurate, the recommended route may not be optimal in real conditions. This is acknowledged. The system is a research prototype — drivers can see all compared routes and make their own decision. It is a decision-support tool, not an enforced routing system.</p>
+              </div>
+            </div>
+
+            {/* Q8 */}
+            <div className="rounded-xl border border-slate-200 overflow-hidden">
+              <div className="bg-slate-800 px-4 py-3">
+                <p className="text-sm font-semibold text-white">"Your e-trike energy model — where did you get the battery specs? Are they accurate for local e-trikes?"</p>
+              </div>
+              <div className="px-4 py-3 bg-slate-50">
+                <p className="text-sm text-slate-600">The BEV energy model uses standard values for rolling resistance, drag coefficient, and drivetrain efficiency from transportation engineering literature. These are not calibrated against specific Philippine e-trike models. Battery degradation and temperature effects are not modeled. Local e-trike calibration is identified as future work, especially relevant given RA 11697 and the projected growth of EVs in the Philippines.</p>
+              </div>
+            </div>
+
+            {/* Q9 */}
+            <div className="rounded-xl border border-slate-200 overflow-hidden">
+              <div className="bg-slate-800 px-4 py-3">
+                <p className="text-sm font-semibold text-white">"Will local people actually use this? Most tricycle drivers don't use routing apps."</p>
+              </div>
+              <div className="px-4 py-3 bg-slate-50">
+                <p className="text-sm text-slate-600">Adoption is a valid concern. The current system is a research prototype targeting tech-familiar users. Barriers include language (app is in English), digital literacy, and mobile data access. These are acknowledged limitations. Localization to Filipino and Ilocano, simplified offline UI, and driver adoption strategies are identified as future work. The thesis contribution is the algorithm and system — not mass deployment.</p>
+              </div>
+            </div>
+
+            {/* Q10 */}
+            <div className="rounded-xl border border-slate-200 overflow-hidden">
+              <div className="bg-slate-800 px-4 py-3">
+                <p className="text-sm font-semibold text-white">"You say you fill a gap — but is the gap real? Maybe no one built this because there's no demand."</p>
+              </div>
+              <div className="px-4 py-3 bg-slate-50">
+                <p className="text-sm text-slate-600">The gap is documented through literature review — no published eco-routing system for Philippine provincial cities using VSP was found. Whether there is market demand is a separate question from whether the research gap exists academically. The study addresses the academic gap. Demand validation would require a separate market study, which is outside this research scope.</p>
+              </div>
+            </div>
+
+          </div>
+        </motion.section>
+
         {/* Theoretical Assumptions */}
         <motion.section
           initial={{ opacity: 0, y: 16 }}
