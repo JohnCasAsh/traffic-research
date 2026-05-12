@@ -1,3 +1,4 @@
+/// <reference types="@types/google.maps" />
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router';
 import {
@@ -16,14 +17,9 @@ const MAPS_API_KEY = (
 const TUGUEGARAO = { lat: 17.6128, lng: 121.7270 };
 
 type ParkingLocation = {
-  id: string;
-  name: string;
-  type: string;
-  lat: number;
-  lng: number;
-  notes: string;
-  fare_normal: number | null;
-  fare_discounted: number | null;
+  id: string; name: string; type: string;
+  lat: number; lng: number; notes: string;
+  fare_normal: number | null; fare_discounted: number | null;
   fuel_prices?: { name: string; price: string }[] | null;
   photo: string | null;
 };
@@ -49,7 +45,7 @@ function formatDist(m: number) {
   return m < 1000 ? `${Math.round(m)} m` : `${(m / 1000).toFixed(1)} km`;
 }
 
-// ── Place autocomplete input (same pattern as driver dashboard) ──
+// ── Place autocomplete — same style as driver dashboard ──
 type Prediction = { id: string; main: string; secondary: string; description: string };
 
 function PlaceAutocompleteInput({
@@ -69,19 +65,13 @@ function PlaceAutocompleteInput({
 
   useEffect(() => {
     if (!MAPS_API_KEY) return;
-    importLibrary('places').then((lib: any) => {
-      serviceRef.current = new lib.AutocompleteService();
-    }).catch(() => {});
-    importLibrary('geocoding').then((lib: any) => {
-      geocoderRef.current = new lib.Geocoder();
-    }).catch(() => {});
+    importLibrary('places').then((lib: any) => { serviceRef.current = new lib.AutocompleteService(); }).catch(() => {});
+    importLibrary('geocoding').then((lib: any) => { geocoderRef.current = new lib.Geocoder(); }).catch(() => {});
   }, []);
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) setOpen(false);
     };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
@@ -90,11 +80,7 @@ function PlaceAutocompleteInput({
   const fetchPredictions = (input: string) => {
     if (!serviceRef.current || input.length < 2) { setPredictions([]); setOpen(false); return; }
     serviceRef.current.getPlacePredictions(
-      {
-        input,
-        componentRestrictions: { country: 'ph' },
-        locationBias: { center: { lat: 17.6132, lng: 121.7270 }, radius: 80000 },
-      },
+      { input, componentRestrictions: { country: 'ph' }, locationBias: { center: { lat: 17.6132, lng: 121.7270 }, radius: 80000 } },
       (results: any[], status: string) => {
         if (status === 'OK' && results) {
           setPredictions(results.slice(0, 5).map((r) => ({
@@ -104,9 +90,7 @@ function PlaceAutocompleteInput({
             description: r.description,
           })));
           setOpen(true);
-        } else {
-          setPredictions([]); setOpen(false);
-        }
+        } else { setPredictions([]); setOpen(false); }
       }
     );
   };
@@ -126,13 +110,9 @@ function PlaceAutocompleteInput({
         if (status === 'OK' && results[0]) {
           const loc = results[0].geometry.location;
           onSelect(p.description, { lat: loc.lat(), lng: loc.lng() });
-        } else {
-          onSelect(p.description);
-        }
+        } else { onSelect(p.description); }
       });
-    } else {
-      onSelect(p.description);
-    }
+    } else { onSelect(p.description); }
   };
 
   return (
@@ -143,21 +123,23 @@ function PlaceAutocompleteInput({
         onChange={(e) => handleInput(e.target.value)}
         onFocus={() => predictions.length > 0 && setOpen(true)}
         placeholder={placeholder}
-        className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white"
+        autoComplete="off"
+        className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-all"
       />
       {open && predictions.length > 0 && (
-        <ul className="absolute z-50 top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-lg overflow-hidden">
+        <div className="absolute z-50 left-0 right-0 top-full mt-1 bg-white border border-slate-200 rounded-xl shadow-xl overflow-hidden">
           {predictions.map((p) => (
-            <li
+            <button
               key={p.id}
+              type="button"
               onMouseDown={() => handleSelect(p)}
-              className="px-3 py-2.5 hover:bg-slate-50 cursor-pointer"
+              className="w-full text-left px-4 py-2.5 hover:bg-teal-50 border-b border-slate-100 last:border-0 transition-colors"
             >
-              <p className="text-sm font-medium text-slate-800">{p.main}</p>
-              {p.secondary && <p className="text-xs text-slate-400">{p.secondary}</p>}
-            </li>
+              <div className="text-sm font-medium text-slate-800 truncate">{p.main}</div>
+              {p.secondary && <div className="text-xs text-slate-400 mt-0.5 truncate">{p.secondary}</div>}
+            </button>
           ))}
-        </ul>
+        </div>
       )}
     </div>
   );
@@ -167,7 +149,7 @@ function PlaceAutocompleteInput({
 export function CommutterDashboardPage() {
   const navigate = useNavigate();
   const { currentLocation, setCurrentLocation } = useLocationConsent();
-  const [gpsMsg, setGpsMsg] = useState('Getting GPS…');
+  const [gpsStatus, setGpsStatus] = useState<string>('Getting GPS…');
 
   // FROM state
   const [fromText, setFromText] = useState('');
@@ -189,15 +171,12 @@ export function CommutterDashboardPage() {
   const userMarkerRef = useRef<google.maps.Marker | null>(null);
   const mapInitRef = useRef(false);
 
-  // Load parking locations
   const load = useCallback(async () => {
     setLoading(true);
     try {
       const res = await fetch(`${API_URL}/api/parking`);
       if (res.ok) setLocations((await res.json()).locations || []);
-    } finally {
-      setLoading(false);
-    }
+    } finally { setLoading(false); }
   }, []);
 
   useEffect(() => { load(); }, [load]);
@@ -205,32 +184,27 @@ export function CommutterDashboardPage() {
   // GPS watcher — driver-identical auto-start
   useEffect(() => {
     if (typeof navigator === 'undefined' || !navigator.geolocation) {
-      setGpsMsg('GPS not supported on this device.');
+      setGpsStatus('GPS not supported on this device.');
       return;
     }
     const watchId = navigator.geolocation.watchPosition(
       (pos) => {
-        setGpsMsg('');
+        setGpsStatus('');
         setCurrentLocation({
-          lat: pos.coords.latitude,
-          lng: pos.coords.longitude,
-          accuracy: pos.coords.accuracy,
-          timestamp: Date.now(),
+          lat: pos.coords.latitude, lng: pos.coords.longitude,
+          accuracy: pos.coords.accuracy, timestamp: Date.now(),
         });
       },
       (error) => {
-        if (error.code === error.PERMISSION_DENIED) {
-          setGpsMsg('Location permission was denied.');
-          return;
-        }
-        setGpsMsg('Unable to get location. Retrying…');
+        if (error.code === error.PERMISSION_DENIED) { setGpsStatus('Location permission was denied.'); return; }
+        setGpsStatus('Unable to get location. Retrying…');
       },
       { enableHighAccuracy: true, maximumAge: 5000, timeout: 6000 }
     );
     return () => navigator.geolocation.clearWatch(watchId);
   }, [setCurrentLocation]);
 
-  // When GPS becomes available and user is using GPS mode — update fromCoords
+  // Keep GPS fromCoords in sync
   useEffect(() => {
     if (currentLocation && usingGps) {
       setFromCoords({ lat: currentLocation.lat, lng: currentLocation.lng });
@@ -245,43 +219,25 @@ export function CommutterDashboardPage() {
     importLibrary('maps').then((mapsLib) => {
       const { Map } = mapsLib as typeof google.maps;
       mapRef.current = new Map(mapContainerRef.current!, {
-        center: TUGUEGARAO,
-        zoom: 14,
-        mapTypeControl: false,
-        streetViewControl: false,
-        fullscreenControl: false,
-        zoomControlOptions: { position: 9 },
+        center: TUGUEGARAO, zoom: 14,
+        mapTypeControl: false, streetViewControl: false, fullscreenControl: false,
       });
       setMapReady(true);
     });
   }, []);
 
-  // Place parking markers on map
+  // Place markers
   useEffect(() => {
     if (!mapReady || !mapRef.current) return;
     markersRef.current.forEach((m) => m.setMap(null));
     markersRef.current.clear();
-
     locations.forEach((loc) => {
       const isGas = GAS_TYPES.has(loc.type);
       const marker = new google.maps.Marker({
-        position: { lat: loc.lat, lng: loc.lng },
-        map: mapRef.current!,
-        title: loc.name,
-        icon: {
-          path: google.maps.SymbolPath.CIRCLE,
-          scale: 12,
-          fillColor: isGas ? '#16a34a' : '#0d9488',
-          fillOpacity: 1,
-          strokeColor: '#ffffff',
-          strokeWeight: 2.5,
-        },
+        position: { lat: loc.lat, lng: loc.lng }, map: mapRef.current!, title: loc.name,
+        icon: { path: google.maps.SymbolPath.CIRCLE, scale: 12, fillColor: isGas ? '#16a34a' : '#0d9488', fillOpacity: 1, strokeColor: '#ffffff', strokeWeight: 2.5 },
       });
-      // Click marker → select destination
-      marker.addListener('click', () => {
-        setSelected(loc);
-        mapRef.current?.panTo({ lat: loc.lat, lng: loc.lng });
-      });
+      marker.addListener('click', () => { setSelected(loc); mapRef.current?.panTo({ lat: loc.lat, lng: loc.lng }); });
       markersRef.current.set(loc.id, marker);
     });
   }, [mapReady, locations]);
@@ -293,18 +249,11 @@ export function CommutterDashboardPage() {
       if (!loc) return;
       const isGas = GAS_TYPES.has(loc.type);
       const isSel = selected?.id === id;
-      marker.setIcon({
-        path: google.maps.SymbolPath.CIRCLE,
-        scale: isSel ? 16 : 12,
-        fillColor: isSel ? '#f59e0b' : (isGas ? '#16a34a' : '#0d9488'),
-        fillOpacity: 1,
-        strokeColor: '#ffffff',
-        strokeWeight: 2.5,
-      });
+      marker.setIcon({ path: google.maps.SymbolPath.CIRCLE, scale: isSel ? 16 : 12, fillColor: isSel ? '#f59e0b' : (isGas ? '#16a34a' : '#0d9488'), fillOpacity: 1, strokeColor: '#ffffff', strokeWeight: 2.5 });
     });
   }, [selected, locations]);
 
-  // User location blue dot on map
+  // User location blue dot
   useEffect(() => {
     if (!mapReady || !mapRef.current) return;
     if (currentLocation) {
@@ -312,56 +261,37 @@ export function CommutterDashboardPage() {
       if (!userMarkerRef.current) {
         userMarkerRef.current = new google.maps.Marker({
           position: pos, map: mapRef.current, title: 'Your Location', zIndex: 999,
-          icon: {
-            path: google.maps.SymbolPath.CIRCLE, scale: 10,
-            fillColor: '#3b82f6', fillOpacity: 1, strokeColor: '#ffffff', strokeWeight: 2.5,
-          },
+          icon: { path: google.maps.SymbolPath.CIRCLE, scale: 10, fillColor: '#3b82f6', fillOpacity: 1, strokeColor: '#ffffff', strokeWeight: 2.5 },
         });
-      } else {
-        userMarkerRef.current.setPosition(pos);
-      }
-    } else {
-      userMarkerRef.current?.setMap(null);
-      userMarkerRef.current = null;
-    }
+      } else { userMarkerRef.current.setPosition(pos); }
+    } else { userMarkerRef.current?.setMap(null); userMarkerRef.current = null; }
   }, [currentLocation, mapReady]);
 
-  const selectAndPan = (loc: ParkingLocation) => {
-    setSelected((prev) => (prev?.id === loc.id ? null : loc));
-    mapRef.current?.panTo({ lat: loc.lat, lng: loc.lng });
-    mapRef.current?.setZoom(16);
-  };
-
   const useGps = () => {
-    const loc = currentLocation;
-    if (loc) {
-      setFromCoords({ lat: loc.lat, lng: loc.lng });
-      setFromText('Your Location (GPS)');
-      setUsingGps(true);
+    setUsingGps(true);
+    if (currentLocation) {
+      setFromCoords({ lat: currentLocation.lat, lng: currentLocation.lng });
+      setFromText(`${currentLocation.lat.toFixed(6)}, ${currentLocation.lng.toFixed(6)}`);
     } else {
-      setFromText('Getting GPS…');
-      setUsingGps(true);
+      setFromText('');
     }
   };
 
-  const clearFrom = () => {
-    setFromText('');
-    setFromCoords(null);
-    setUsingGps(false);
-  };
+  const clearFrom = () => { setFromText(''); setFromCoords(null); setUsingGps(false); };
 
-  const walkThere = (loc: ParkingLocation) => {
-    const origin = fromCoords ?? (currentLocation ? { lat: currentLocation.lat, lng: currentLocation.lng } : null);
-    let url = `/walkway?dest_lat=${loc.lat}&dest_lng=${loc.lng}&dest_name=${encodeURIComponent(loc.name)}`;
+  const origin = fromCoords ?? (currentLocation ? { lat: currentLocation.lat, lng: currentLocation.lng } : null);
+
+  const walkThere = () => {
+    if (!selected) return;
+    let url = `/walkway?dest_lat=${selected.lat}&dest_lng=${selected.lng}&dest_name=${encodeURIComponent(selected.name)}`;
     if (origin) url += `&origin_lat=${origin.lat}&origin_lng=${origin.lng}`;
     navigate(url);
   };
 
-  const driveThere = (loc: ParkingLocation) => {
-    window.open(`https://www.google.com/maps/dir/?api=1&destination=${loc.lat},${loc.lng}&travelmode=driving`, '_blank');
+  const driveThere = () => {
+    if (!selected) return;
+    window.open(`https://www.google.com/maps/dir/?api=1&destination=${selected.lat},${selected.lng}&travelmode=driving`, '_blank');
   };
-
-  const origin = fromCoords ?? (currentLocation ? { lat: currentLocation.lat, lng: currentLocation.lng } : null);
 
   const filtered = locations
     .filter((l) => {
@@ -374,212 +304,228 @@ export function CommutterDashboardPage() {
     })
     .sort((a, b) => {
       if (!origin) return a.name.localeCompare(b.name);
-      return (
-        getDistanceM(origin.lat, origin.lng, a.lat, a.lng) -
-        getDistanceM(origin.lat, origin.lng, b.lat, b.lng)
-      );
+      return getDistanceM(origin.lat, origin.lng, a.lat, a.lng) - getDistanceM(origin.lat, origin.lng, b.lat, b.lng);
     });
 
   return (
-    <div className="flex flex-col md:flex-row h-[calc(100vh-4rem)] overflow-hidden">
+    <div className="min-h-[calc(100vh-4rem)] bg-slate-50">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
 
-      {/* ── Left panel (driver-style form) ── */}
-      <div className="w-full md:w-80 md:flex-shrink-0 flex flex-col bg-white border-b md:border-b-0 md:border-r border-slate-200 overflow-hidden md:h-full" style={{ maxHeight: '55vh' }}>
+        {/* Header — identical to driver */}
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold text-slate-900 mb-2">Commuter Dashboard</h1>
+          <p className="text-slate-600">Find nearby parking and gas stations — walk or drive there</p>
+        </div>
 
-        {/* Header */}
-        <div className="px-4 pt-4 pb-3 border-b border-slate-100 space-y-3 flex-shrink-0">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="font-bold text-slate-900">Commuter Dashboard</h1>
-              <p className="text-xs text-slate-400">Tuguegarao City</p>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+
+          {/* ── Left form column ── */}
+          <div className="lg:col-span-1 space-y-3">
+
+            {/* FROM card — identical structure to driver */}
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-visible">
+              <div className="px-4 pt-4 pb-4">
+                <div className="flex items-center justify-between mb-2">
+                  <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                    <MapPin className="w-3.5 h-3.5 text-teal-500" /> From
+                  </label>
+                  {!usingGps ? (
+                    <button
+                      type="button"
+                      onClick={useGps}
+                      className="text-xs text-teal-600 hover:text-teal-700 font-medium flex items-center gap-1"
+                    >
+                      <Navigation className="w-3 h-3" /> Use GPS
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={clearFrom}
+                      className="text-xs text-slate-400 hover:text-slate-600 flex items-center gap-1"
+                    >
+                      <X className="w-3 h-3" /> Clear
+                    </button>
+                  )}
+                </div>
+                {usingGps ? (
+                  <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg border border-teal-300 bg-teal-50">
+                    <span className={`w-2 h-2 rounded-full flex-shrink-0 ${currentLocation ? 'bg-teal-500 animate-pulse' : 'bg-amber-400 animate-pulse'}`} />
+                    <span className="text-sm text-teal-800 flex-1 truncate">
+                      {currentLocation ? 'Your live GPS location' : gpsStatus || 'Getting GPS…'}
+                    </span>
+                  </div>
+                ) : (
+                  <PlaceAutocompleteInput
+                    value={fromText}
+                    onChange={setFromText}
+                    onSelect={(_, coords) => { if (coords) setFromCoords(coords); }}
+                    placeholder="Enter starting location"
+                  />
+                )}
+                {!usingGps && (
+                  <p className="text-xs mt-1.5 text-slate-400">
+                    {currentLocation ? '📍 GPS available — or type an address above' : gpsStatus}
+                  </p>
+                )}
+              </div>
             </div>
-            <button onClick={load} disabled={loading} className="p-1.5 rounded-lg hover:bg-slate-100 transition">
-              <RefreshCw className={`w-4 h-4 text-slate-500 ${loading ? 'animate-spin' : ''}`} />
+
+            {/* DESTINATION card */}
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+              <div className="px-4 pt-4 pb-3">
+                <div className="flex items-center justify-between mb-2">
+                  <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                    <PersonStanding className="w-3.5 h-3.5 text-blue-500" /> Destination
+                  </label>
+                  <button onClick={load} disabled={loading} className="p-1 rounded hover:bg-slate-100 transition">
+                    <RefreshCw className={`w-3.5 h-3.5 text-slate-400 ${loading ? 'animate-spin' : ''}`} />
+                  </button>
+                </div>
+
+                {/* Search */}
+                <div className="relative mb-2">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+                  <input
+                    type="text"
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    placeholder="Search parking or gas…"
+                    className="w-full pl-8 pr-3 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-all"
+                  />
+                </div>
+
+                {/* Filter tabs */}
+                <div className="flex rounded-lg overflow-hidden border border-slate-200">
+                  {(['all', 'parking', 'gas'] as const).map((f) => (
+                    <button
+                      key={f}
+                      onClick={() => setFilterTab(f)}
+                      className={`flex-1 py-1.5 text-xs font-semibold transition capitalize ${filterTab === f ? 'bg-teal-600 text-white' : 'text-slate-500 hover:bg-slate-50'}`}
+                    >
+                      {f === 'all' ? 'All' : f === 'parking' ? 'Parking' : 'Gas'}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Location list — scrollable inside card */}
+              <div className="max-h-52 overflow-y-auto border-t border-slate-100">
+                {loading ? (
+                  <div className="py-8 text-center text-xs text-slate-400">Loading locations…</div>
+                ) : filtered.length === 0 ? (
+                  <div className="py-8 text-center">
+                    <MapPinOff className="w-7 h-7 text-slate-300 mx-auto mb-1.5" />
+                    <p className="text-xs text-slate-400">{search ? 'No results found.' : 'No locations yet.'}</p>
+                  </div>
+                ) : (
+                  <div className="divide-y divide-slate-100">
+                    {filtered.map((loc) => {
+                      const isGas = GAS_TYPES.has(loc.type);
+                      const isSel = selected?.id === loc.id;
+                      const dist = origin ? getDistanceM(origin.lat, origin.lng, loc.lat, loc.lng) : null;
+                      return (
+                        <button
+                          key={loc.id}
+                          onClick={() => {
+                            setSelected((prev) => (prev?.id === loc.id ? null : loc));
+                            mapRef.current?.panTo({ lat: loc.lat, lng: loc.lng });
+                            mapRef.current?.setZoom(16);
+                          }}
+                          className={`w-full text-left px-4 py-3 flex items-center gap-3 transition ${isSel ? 'bg-amber-50 border-l-4 border-amber-400' : 'hover:bg-slate-50'}`}
+                        >
+                          <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${isGas ? 'bg-green-100' : 'bg-teal-100'}`}>
+                            {isGas ? <Fuel className="w-4 h-4 text-green-600" /> : <ParkingSquare className="w-4 h-4 text-teal-600" />}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-semibold text-slate-800 truncate">{loc.name}</p>
+                            <p className="text-xs text-slate-400 truncate">
+                              {TYPE_LABELS[loc.type] || loc.type}{dist !== null ? ` · ${formatDist(dist)}` : ''}
+                            </p>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Selected destination summary */}
+            {selected && (
+              <div className="bg-white rounded-xl shadow-sm border border-slate-200 px-4 py-3">
+                <div className="flex items-start justify-between gap-2 mb-1">
+                  <div className="min-w-0">
+                    <p className="text-sm font-bold text-slate-900 truncate">{selected.name}</p>
+                    <p className="text-xs text-slate-500">
+                      {TYPE_LABELS[selected.type] || selected.type}
+                      {origin ? ` · ${formatDist(getDistanceM(origin.lat, origin.lng, selected.lat, selected.lng))} away` : ''}
+                    </p>
+                  </div>
+                  <button onClick={() => setSelected(null)} className="p-0.5 text-slate-400 hover:text-slate-600 flex-shrink-0">
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Walk There — same style as driver's Analyze Routes */}
+            <button
+              onClick={walkThere}
+              disabled={!selected}
+              className="w-full bg-gradient-to-r from-teal-500 to-blue-600 text-white py-3.5 rounded-xl font-semibold hover:shadow-lg transition-all flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <PersonStanding className="w-5 h-5" />
+              {selected ? `Walk to ${selected.name}` : 'Walk There'}
             </button>
+
+            {/* Drive There — same style as driver's Tracking Live button */}
+            <button
+              onClick={driveThere}
+              disabled={!selected}
+              className="w-full py-2.5 px-4 border border-slate-200 bg-white rounded-xl text-sm font-medium flex items-center justify-center gap-2 transition-colors hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed text-slate-600"
+            >
+              <Car className="w-4 h-4" />
+              Drive There
+            </button>
+
           </div>
 
-          {/* FROM field */}
-          <div>
-            <div className="flex items-center justify-between mb-1">
-              <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide flex items-center gap-1">
-                <MapPin className="w-3 h-3" /> From
-              </label>
-              {!usingGps && (
-                <button
-                  onClick={useGps}
-                  className="text-xs text-teal-600 hover:text-teal-700 font-semibold flex items-center gap-1"
-                >
-                  <Navigation className="w-3 h-3" />
-                  Use GPS
-                </button>
+          {/* ── Map column — same as driver's map card ── */}
+          <div className="lg:col-span-2">
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 h-full min-h-[600px] relative overflow-hidden">
+              <div ref={mapContainerRef} className="absolute inset-0" />
+
+              {/* Legend */}
+              <div className="absolute top-3 right-3 bg-white/95 backdrop-blur-sm rounded-xl border border-slate-200 shadow-sm px-3 py-2 space-y-1.5">
+                {[['bg-teal-500', 'Parking'], ['bg-green-600', 'Gas Station'], ['bg-amber-400', 'Selected'], ['bg-blue-500', 'You']].map(([color, label]) => (
+                  <div key={label} className="flex items-center gap-2">
+                    <span className={`w-3 h-3 rounded-full ${color}`} />
+                    <span className="text-xs text-slate-600">{label}</span>
+                  </div>
+                ))}
+              </div>
+
+              {/* Tap hint */}
+              {!selected && locations.length > 0 && (
+                <div className="absolute top-3 left-3 bg-white/90 backdrop-blur-sm rounded-xl border border-slate-200 shadow-sm px-3 py-1.5">
+                  <p className="text-xs text-slate-500 flex items-center gap-1.5">
+                    <MapPin className="w-3.5 h-3.5 text-teal-500" />
+                    Tap a marker or list item to select
+                  </p>
+                </div>
+              )}
+
+              {/* GPS acquiring hint */}
+              {!currentLocation && (
+                <div className="absolute bottom-5 left-1/2 -translate-x-1/2 bg-white rounded-2xl border border-slate-200 shadow-lg px-4 py-3 flex items-center gap-3">
+                  <Navigation className="w-4 h-4 text-amber-500 flex-shrink-0" />
+                  <span className="text-xs text-slate-600">{gpsStatus || 'Getting GPS fix…'}</span>
+                </div>
               )}
             </div>
-            {usingGps ? (
-              <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-teal-300 bg-teal-50">
-                <span className={`w-2 h-2 rounded-full flex-shrink-0 ${currentLocation ? 'bg-teal-500 animate-pulse' : 'bg-amber-400 animate-pulse'}`} />
-                <span className="text-sm text-teal-800 flex-1 truncate">
-                  {currentLocation ? 'Your live GPS location' : gpsMsg}
-                </span>
-                <button onClick={clearFrom} className="text-slate-400 hover:text-slate-600">
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            ) : (
-              <PlaceAutocompleteInput
-                value={fromText}
-                onChange={setFromText}
-                onSelect={(desc, coords) => {
-                  setFromText(desc);
-                  if (coords) setFromCoords(coords);
-                }}
-                placeholder="Enter starting location…"
-              />
-            )}
           </div>
+
         </div>
-
-        {/* Destination search + filter */}
-        <div className="px-4 py-3 border-b border-slate-100 space-y-2 flex-shrink-0">
-          <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide flex items-center gap-1">
-            <PersonStanding className="w-3 h-3" /> Destination
-          </label>
-          <div className="relative">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search parking or gas…"
-              className="w-full pl-8 pr-3 py-2 text-sm rounded-lg border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-teal-500"
-            />
-          </div>
-          <div className="flex rounded-lg overflow-hidden border border-slate-200">
-            {(['all', 'parking', 'gas'] as const).map((f) => (
-              <button
-                key={f}
-                onClick={() => setFilterTab(f)}
-                className={`flex-1 py-1.5 text-xs font-semibold transition capitalize ${filterTab === f ? 'bg-teal-600 text-white' : 'text-slate-500 hover:bg-slate-50'}`}
-              >
-                {f === 'all' ? 'All' : f === 'parking' ? 'Parking' : 'Gas'}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Location list */}
-        <div className="flex-1 overflow-y-auto">
-          {loading ? (
-            <div className="py-10 text-center text-xs text-slate-400">Loading locations…</div>
-          ) : filtered.length === 0 ? (
-            <div className="py-10 text-center">
-              <MapPinOff className="w-8 h-8 text-slate-300 mx-auto mb-2" />
-              <p className="text-xs text-slate-400">{search ? 'No results found.' : 'No locations yet.'}</p>
-            </div>
-          ) : (
-            <div className="divide-y divide-slate-100">
-              {filtered.map((loc) => {
-                const isGas = GAS_TYPES.has(loc.type);
-                const isSel = selected?.id === loc.id;
-                const dist = origin ? getDistanceM(origin.lat, origin.lng, loc.lat, loc.lng) : null;
-                return (
-                  <button
-                    key={loc.id}
-                    onClick={() => selectAndPan(loc)}
-                    className={`w-full text-left px-4 py-3 flex items-center gap-3 transition ${isSel ? 'bg-amber-50 border-l-2 border-amber-400' : 'hover:bg-slate-50'}`}
-                  >
-                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${isGas ? 'bg-green-100' : 'bg-teal-100'}`}>
-                      {isGas ? <Fuel className="w-4 h-4 text-green-600" /> : <ParkingSquare className="w-4 h-4 text-teal-600" />}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold text-slate-800 truncate">{loc.name}</p>
-                      <p className="text-xs text-slate-400 truncate">
-                        {TYPE_LABELS[loc.type] || loc.type}
-                        {dist !== null ? ` · ${formatDist(dist)}` : ''}
-                      </p>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          )}
-        </div>
-
-        {/* Selected destination action bar */}
-        {selected && (
-          <div className="flex-shrink-0 border-t border-slate-200 bg-slate-50 px-4 py-3 space-y-2">
-            <div className="flex items-start justify-between gap-2">
-              <div className="min-w-0">
-                <p className="text-sm font-bold text-slate-900 truncate">{selected.name}</p>
-                <p className="text-xs text-slate-500">
-                  {TYPE_LABELS[selected.type] || selected.type}
-                  {origin ? ` · ${formatDist(getDistanceM(origin.lat, origin.lng, selected.lat, selected.lng))} away` : ''}
-                </p>
-              </div>
-              <button onClick={() => setSelected(null)} className="p-0.5 text-slate-400 hover:text-slate-700 flex-shrink-0">
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                onClick={() => walkThere(selected)}
-                className="flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-teal-600 text-white text-xs font-bold hover:bg-teal-700 transition"
-              >
-                <PersonStanding className="w-4 h-4" />
-                Walk There
-              </button>
-              <button
-                onClick={() => driveThere(selected)}
-                className="flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-blue-600 text-white text-xs font-bold hover:bg-blue-700 transition"
-              >
-                <Car className="w-4 h-4" />
-                Drive There
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* ── Map ── */}
-      <div className="flex-1 relative min-h-[45vh] md:min-h-0">
-        <div ref={mapContainerRef} className="absolute inset-0" />
-
-        {/* Map legend */}
-        <div className="absolute top-3 right-3 bg-white/95 backdrop-blur-sm rounded-xl border border-slate-200 shadow-sm px-3 py-2 space-y-1.5">
-          <div className="flex items-center gap-2">
-            <span className="w-3 h-3 rounded-full bg-teal-500" />
-            <span className="text-xs text-slate-600">Parking</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="w-3 h-3 rounded-full bg-green-600" />
-            <span className="text-xs text-slate-600">Gas Station</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="w-3 h-3 rounded-full bg-amber-400" />
-            <span className="text-xs text-slate-600">Selected</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="w-3 h-3 rounded-full bg-blue-500" />
-            <span className="text-xs text-slate-600">You</span>
-          </div>
-        </div>
-
-        {/* GPS hint while waiting for fix */}
-        {!currentLocation && !usingGps && (
-          <div className="absolute bottom-5 left-1/2 -translate-x-1/2 bg-white rounded-2xl border border-slate-200 shadow-lg px-4 py-3 flex items-center gap-3">
-            <Navigation className="w-4 h-4 text-amber-500 flex-shrink-0" />
-            <span className="text-xs text-slate-600">{gpsMsg || 'Getting GPS fix…'}</span>
-          </div>
-        )}
-
-        {/* Tap hint when no selection */}
-        {locations.length > 0 && !selected && (
-          <div className="absolute top-3 left-3 bg-white/90 backdrop-blur-sm rounded-xl border border-slate-200 shadow-sm px-3 py-1.5">
-            <p className="text-xs text-slate-500 flex items-center gap-1.5">
-              <MapPin className="w-3.5 h-3.5 text-teal-500" />
-              Tap a marker or list item to select
-            </p>
-          </div>
-        )}
       </div>
     </div>
   );
