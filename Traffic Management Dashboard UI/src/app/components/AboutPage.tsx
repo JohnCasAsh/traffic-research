@@ -102,6 +102,54 @@ export function AboutPage() {
 
       <div className="max-w-5xl mx-auto px-6 py-12 space-y-12">
 
+        {/* ONE Research Focus */}
+        <motion.section
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.09 }}
+          className="rounded-2xl border-2 border-teal-400 bg-teal-50 p-8"
+        >
+          <p className="text-xs font-bold text-teal-600 uppercase tracking-widest mb-3">One Research Goal</p>
+          <h2 className="text-2xl font-bold text-slate-900 mb-4 leading-snug">
+            Can A* with VSP energy modeling produce fuel-efficient route recommendations for multiple vehicle types in Tuguegarao City?
+          </h2>
+          <p className="text-sm text-slate-600 leading-relaxed mb-6">
+            That is the single question this study answers. Everything else in the system — the AI assistant, speed meter,
+            road reporter, commuter features, parking map — exists only to support this goal. They are tools, not separate studies.
+          </p>
+
+          <div className="grid sm:grid-cols-2 gap-3">
+            {[
+              { feature: 'A* Route Algorithm', role: 'Core study — the research contribution', core: true },
+              { feature: 'VSP Energy Model', role: 'Core study — the fuel cost formula', core: true },
+              { feature: 'Speed Meter', role: 'Data collection — feeds speed data into D(e) traffic estimates', core: false },
+              { feature: 'Road Reporter', role: 'Data collection — captures road conditions from users', core: false },
+              { feature: 'AI Assistant', role: 'Supporting tool — helps users understand route recommendations', core: false },
+              { feature: 'Commuter Features', role: 'Supporting tool — walking routes, terminals, parking for non-drivers', core: false },
+              { feature: 'Parking Map', role: 'Supporting tool — helps commuters decide when to walk vs ride', core: false },
+              { feature: 'Live Tracking', role: 'Supporting tool — real-time position for active trips', core: false },
+            ].map(({ feature, role, core }) => (
+              <div key={feature} className={`flex gap-3 p-3 rounded-xl border ${core ? 'bg-teal-100 border-teal-300' : 'bg-white border-slate-200'}`}>
+                <span className={`mt-0.5 w-5 h-5 rounded-full text-xs font-bold flex items-center justify-center shrink-0 ${core ? 'bg-teal-500 text-white' : 'bg-slate-200 text-slate-500'}`}>
+                  {core ? '★' : '○'}
+                </span>
+                <div>
+                  <p className={`text-sm font-semibold ${core ? 'text-teal-800' : 'text-slate-700'}`}>{feature}</p>
+                  <p className={`text-xs mt-0.5 ${core ? 'text-teal-700' : 'text-slate-500'}`}>{role}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="mt-5 p-4 bg-white rounded-xl border border-teal-200">
+            <p className="text-sm font-semibold text-teal-800 mb-1">If a panelist says "your scope is too big"</p>
+            <p className="text-sm text-teal-700 italic">
+              "The research scope is one algorithm — A* with VSP-based fuel modeling. The additional features are
+              implementation tools that support data collection and user access. They are not separate research contributions."
+            </p>
+          </div>
+        </motion.section>
+
         {/* Core Claim */}
         <motion.section
           initial={{ opacity: 0, y: 16 }}
