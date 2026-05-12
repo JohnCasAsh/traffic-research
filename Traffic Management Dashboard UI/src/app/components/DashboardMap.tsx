@@ -1883,6 +1883,34 @@ export function DashboardMap({
                 <span className="text-xs text-slate-600">Heavy Traffic ({trafficLevelCounts.heavy})</span>
               </div>
             </div>
+            {showParking && (
+              <>
+                <div className="my-1.5 border-t border-slate-100" />
+                <div className="flex items-center space-x-2">
+                  <div className="w-5 h-5 rounded-full bg-green-600 flex items-center justify-center flex-shrink-0">
+                    <span className="text-white text-[9px] font-bold">G</span>
+                  </div>
+                  <span className="text-xs text-slate-600">Gas Station</span>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <div className="w-5 h-5 rounded-full bg-amber-400 flex items-center justify-center flex-shrink-0">
+                    <span className="text-white text-[9px] font-bold">★</span>
+                  </div>
+                  <span className="text-xs text-slate-600">Selected</span>
+                </div>
+              </>
+            )}
+            {currentLocation && (
+              <>
+                <div className="my-1.5 border-t border-slate-100" />
+                <div className="flex items-center space-x-2">
+                  <div className="w-5 h-5 rounded-full bg-blue-500 flex items-center justify-center flex-shrink-0">
+                    <span className="text-white text-[9px] font-bold">●</span>
+                  </div>
+                  <span className="text-xs text-slate-600">You</span>
+                </div>
+              </>
+            )}
             <p className="mt-2 max-w-[190px] text-[10px] text-slate-500">
               Local roads missing from Google data may not appear in generated routes.
             </p>
