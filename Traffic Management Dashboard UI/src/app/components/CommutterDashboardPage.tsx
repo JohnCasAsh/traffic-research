@@ -311,7 +311,9 @@ export function CommutterDashboardPage() {
 
   const driveThere = () => {
     if (!selected) return;
-    window.open(`https://www.google.com/maps/dir/?api=1&destination=${selected.lat},${selected.lng}&travelmode=driving`, '_blank');
+    let url = `/driveway?dest_lat=${selected.lat}&dest_lng=${selected.lng}&dest_name=${encodeURIComponent(selected.name)}`;
+    if (origin) url += `&origin_lat=${origin.lat}&origin_lng=${origin.lng}`;
+    navigate(url);
   };
 
   const filtered = locations

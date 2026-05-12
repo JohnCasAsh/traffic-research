@@ -17,6 +17,7 @@ import { NotFoundPage } from "./components/NotFoundPage";
 import { AboutPage } from "./components/AboutPage";
 import { ParkingWayPage } from "./components/ParkingWayPage";
 import { WalkwayPage } from "./components/WalkwayPage";
+import { DrivewayPage } from "./components/DrivewayPage";
 import { FeedbackPage } from "./components/FeedbackPage";
 import { CommutterDashboardPage } from "./components/CommutterDashboardPage";
 
@@ -36,6 +37,7 @@ export const router = createBrowserRouter([
           { path: "commuter-dashboard", Component: CommutterDashboardPage },
           { path: "parking-way", Component: ParkingWayPage },
           { path: "walkway", Component: WalkwayPage },
+          { path: "driveway", Component: DrivewayPage },
           { path: "feedback", Component: FeedbackPage },
           { path: "profile", Component: ProfilePage },
           {
