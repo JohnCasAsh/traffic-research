@@ -171,3 +171,5 @@ try {
 } catch {
     Write-Host "  Notion logging skipped (backend not running)." -ForegroundColor DarkGray
 }
+
+exit 0
