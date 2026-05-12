@@ -223,10 +223,22 @@ export function Layout() {
             <div>
               <h4 className="font-semibold text-white mb-3">Platform</h4>
               <ul className="space-y-2 text-sm">
-                <li><Link to="/dashboard" className="hover:text-teal-400 transition-colors">Dashboard</Link></li>
-                <li><Link to="/routes" className="hover:text-teal-400 transition-colors">Route Comparison</Link></li>
-                <li><Link to="/analytics" className="hover:text-teal-400 transition-colors">Analytics</Link></li>
-                <li><Link to="/speed-meter" className="hover:text-teal-400 transition-colors">Speed Meter</Link></li>
+                {user?.role === 'commuter' ? (
+                  <>
+                    <li><Link to="/commuter-dashboard" className="hover:text-teal-400 transition-colors">Dashboard</Link></li>
+                    <li><Link to="/parking-way" className="hover:text-teal-400 transition-colors">Parking Way</Link></li>
+                    <li><Link to="/walkway" className="hover:text-teal-400 transition-colors">Walkway</Link></li>
+                  </>
+                ) : (
+                  <>
+                    <li><Link to="/dashboard" className="hover:text-teal-400 transition-colors">Dashboard</Link></li>
+                    <li><Link to="/routes" className="hover:text-teal-400 transition-colors">Route Comparison</Link></li>
+                    {(user?.role === 'admin' || user?.role === 'researcher') && (
+                      <li><Link to="/analytics" className="hover:text-teal-400 transition-colors">Analytics</Link></li>
+                    )}
+                    <li><Link to="/speed-meter" className="hover:text-teal-400 transition-colors">Speed Meter</Link></li>
+                  </>
+                )}
               </ul>
             </div>
             <div>
