@@ -1201,6 +1201,130 @@ export function AboutPage() {
           </div>
         </motion.section>
 
+        {/* Features */}
+        <motion.section
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.29 }}
+          className="bg-white rounded-2xl border border-slate-200 p-8"
+        >
+          <div className="flex items-center gap-3 mb-6">
+            <div className="w-9 h-9 rounded-lg bg-teal-50 flex items-center justify-center">
+              <Navigation className="w-5 h-5 text-teal-600" />
+            </div>
+            <h2 className="text-xl font-bold text-slate-900">Navocs Features</h2>
+          </div>
+
+          <div className="space-y-6">
+
+            <div>
+              <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-3">Core System</p>
+              <div className="grid sm:grid-cols-2 gap-2">
+                {[
+                  'Eco-Route Recommendation — retrieves up to 5 routes from Google Routes API and re-ranks by VSP fuel efficiency',
+                  'VSP-Based Fuel Scoring Engine — calculates fuel cost per road segment using speed, acceleration, and gradient',
+                  'Route Comparison View — all candidate routes shown side by side with fuel cost, time, and distance',
+                  'Human-in-the-Loop Design — algorithm recommends, driver decides — no forced routing',
+                ].map((f) => (
+                  <div key={f} className="flex gap-2 text-sm text-slate-600 bg-teal-50 border border-teal-100 rounded-xl px-3 py-2">
+                    <span className="text-teal-500 font-bold shrink-0">—</span>{f}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-3">Vehicle Support</p>
+              <div className="grid sm:grid-cols-2 gap-2">
+                {[
+                  '10 Vehicle Types — Tricycle, Motorcycle, Sedan, SUV, Utility Van, Hybrid Car, Hybrid Van, E-Trike, E-Motorcycle, Electric Van',
+                  '3 Powertrain Models — ICE (VSP formula), HEV (dual-mode), BEV (energy model + State of Charge)',
+                  'Cross-Powertrain Comparison — compare fuel/energy cost across different vehicle types on the same route',
+                ].map((f) => (
+                  <div key={f} className="flex gap-2 text-sm text-slate-600 bg-blue-50 border border-blue-100 rounded-xl px-3 py-2">
+                    <span className="text-blue-500 font-bold shrink-0">—</span>{f}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-3">Driver Features</p>
+              <div className="grid sm:grid-cols-2 gap-2">
+                {[
+                  'Live Trip Tracking — real-time GPS position during active trips',
+                  'Trip History & Logging — all trips recorded to Firebase Firestore',
+                  'Fuel Savings Analytics — projected savings vs default Google route per trip',
+                ].map((f) => (
+                  <div key={f} className="flex gap-2 text-sm text-slate-600 bg-orange-50 border border-orange-100 rounded-xl px-3 py-2">
+                    <span className="text-orange-500 font-bold shrink-0">—</span>{f}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-3">Commuter Features</p>
+              <div className="grid sm:grid-cols-2 gap-2">
+                {[
+                  'Walking Route Guidance — safe walking paths in Tuguegarao City',
+                  'Tricycle Terminal Map — locations of terminals for commuters',
+                  'Parking Locator — public parking spots mapped for drivers and commuters',
+                ].map((f) => (
+                  <div key={f} className="flex gap-2 text-sm text-slate-600 bg-violet-50 border border-violet-100 rounded-xl px-3 py-2">
+                    <span className="text-violet-500 font-bold shrink-0">—</span>{f}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-3">Data Collection Tools</p>
+              <div className="grid sm:grid-cols-2 gap-2">
+                {[
+                  'Speed Meter — GPS Doppler + Kalman filter speed logger for collecting real road speed data for thesis validation',
+                  'Road Reporter — GPS-tagged road condition reports with photo proof and categories (blocked sidewalk, unsafe walkway, congestion, etc.)',
+                ].map((f) => (
+                  <div key={f} className="flex gap-2 text-sm text-slate-600 bg-amber-50 border border-amber-100 rounded-xl px-3 py-2">
+                    <span className="text-amber-500 font-bold shrink-0">—</span>{f}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-3">AI & Support</p>
+              <div className="grid sm:grid-cols-2 gap-2">
+                {[
+                  'Navocs AI Assistant — powered by Google Vertex AI, answers route queries and guides commuters and drivers',
+                  'Role-Based Access — Driver and Commuter roles with separate feature sets',
+                  'Secure Authentication — Firebase Auth + JWT token system',
+                ].map((f) => (
+                  <div key={f} className="flex gap-2 text-sm text-slate-600 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2">
+                    <span className="text-slate-500 font-bold shrink-0">—</span>{f}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-3">Research & Validation</p>
+              <div className="grid sm:grid-cols-2 gap-2">
+                {[
+                  'Simulated Test Cases — VSP mathematical simulation on Tanza Junction, Buntun Highway, and College Avenue',
+                  'Eco-Route Efficiency Formula — Fs = (F_google − F_navocs) / F_google × 100',
+                  'Projected 12–18% fuel savings vs standard Google Routes navigation — simulation-based result',
+                ].map((f) => (
+                  <div key={f} className="flex gap-2 text-sm text-slate-600 bg-green-50 border border-green-100 rounded-xl px-3 py-2">
+                    <span className="text-green-500 font-bold shrink-0">—</span>{f}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+          </div>
+        </motion.section>
+
         {/* Tech Stack */}
         <motion.section
           initial={{ opacity: 0, y: 16 }}
