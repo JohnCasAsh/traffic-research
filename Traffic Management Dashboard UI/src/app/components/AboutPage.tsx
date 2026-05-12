@@ -1,5 +1,5 @@
 import { motion } from 'motion/react';
-import { Navigation, FlaskConical, Cpu, Car, Zap, GitBranch, Database, MapPin, BarChart3, Shield } from 'lucide-react';
+import { Navigation, FlaskConical, Cpu, Car, Zap, GitBranch, Database, MapPin, BarChart3, Shield, BookOpen } from 'lucide-react';
 
 const vehicles = [
   { name: 'Tricycle', type: 'ICE', model: 'VSP fuel model', color: 'bg-amber-50 text-amber-700 border-amber-200' },
@@ -518,6 +518,63 @@ export function AboutPage() {
                 <p className="text-sm font-semibold text-teal-800">Why not just use Google Maps or Waze?</p>
                 <p className="text-sm text-teal-700 mt-0.5">They optimize for time. Navocs optimizes for fuel cost per vehicle type using physics-based modeling. No existing app does this for tricycles or EVs in a Philippine provincial city — that is the gap this study fills.</p>
               </div>
+            </div>
+
+          </div>
+        </motion.section>
+
+        {/* Theoretical Assumptions */}
+        <motion.section
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.28 }}
+          className="bg-white rounded-2xl border border-slate-200 p-8"
+        >
+          <div className="flex items-center gap-3 mb-2">
+            <div className="w-9 h-9 rounded-lg bg-blue-50 flex items-center justify-center">
+              <BookOpen className="w-5 h-5 text-blue-600" />
+            </div>
+            <h2 className="text-xl font-bold text-slate-900">Theoretical Assumptions</h2>
+          </div>
+          <p className="text-sm text-slate-500 mb-6">
+            These are the assumptions the system operates on. Each is acknowledged as a study boundary — not a flaw.
+          </p>
+
+          <div className="space-y-3">
+
+            <div className="p-4 rounded-xl border border-slate-200 bg-slate-50">
+              <p className="text-sm font-semibold text-slate-800 mb-1">VSP formula is adopted from literature, not derived locally</p>
+              <p className="text-sm text-slate-600">The VSP formula is from internationally peer-reviewed transportation research. Its coefficients are standard values — not measured from actual Filipino tricycles. The study applies the formula as-is and identifies local calibration as future work.</p>
+            </div>
+
+            <div className="p-4 rounded-xl border border-slate-200 bg-slate-50">
+              <p className="text-sm font-semibold text-slate-800 mb-1">Road gradient is assumed flat unless GPS elevation data is available</p>
+              <p className="text-sm text-slate-600">The VSP formula requires road slope (grade). Since detailed elevation data for Tuguegarao roads is not yet integrated, the current implementation assumes flat terrain. Most urban roads in Tuguegarao are relatively flat, making this a reasonable assumption for this scope.</p>
+            </div>
+
+            <div className="p-4 rounded-xl border border-slate-200 bg-slate-50">
+              <p className="text-sm font-semibold text-slate-800 mb-1">Vehicle mass and specs use standard assumed values per type</p>
+              <p className="text-sm text-slate-600">Each vehicle profile (tricycle, motorcycle, car, e-trike, etc.) uses standard mass and drag values from literature. Individual vehicle variations — engine condition, load weight, tire pressure — are not modeled. This is acceptable at study scope level.</p>
+            </div>
+
+            <div className="p-4 rounded-xl border border-slate-200 bg-slate-50">
+              <p className="text-sm font-semibold text-slate-800 mb-1">Traffic delay is time-of-day based, not real-time</p>
+              <p className="text-sm text-slate-600">The D(e) component uses theoretical time-of-day patterns — rush hour assumed higher delay, off-peak assumed lower. Real-time traffic feeds are not yet connected. GPS speed data from the Navocs speed meter will feed into this over time.</p>
+            </div>
+
+            <div className="p-4 rounded-xl border border-slate-200 bg-slate-50">
+              <p className="text-sm font-semibold text-slate-800 mb-1">E-Trike and E-Motorcycle battery model assumes standard efficiency</p>
+              <p className="text-sm text-slate-600">The BEV energy model uses a standard drivetrain efficiency value (η). Battery degradation, temperature effects, and charger type are not modeled. State of Charge (SoC) constraints prevent routes that would drain the battery — but exact range varies per unit.</p>
+            </div>
+
+            <div className="p-4 rounded-xl border border-slate-200 bg-slate-50">
+              <p className="text-sm font-semibold text-slate-800 mb-1">Fuel prices are assumed constant during route calculation</p>
+              <p className="text-sm text-slate-600">Fuel cost estimates use a fixed price per liter. Real-world pump prices fluctuate weekly. The system compares routes relative to each other — so even if the absolute cost is approximate, the ranking of routes remains valid.</p>
+            </div>
+
+            <div className="p-4 rounded-xl border border-slate-200 bg-slate-50">
+              <p className="text-sm font-semibold text-slate-800 mb-1">Drivers are assumed to follow the recommended route</p>
+              <p className="text-sm text-slate-600">The system recommends a route but cannot enforce it. Real drivers may deviate based on personal knowledge, road conditions, or preference. Adherence tracking is not within the scope of this study.</p>
             </div>
 
           </div>
