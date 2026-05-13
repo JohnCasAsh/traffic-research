@@ -24,7 +24,13 @@
       "Bash(Get-Content \"C:\\\\Users\\\\JOHNAS~1\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--Users-John-Asley-OneDrive-Desktop-TRAFFIC---MANAGEMENT\\\\b77d72e4-20e4-4243-ac6f-bb4763bf690d\\\\tasks\\\\b5wfh7ctw.output\")",
       "PowerShell($token = $env:SWA_DEPLOYMENT_TOKEN_GREEN; if \\(-not $token\\) { $token = $env:AZURE_STATIC_WEB_APPS_API_TOKEN }; if \\($token\\) { \"Token found\" } else { \"Token missing\" })",
       "PowerShell(az staticwebapp secrets list --name \"tmresearch-green-johncasash\" --resource-group \"traffic-management-rg\" --query \"properties.apiKey\" -o tsv)",
-      "PowerShell($env:SWA_DEPLOYMENT_TOKEN_GREEN = \"1f0d359479f271506b2aca9a355ac95b5d6ebc129ad9321b6519ddbe45f99d4004-478d80e9-b00d-480c-81e8-239e63a16564000292109f897900\"; cd \"c:\\\\Users\\\\John Asley\\\\OneDrive\\\\Desktop\\\\TRAFFIC _ MANAGEMENT\"; .\\\\deploy.ps1)"
+      "PowerShell($env:SWA_DEPLOYMENT_TOKEN_GREEN = \"1f0d359479f271506b2aca9a355ac95b5d6ebc129ad9321b6519ddbe45f99d4004-478d80e9-b00d-480c-81e8-239e63a16564000292109f897900\"; cd \"c:\\\\Users\\\\John Asley\\\\OneDrive\\\\Desktop\\\\TRAFFIC _ MANAGEMENT\"; .\\\\deploy.ps1)",
+      "Read(//mnt/c/Users/JOHNAS~1/AppData/Local/Temp/claude/c--Users-John-Asley-OneDrive-Desktop-TRAFFIC---MANAGEMENT/b77d72e4-20e4-4243-ac6f-bb4763bf690d/tasks/**)",
+      "Bash(curl -s https://traffic-backend-johncasash.azurewebsites.net/api/health)",
+      "Bash(curl -s https://navocs-backend.azurewebsites.net/api/health)",
+      "PowerShell(Invoke-RestMethod -Uri \"https://api.navocs.com/api/health\" -Method Get -TimeoutSec 10)",
+      "PowerShell(try { $r = Invoke-WebRequest -Uri \"https://api.navocs.com/api/health\" -TimeoutSec 10; $r.StatusCode; $r.Content } catch { $_.Exception.Message })",
+      "PowerShell($env:SWA_DEPLOYMENT_TOKEN_GREEN = \"1f0d359479f271506b2aca9a355ac95b5d6ebc129ad9321b6519ddbe45f99d4004-478d80e9-b00d-480c-81e8-239e63a16564000292109f897900\"; cd \"c:\\\\Users\\\\John Asley\\\\OneDrive\\\\Desktop\\\\TRAFFIC _ MANAGEMENT\"; .\\\\deploy.ps1 -Message \"Fix: pass auth token to route analysis API call\")"
     ],
     "additionalDirectories": [
       "c:\\Users\\John Asley\\OneDrive\\Desktop\\TRAFFIC _ MANAGEMENT\\Traffic Management Dashboard UI\\src\\app\\components"

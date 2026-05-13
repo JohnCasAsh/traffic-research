@@ -156,12 +156,14 @@ export function doesAnalysisMatchRequest(
 export async function fetchRouteAnalysis(
   apiBaseUrl: string,
   request: RouteAnalysisRequest,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  token?: string | null
 ): Promise<RouteAnalysisResponse> {
   const response = await fetch(`${apiBaseUrl}/api/routes/analyze`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
     body: JSON.stringify(request),
     signal,

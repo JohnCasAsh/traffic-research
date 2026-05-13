@@ -289,7 +289,7 @@ export function RouteComparison() {
       setErrorMessage(null);
 
       try {
-        const payload = await fetchRouteAnalysis(apiBaseUrl, analysisRequest);
+        const payload = await fetchRouteAnalysis(apiBaseUrl, analysisRequest, undefined, token);
 
         if (!cancelled) {
           setAnalysis(payload);
